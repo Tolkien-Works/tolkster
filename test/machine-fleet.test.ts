@@ -218,6 +218,9 @@ test("an asleep machine behind its recipe's revision is updated, once until it s
   const pinned = newCoordinator();
   pinned.queue = [waits("q", { on: "h-1" })];
   assert.deepEqual(asked(run(newRun(), rolled({ "tolkster-1": behind }), pinned, NOW).send), [["wakeHost", "tolkster-1"]]);
+  const granted = newCoordinator();
+  granted.grants.g = { session: null, sinceMs: NOW, host: "h-1" };
+  assert.deepEqual(asked(run(newRun(), rolled({ "tolkster-1": behind }), granted, NOW).send), [["wakeHost", "tolkster-1"]]);
   const wanted = step(newRun(), { kind: "wanted", host: "h-1" }, NOW);
   assert.deepEqual(run(wanted, rolled({ "tolkster-1": behind }), idle, NOW, []).send, []);
   // Done or failed, it isn't asked again until UPDATE_RETRY_MS, unless the config report says

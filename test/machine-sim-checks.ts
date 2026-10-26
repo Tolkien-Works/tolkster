@@ -367,12 +367,12 @@ export const CHECKS: Record<string, CheckFn> = {
   },
 
   // An update goes only to the asleep machine (m1, paired as h2), and never while a request is
-  // pinned to its host or a worker's command waits on it, before the step and after it.
+  // granted or pinned to its host or a worker's command waits on it, before the step and after it.
   updatesOnlyResting(before, after, seen, memo) {
     for (const { command } of seen.sent.filter((s) => s.command.issue === FLEET && s.command.kind === "updateHost" && !memo.updatesSent.has(s.command.id))) {
       memo.updatesSent.add(command.id);
       if (command.params.name !== NAP_MACHINES[0]) return `${command.id} updates ${String(command.params.name)}, which isn't asleep`;
-      const held = (v: View) => v.coordinator.queue.some((p) => p.on === NAP_HOSTS[1]) || Object.hasOwn(v.run.wanted, NAP_HOSTS[1]);
+      const held = (v: View) => Object.values(v.coordinator.grants).some((g) => g.host === NAP_HOSTS[1]) || v.coordinator.queue.some((p) => p.on === NAP_HOSTS[1]) || Object.hasOwn(v.run.wanted, NAP_HOSTS[1]);
       if (held(before) && held(after)) return `${command.id} updates ${NAP_MACHINES[0]} while something holds ${NAP_HOSTS[1]} awake`;
     }
     return null;
