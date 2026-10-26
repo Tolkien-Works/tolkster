@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{LazyLock, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
+use self::frame::Work;
 use crate::machine::{Observed, Outcome, Waiting};
 use crate::sync::lock;
 use crate::trace::Logged;
@@ -154,6 +155,8 @@ pub struct State {
     pub base: Option<String>,
     // The coordinator's, as the relay last sent it on this connection.
     pub frame: Option<Frame>,
+    // The issues whose frame slot a listing was asked for because no listing had its worker.
+    pub asked: HashSet<String>,
     pub log: VecDeque<Logged>,
 }
 
@@ -168,6 +171,7 @@ impl State {
         let framed = |issue: &String| self.frame.iter().flat_map(|f| &f.slots).any(|s| s.identifier.as_ref() == Some(issue));
         self.last.retain(|issue, f| slotted(issue) || framed(issue) || listing.at.saturating_duration_since(f.at) < OUTCOMES_FOR);
         self.queued.retain(|issue, q| !slotted(issue) && listing.at.saturating_duration_since(q.said) < QUEUED_FOR);
+        self.asked.retain(|issue| !slotted(issue));
         self.began.retain(|worktree, _| listed(worktree));
         self.changed.retain(|worktree, _| listed(worktree));
         self.conversations.retain(|terminal, (_, opened)| terminals.contains(terminal) || listing.at.saturating_duration_since(*opened) < UNLISTED_FOR);
@@ -209,6 +213,23 @@ impl State {
         let changed = frame.iter().flat_map(|now| &now.why).filter(|(repo, why)| before.and_then(|b| b.get(*repo)) != Some(*why)).map(|(repo, why)| (repo.clone(), why.said())).collect();
         self.frame = frame;
         changed
+    }
+
+    // Whether the newest frame holds a worker running, idle or held that the newest listing has
+    // none for, and no listing was asked for since it began being so. A listing that still lacks
+    // it leaves it unseen without another ask (`asked`), until a listing has it or the frame
+    // no longer does.
+    fn unlisted(&mut self) -> bool {
+        let Some(listing) = &self.listing else { return false };
+        let missing: HashSet<&String> = self.frame.iter().flat_map(|f| &f.slots)
+            .filter(|s| !s.reserved && matches!(s.work, Some(Work::Running | Work::Idle | Work::Held)))
+            .filter_map(|s| s.identifier.as_ref())
+            .filter(|issue| !listing.slots.iter().any(|l| l.issue.as_ref() == Some(*issue)))
+            .collect();
+        self.asked.retain(|issue| missing.contains(issue));
+        let before = self.asked.len();
+        self.asked.extend(missing.into_iter().cloned());
+        self.asked.len() > before
     }
 
     fn finish(&mut self, finish: Finish) {
@@ -330,11 +351,17 @@ pub fn finished(finish: Finish) {
 // The newest frame. Each repo's reason the fleet asks no machine for it goes to the log as it
 // changes, so `listen.log` says why a request waits. Logged once the state is let go: with the
 // panel on, a log line takes it again (`log`), and a std Mutex isn't reentrant.
-pub fn framed(frame: Option<Frame>) {
-    let changed = state().reframe(frame);
+// True when the frame shows a worker the newest listing lacks, for the caller to ask for
+// another listing (`unlisted`).
+pub fn framed(frame: Option<Frame>) -> bool {
+    let (changed, unlisted) = {
+        let mut state = state();
+        (state.reframe(frame), state.unlisted())
+    };
     for (repo, why) in changed {
         crate::trace::event(crate::trace::Host::NoMachine { repo, why });
     }
+    unlisted
 }
 
 pub fn base(after: &str) {

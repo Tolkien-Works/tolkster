@@ -233,6 +233,39 @@ fn a_frame_names_each_repos_no_machine_reason_only_when_it_changed() {
     assert_eq!(state.reframe(Some(frame)), all);
 }
 
+// A running, idle or held frame slot the newest listing has no worker for asks for one
+// listing, however many frames follow, until a listing has it or the frame stops holding it.
+#[test]
+fn a_running_frame_slot_with_no_listed_worker_asks_for_one_listing() {
+    let t0 = Instant::now();
+    let mut state = State::default();
+    let mut frame = parse_frame(&contract()["frame"]).unwrap().unwrap();
+    let template = frame.slots[1].clone();
+    let held = |identifier: &str, reserved: bool, work: Option<Work>| super::frame::Slot { identifier: Some(identifier.into()), reserved, work, deadline: None, pr: None, anomaly: false, ..template.clone() };
+    frame.slots = vec![held("TW-1", true, None), held("TW-2", false, Some(Work::Launching)), held("TW-3", false, Some(Work::Running)), held("TW-4", false, Some(Work::Exited))];
+    state.reframe(Some(frame.clone()));
+    // No listing yet: the first one is already coming.
+    assert!(!state.unlisted());
+    list(&mut state, listing(t0, vec![]));
+    assert!(state.unlisted());
+    // The listing that follows still lacks it: it stays unseen, with no ask in a loop.
+    list(&mut state, listing(t0 + MIN, vec![]));
+    state.reframe(Some(frame.clone()));
+    assert!(!state.unlisted());
+    // A listing has it, then loses it: that is a new change.
+    list(&mut state, listing(t0 + 2 * MIN, vec![slot("w-3", "TW-3", None, Observed::AgentWorking)]));
+    assert!(!state.unlisted());
+    list(&mut state, listing(t0 + 3 * MIN, vec![]));
+    assert!(state.unlisted());
+    // Another slot that becomes held asks once more; one the frame no longer holds is forgotten.
+    frame.slots.push(held("TW-5", false, Some(Work::Held)));
+    state.reframe(Some(frame.clone()));
+    assert!(state.unlisted() && !state.unlisted());
+    frame.slots.retain(|s| s.identifier.as_deref() != Some("TW-3"));
+    state.reframe(Some(frame));
+    assert!(!state.unlisted() && state.asked.len() == 1);
+}
+
 #[test]
 fn with_a_frame_a_reserved_slot_shows_before_its_worker_the_queue_keeps_its_order_and_parked_work_needs_you() {
     let t0 = Instant::now();

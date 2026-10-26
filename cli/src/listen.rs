@@ -237,7 +237,11 @@ fn connection(url: &str, secret: &str, out: &mut impl Write, mut scheduler: Opti
                 return End::Stop(error);
             }
             match coordinator {
-                Ok(coordinator) => panel::framed(Some(coordinator)),
+                Ok(coordinator) => {
+                    if panel::framed(Some(coordinator)) && let Some(scheduler) = scheduler.as_deref() {
+                        scheduler.list_now();
+                    }
+                }
                 // The last one is no longer current: the panel falls back to its own view.
                 Err(reason) => {
                     panel::framed(None);
