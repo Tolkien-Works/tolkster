@@ -5,7 +5,7 @@
 
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,20 +21,23 @@ export const PROJECT_ROOT = `${HOME}/tolkster`;
 
 // Ids, names and digests only, never a credential. `baseInstanceId` is set only once its base
 // is ready to fork. The inputs are the digests (`inputs`) the template and the base were last
-// built from; `buildingBase` is a base being built and `retired` the instances left to delete,
-// which a cut-off `prepare` leaves to the next one.
+// built from, and `imageRevision` the revision that build published; `buildingBase` is a base
+// being built and `retired` the instances left to delete, which a cut-off `prepare` leaves to
+// the next one.
 export type State = {
   template?: string; orcaVersion?: string; baseInstanceId?: string; repoUrl?: string; repoRef?: string;
-  imageInputs?: string; baseInputs?: string; buildingBase?: string; retired?: string[];
+  imageInputs?: string; imageRevision?: string; baseInputs?: string; buildingBase?: string; retired?: string[];
 };
 
 export function readState(): State {
   return existsSync(STATE) ? (JSON.parse(readFileSync(STATE, "utf8")) as State) : {};
 }
 
+// Renamed into place, so a `create` reading it as `prepare` writes never reads half a file.
 export function mergeState(change: State): State {
   const state = { ...readState(), ...change };
-  writeFileSync(STATE, `${JSON.stringify(state, null, 2)}\n`);
+  writeFileSync(`${STATE}.${process.pid}`, `${JSON.stringify(state, null, 2)}\n`);
+  renameSync(`${STATE}.${process.pid}`, STATE);
   return state;
 }
 

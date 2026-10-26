@@ -99,7 +99,8 @@ keeps its own credentials and the realtime secret.
   but its checkouts and no worker being set up; one asleep and unpaired, once no record names
   it; a mark, with no make running in `listen` and an hour at least, past any `host add`.
 - A sleep or wake never pairs or unpairs a machine: only `create` and `destroy` do.
-- A rollout always leaves a base to fork: the old one goes a minute after its replacement is ready.
+- A rollout always leaves a base to fork: the old one goes only once its replacement is ready,
+  and a `create` whose fork finds it gone forks the new one.
 - An Agent37 machine runs one Orca server: a boot and a `resume` start it one at a time,
   each once the last has exited, and a boot script replaced since its run began starts none.
 - The Durable Object stores no credential, only its digest, and a storage reset keeps the

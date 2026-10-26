@@ -4,9 +4,8 @@
 // old as the base: `tolkster host add --recipe` fetches it through the host's own credential
 // once it joins, so no git token is handed to the instance here.
 
-import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFileSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import {
   api, baseStep, boot, exec, inputs, log, mergeState, pairingAddress, payloadInstance, readState, result, revision, run, sleep, waitRunning,
 } from "./agent37.ts";
@@ -26,13 +25,21 @@ async function note(id: string, phase: string): Promise<void> {
 }
 
 async function create() {
-  const { baseInstanceId } = readState();
-  if (!baseInstanceId) throw new Error("no base instance: run agent37-recipe.ts prepare");
   const slug = `orca-${process.env.ORCA_RECIPE_ID ?? "agent37"}-${process.env.ORCA_VM_INSTANCE_ID ?? Date.now()}`;
   const name = slug.toLowerCase().replace(/[^a-z0-9-]+/g, "-").slice(-63);
-  const fork = await api("POST", `/instances/${baseInstanceId}/fork`, { name });
+  const forked = (base: string | undefined) => {
+    if (!base) throw new Error("no base instance: run agent37-recipe.ts prepare");
+    return api("POST", `/instances/${base}/fork`, { name });
+  };
+  const { baseInstanceId: read } = readState();
+  // A `prepare` may have replaced and deleted the base this read: the new one is forked then.
+  const fork = await forked(read).catch((error: Error) => {
+    const now = readState().baseInstanceId;
+    if (!error.message.includes(": 404 ") || now === read) throw error;
+    return forked(now);
+  });
   const id: string = fork.id;
-  log(`forked ${baseInstanceId} as ${id}`);
+  log(`forked the base as ${id}`);
   try {
     const instance = await waitRunning(id);
     await note(id, "create");
@@ -65,39 +72,38 @@ async function destroy() {
 }
 
 // The image and the base brought up to the repo's inputs, as `listen` runs it after each pull:
-// a template rebuilt when agent37/ changed, then the base moved to its revision in place, as
-// Agent37's update keeps the home volume and leaves a stopped instance stopped, or a new base
-// built alongside when this file's setup changed. `create` forks the old base until the new
-// one is ready. Exit 3 when nothing changed.
+// a template rebuilt when agent37/ changed or another checkout published the newest revision,
+// then the base moved to it in place, as Agent37's update keeps the home volume and leaves a
+// stopped instance stopped, or a new base built alongside when this file's setup changed.
+// `create` forks the old base until the new one is ready. Exit 3 when nothing changed.
 async function prepare() {
-  if (!locked()) {
-    log("another prepare is running");
-    process.exitCode = 3;
-    return;
-  }
+  // Read before any wait: a pull meanwhile must not be recorded as built by this run's code.
+  const [image, setup] = [inputs([IMAGE_DIR]), inputs([BASE_SETUP])];
+  await lock();
   let state = readState();
   const left = [...(state.retired ?? []), ...(state.buildingBase ? [state.buildingBase] : [])];
   state = mergeState({ buildingBase: undefined, retired: left });
   await deleteRetired();
   const done: Record<string, string> = {};
-  const image = inputs([IMAGE_DIR]);
-  if (state.imageInputs !== image) {
-    await buildImage();
-    state = mergeState({ imageInputs: image });
+  const newest = async () => state.template && revision({ template_revision: (await api("GET", `/templates/${state.template}`)).revision });
+  let template = await newest();
+  if (state.imageInputs !== image || template !== state.imageRevision) {
+    state = await buildImage();
+    template = await newest();
+    state = mergeState({ imageInputs: image, imageRevision: template });
     done.image = image;
   }
-  const template = revision({ template_revision: (await api("GET", `/templates/${state.template}`)).revision });
-  const setup = inputs([BASE_SETUP]);
   const old = state.baseInstanceId;
   const base = old ? await api("GET", `/instances/${old}`).catch((error: Error) => {
     if (!error.message.includes(": 404 ")) throw error;
   }) : undefined;
-  switch (baseStep(state, setup, base && revision(base), template)) {
+  switch (baseStep(state, setup, base && revision(base), template as string)) {
     case "new": {
       const id = await newBase(state);
       mergeState({ baseInstanceId: id, baseInputs: setup, buildingBase: undefined, retired: [...(readState().retired ?? []), ...(old ? [old] : [])] });
       done.base = id;
-      // A `create` that read the old base just before may still be forking it.
+      // A fork of the old base begun before the swap gets a minute to copy it; one begun
+      // later finds it gone and forks the new one.
       await sleep(60_000);
       await deleteRetired();
       break;
@@ -105,13 +111,18 @@ async function prepare() {
     case "update": {
       const updated = await api("POST", `/instances/${old}/update`);
       if (revision(updated) !== template) throw new Error(`base ${old} updated to revision ${revision(updated)}, not ${template}`);
-      // Forks copy the base at rest, and one woken from a sleep comes back running.
-      if (updated.status !== "stopped") await api("POST", `/instances/${old}/stop`);
       done.base = `${old}:${template}`;
       break;
     }
     case "none":
       break;
+  }
+  // Forks copy the base at rest: an update or a wake leaves it running, and a run cut off
+  // after either leaves it so for the next to stop.
+  const id = readState().baseInstanceId;
+  if (id && (await api("GET", `/instances/${id}`)).status === "running") {
+    await api("POST", `/instances/${id}/stop`);
+    done.stopped = id;
   }
   if (Object.keys(done).length === 0) {
     process.exitCode = 3;
@@ -134,23 +145,47 @@ async function deleteRetired() {
   }
 }
 
-// One `prepare` at a time: a `listen` that restarts leaves its run going, and the next start's
-// finds it here. A lock whose process has gone is taken over.
-function locked(): boolean {
-  const path = join(tmpdir(), "tolkster-agent37-prepare.lock");
-  try {
-    writeFileSync(path, String(process.pid), { flag: "wx" });
-  } catch {
-    const holder = Number(readFileSync(path, "utf8"));
-    if (alive(holder)) return false;
-    writeFileSync(path, String(process.pid));
+// One `prepare` at a time per checkout, waited for: a `listen` that restarts leaves its run
+// going, and the next start's runs once it ends, so the pull it was asked for is prepared. The
+// holder touches the lock each minute; one whose process has gone, or untouched for five
+// minutes, as a reused process ID could pass for alive, is taken over.
+const LOCK = fileURLToPath(new URL("agent37-prepare.lock", import.meta.url));
+
+async function lock(): Promise<void> {
+  for (let said = false; ; ) {
+    try {
+      writeFileSync(LOCK, String(process.pid), { flag: "wx" });
+      break;
+    } catch {
+      if (!held()) {
+        rmSync(LOCK, { force: true });
+        continue;
+      }
+      if (!said) log("waiting for another prepare to end");
+      said = true;
+      await sleep(10_000);
+    }
   }
+  setInterval(() => {
+    try {
+      utimesSync(LOCK, new Date(), new Date());
+    } catch {}
+  }, 60_000).unref();
   process.on("exit", () => {
     try {
-      if (readFileSync(path, "utf8") === String(process.pid)) unlinkSync(path);
+      if (readFileSync(LOCK, "utf8") === String(process.pid)) unlinkSync(LOCK);
     } catch {}
   });
-  return true;
+}
+
+// An empty lock is one being written.
+function held(): boolean {
+  try {
+    const pid = Number(readFileSync(LOCK, "utf8"));
+    return Date.now() - statSync(LOCK).mtimeMs < 5 * 60_000 && (pid === 0 || alive(pid));
+  } catch {
+    return false;
+  }
 }
 
 function alive(pid: number): boolean {

@@ -30,16 +30,18 @@ export async function buildImage(): Promise<State> {
   // The CLI packs the context with `tar -f <temp path>`; on Windows that must be the system
   // tar, since Git's reads a drive letter (`D:`) as a remote host.
   const path = process.platform === "win32" ? `${process.env.SystemRoot}\\System32;${process.env.PATH}` : process.env.PATH;
+  // The CLI needs no git token.
+  const { GH_TOKEN: _gh, GITHUB_TOKEN: _github, ...env } = process.env;
   execSync(`npx --yes agent37@0.4.1 templates build . --name ${TEMPLATE}`, {
     cwd: IMAGE_DIR,
-    env: { ...process.env, PATH: path },
+    env: { ...env, PATH: path },
     stdio: ["ignore", process.stderr, process.stderr],
   });
   return mergeState({ template: TEMPLATE, orcaVersion });
 }
 
 // A new base, stopped and ready to fork: its id. It is `buildingBase` from its creation, so a
-// run cut off partway leaves it to delete.
+// run cut off partway leaves it to delete; a failure deletes it at once.
 export async function newBase(state: State): Promise<string> {
   if (!state.template) throw new Error("no template: build the image first");
   const repoUrl = state.repoUrl ?? execFileSync("git", ["remote", "get-url", "origin"], { encoding: "utf8" }).trim();
@@ -50,6 +52,20 @@ export async function newBase(state: State): Promise<string> {
   const id: string = instance.id;
   mergeState({ buildingBase: id, repoUrl, repoRef });
   log(`created base ${id}; cloning and warming the build (about 15 minutes)`);
+  try {
+    await setUp(id, repoUrl, repoRef);
+  } catch (error) {
+    await api("DELETE", `/instances/${id}`).then(
+      () => mergeState({ buildingBase: undefined }),
+      (e: unknown) => log(`could not delete ${id}; the next prepare tries again: ${e}`),
+    );
+    throw error;
+  }
+  log(`base ${id} is stopped and ready to fork`);
+  return id;
+}
+
+async function setUp(id: string, repoUrl: string, repoRef: string): Promise<void> {
   await waitRunning(id);
   // Claude Code's terms keep it out of the public image, so its installer puts it in the home
   // volume, which forks copy, unless Agent37's platform ships one (its managed settings then
@@ -76,6 +92,4 @@ export async function newBase(state: State): Promise<string> {
   await shLong(id, withGitToken(ghToken(), clone), "cloning", 10);
   await shLong(id, `set -euo pipefail\n${claude}\n${warm}`, "warming the build", 45);
   await api("POST", `/instances/${id}/stop`);
-  log(`base ${id} is stopped and ready to fork`);
-  return id;
 }
