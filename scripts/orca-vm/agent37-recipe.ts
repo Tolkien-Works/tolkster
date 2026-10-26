@@ -67,19 +67,25 @@ async function resume() {
 // The stopped instance moved onto the template's revision `listen` asks for (TOLKSTER_REVISION)
 // in place, as `prepare` moves the base: Agent37 keeps its home volume, so its next `resume`
 // boots the new image. Exit 3 for one not stopped, whose update would restart it, or a template
-// on another revision, which the next `prepare` reports. One found running after is stopped, as
-// it is marked asleep.
+// on another revision, which the next `prepare` reports. It is marked asleep, so one found
+// running, before the update or after it, is stopped: a stop that failed is retried with the
+// next update.
 async function update() {
   const id = payloadInstance();
+  const stopped = async () => {
+    const { status } = await api("GET", `/instances/${id}`);
+    if (status === "running") await api("POST", `/instances/${id}/stop`);
+    return status === "stopped";
+  };
   const { template } = readState();
   const wanted = process.env.TOLKSTER_REVISION;
   const now = template && revision({ template_revision: (await api("GET", `/templates/${template}`)).revision });
-  if (!wanted || now !== wanted || (await api("GET", `/instances/${id}`)).status !== "stopped") {
+  if (!(await stopped()) || !wanted || now !== wanted) {
     process.exitCode = 3;
     return;
   }
   const updated = await api("POST", `/instances/${id}/update`);
-  if ((await api("GET", `/instances/${id}`)).status === "running") await api("POST", `/instances/${id}/stop`);
+  await stopped();
   return { schemaVersion: 1, userData: { provider: "agent37", resourceId: id, revision: revision(updated) } };
 }
 

@@ -18,10 +18,10 @@ use crate::plain::plain_host;
 use crate::runtime::{Making, Shared};
 use crate::trace;
 
-// The machine `name` updated to `revision`, its recipe's as `listen` reported it: whether it was. No make, wake, sleep or destroy runs meanwhile,
-// so it stays asleep throughout: one asked while another runs waits on the lock. Ok(false): it
-// is no asleep machine, its recipe has no `update`, or the recipe found it running or its image
-// on another revision.
+// The machine `name` updated to `revision`, its recipe's as `listen` reported it: whether it
+// was. No make, wake, sleep or destroy runs meanwhile, so it stays asleep throughout: one asked
+// while another runs waits on the lock. Ok(false): it is no asleep machine, its recipe has no
+// `update`, or the recipe found it running or its image on another revision.
 pub fn update(shared: &Arc<Shared>, name: &str, revision: &str) -> Result<bool, Error> {
     if !plain_host(name) {
         return Ok(false);
