@@ -247,6 +247,12 @@ fn recipe_settings_are_printed_and_made_machines_read() {
     assert_eq!(json["repos"]["Site"]["recipe"], json!({ "id": "cloud", "machines": 2, "slotsEach": 3, "idleMinutes": DEFAULT_IDLE_MINUTES, "destroyAfter": DEFAULT_DESTROY_AFTER }));
     let made = machines(&json!({ "site-1": { "recipe": "cloud", "repo": "Site", "destroy": "x", "userData": { "k": 1 } } }));
     assert_eq!(made.into_iter().collect::<Vec<_>>(), [("site-1".to_string(), Machine { recipe: "cloud".into(), repo: "Site".into(), made: true, sleeps: false, asleep: false, environment: None, revision: None })]);
+    // The revision is the one `userData` holds, when the Durable Object would take it.
+    let stamped = |revision: Value| machines(&json!({ "site-1": { "recipe": "cloud", "userData": { "revision": revision } } }))["site-1"].revision.clone();
+    assert_eq!(stamped(json!("4")), Some("4".into()));
+    for odd in [json!(4), json!(""), json!("4 5"), json!("x".repeat(101))] {
+        assert_eq!(stamped(odd.clone()), None, "{odd}");
+    }
     let lines = json!({ "recipe": "cloud", "repo": "Site", "folder": "/s", "destroy": "d", "suspend": "s", "resume": "r", "userData": {}, "asleep": true });
     assert!(machines(&json!({ "site-1": lines }))["site-1"].sleeps && machines(&json!({ "site-1": lines }))["site-1"].asleep);
     for odd in [json!([]), json!({ "site-1": "cloud" }), json!({ "site-1": { "repo": "Site" } })] {

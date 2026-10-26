@@ -1,26 +1,29 @@
-// The one-time setup the `agent37` recipe forks from, run by hand in order:
-//   image   builds agent37/Dockerfile in Agent37's cloud as the `tolkster-orca` template
-//   base    creates the base instance from it, installs Claude Code, clones Tolkster, warms
-//           npm and cargo, then stops it so forks copy it at rest
-// Rerun `image` to take a new Orca (raise ORCA_VERSION in the Dockerfile), then `base` again:
-// an instance keeps the image it was created from. Nothing on the base is signed in: a fork gets
-// its credentials after it starts (docs/hosts.md). `orca-ide serve` never runs on the
-// base, so no fork inherits another's Orca identity.
+// The image and the base the `agent37` recipe forks from, built by its `prepare`
+// (agent37-recipe.ts) when their inputs change:
+//   buildImage  builds agent37/Dockerfile in Agent37's cloud as the `tolkster-orca` template
+//   newBase     creates a base instance from it, installs Claude Code, clones Tolkster, warms
+//               npm and cargo, then stops it so forks copy it at rest
+// This file is the base's inputs: any change to it builds a new base, as its setup is on the
+// base's disk. Nothing on the base is signed in: a fork gets its credentials after it starts
+// (docs/hosts.md). `orca-ide serve` never runs on the base, so no fork inherits another's Orca
+// identity.
 
 import { execFileSync, execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
-  HOME, PROJECT_ROOT, api, ghToken, log, mergeState, readState, run, shLong, waitRunning, withGitToken,
+  HOME, PROJECT_ROOT, type State, api, ghToken, log, mergeState, shLong, waitRunning, withGitToken,
 } from "./agent37.ts";
 
 const TEMPLATE = "tolkster-orca";
-const IMAGE_DIR = fileURLToPath(new URL("agent37/", import.meta.url));
+export const IMAGE_DIR = fileURLToPath(new URL("agent37/", import.meta.url));
+export const BASE_SETUP = fileURLToPath(import.meta.url);
 const RESOURCES = { cpu: 4, memory: 8, disk: 20 };
 // Asleep, an instance bills only its disk; a fork inherits both settings.
 const IDLE_TIMEOUT = 300;
 
-async function image() {
+// Publishes a new revision of the template, which no instance runs until it is updated.
+export async function buildImage(): Promise<State> {
   const dockerfile = readFileSync(`${IMAGE_DIR}Dockerfile`, "utf8");
   const orcaVersion = /ARG ORCA_VERSION=(\S+)/.exec(dockerfile)?.[1];
   if (!orcaVersion) throw new Error("the Dockerfile pins no ORCA_VERSION");
@@ -35,19 +38,17 @@ async function image() {
   return mergeState({ template: TEMPLATE, orcaVersion });
 }
 
-async function base() {
-  const state = readState();
-  if (!state.template) throw new Error("no template: run `image` first");
-  if (state.baseInstanceId) {
-    throw new Error(`a base exists (${state.baseInstanceId}): delete it in Agent37 and remove baseInstanceId from the state file first`);
-  }
+// A new base, stopped and ready to fork: its id. It is `buildingBase` from its creation, so a
+// run cut off partway leaves it to delete.
+export async function newBase(state: State): Promise<string> {
+  if (!state.template) throw new Error("no template: build the image first");
   const repoUrl = state.repoUrl ?? execFileSync("git", ["remote", "get-url", "origin"], { encoding: "utf8" }).trim();
   const repoRef = state.repoRef ?? "main";
   const instance = await api("POST", "/instances", {
     template: state.template, name: "tolkster-orca-base", resources: RESOURCES, auto_sleep: true, idle_timeout_seconds: IDLE_TIMEOUT,
   });
   const id: string = instance.id;
-  mergeState({ baseInstanceId: id, baseReady: false, repoUrl, repoRef });
+  mergeState({ buildingBase: id, repoUrl, repoRef });
   log(`created base ${id}; cloning and warming the build (about 15 minutes)`);
   await waitRunning(id);
   // Claude Code's terms keep it out of the public image, so its installer puts it in the home
@@ -76,14 +77,5 @@ async function base() {
   await shLong(id, `set -euo pipefail\n${claude}\n${warm}`, "warming the build", 45);
   await api("POST", `/instances/${id}/stop`);
   log(`base ${id} is stopped and ready to fork`);
-  // Only now may `create` fork it: a base that failed partway is running and half set up.
-  return mergeState({ baseReady: true });
+  return id;
 }
-
-const steps: Record<string, () => Promise<unknown>> = { image, base };
-const step = steps[process.argv[2] ?? ""];
-if (!step) {
-  console.error("usage: agent37-base.ts image|base");
-  process.exit(2);
-}
-run(step);

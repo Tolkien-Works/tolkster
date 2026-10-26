@@ -8,3 +8,4 @@ environmentRecipes:
     suspend: node scripts/orca-vm/agent37-recipe.ts suspend
     resume: node scripts/orca-vm/agent37-recipe.ts resume
     destroy: node scripts/orca-vm/agent37-recipe.ts destroy
+    prepare: node scripts/orca-vm/agent37-recipe.ts prepare
