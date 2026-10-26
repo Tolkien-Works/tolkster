@@ -89,6 +89,8 @@ pub enum Waits {
     Host(String),
     // No recipe machine being made, woken or put to sleep (`recipe::Making`).
     Lock,
+    // This machine's Orca to answer: not found to run, or its runtime unreachable.
+    Orca,
 }
 
 // Why Orca typed nothing.
@@ -132,6 +134,11 @@ impl Error {
 
     pub fn unavailable(&self) -> bool {
         matches!(self, Error::Unavailable(_))
+    }
+
+    // A program that couldn't be run because it isn't there.
+    pub fn not_found(&self) -> bool {
+        matches!(self, Error::Io { source, .. } if source.0.kind() == std::io::ErrorKind::NotFound)
     }
 
     // This error with what went wrong after it, keeping whether it was Orca's.

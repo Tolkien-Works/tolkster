@@ -373,7 +373,8 @@ export class Relay extends DurableObject<LinearApp> {
           // Only a complete listing says a host holds nothing.
           if (report.fleet !== null) await fleetReported(storage, { hosts: report.fleet }, nowMs, sender);
           if (report.listed !== null) await fleetEvent(storage, { kind: "listed", idle: report.idle, dormant: report.dormant, elapsedMs: report.elapsedMs }, nowMs, sender);
-          await waitsCleared(storage, { hosts: report.hosts }, nowMs, sender);
+          // `listen` sends no listing whose own Orca didn't answer.
+          await waitsCleared(storage, { hosts: report.hosts, orca: true }, nowMs, sender);
         }
       } else if (report.report === "terminalClosed") {
         await terminalClosed(storage, report.terminal, `${connection}:${report.sequence}`, nowMs, sender);
@@ -645,13 +646,15 @@ export class Relay extends DurableObject<LinearApp> {
   }
 }
 
-// A listing begun since the command was sent may have heard the host it now waits on before its
-// result came: that clears the wait on its own issue, as the next listing hearing it would.
+// A listing begun since the command was sent may have heard the host or Orca it now waits on
+// before its result came: that clears the wait on its own issue, as the next listing would.
 async function heardSince(storage: DurableObjectStorage, issue: string, id: string, nowMs: number, sender: (c: Command[]) => void): Promise<void> {
   const c = (await loadStore(storage, issue)).queue.find((q) => q.id === id);
-  if (c?.sentMs == null || c.waitsOn == null || !("host" in c.waitsOn)) return;
+  if (c?.sentMs == null || c.waitsOn == null || "lock" in c.waitsOn) return;
   const kept = await keptListing(storage);
-  if (kept !== null && kept.began >= c.sentMs && kept.listing.hosts.includes(c.waitsOn.host)) await waitsCleared(storage, { hosts: [c.waitsOn.host] }, nowMs, sender, [issue]);
+  if (kept === null || kept.began < c.sentMs) return;
+  if ("orca" in c.waitsOn) await waitsCleared(storage, { orca: true }, nowMs, sender, [issue]);
+  else if (kept.listing.hosts.includes(c.waitsOn.host)) await waitsCleared(storage, { hosts: [c.waitsOn.host] }, nowMs, sender, [issue]);
 }
 
 // The worktree an ok result names, by a valid ID, with its branch and repo as they came.

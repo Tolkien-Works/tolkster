@@ -49,6 +49,7 @@ fn a_server_that_failed_is_sent_again_but_a_refusal_or_orca_is_not() {
     let waits = |error: Error| Finished::of(&error).detail.get("waitsOn").cloned();
     assert_eq!(waits(Error::silent("mac")), Some(json!({ "host": "mac" })));
     assert_eq!(waits(Error::Waits(crate::error::Waits::Lock, "a make runs".into())), Some(json!({ "lock": true })));
+    assert_eq!(Value::Object(Finished::of(&Error::Waits(crate::error::Waits::Orca, "orca: program not found".into())).detail), pinned("readIssueOrcaAbsent"));
     assert_eq!(waits(Error::Later("not yet".into())), None);
 }
 

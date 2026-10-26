@@ -165,7 +165,8 @@ function parseData(value: unknown): ResultData {
 
 export function parseWaitsOn(value: unknown): WaitsOn {
   const w = object(value, "waitsOn");
-  return w.lock === true ? { lock: true } : { host: str(w.host, HOST, "waitsOn.host") };
+  if (w.lock === true) return { lock: true };
+  return w.orca === true ? { orca: true } : { host: str(w.host, HOST, "waitsOn.host") };
 }
 
 function members(value: unknown, what: string): { id: string; done: boolean; updatedAt: string }[] {

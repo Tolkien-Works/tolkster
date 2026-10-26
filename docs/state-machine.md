@@ -208,7 +208,7 @@ away. Shapes are `Command` and `PrRead` in `types.ts`.
 A command with no result in its timeout
 (2 min; 10 for `startWorker` and `startTriage`) is sent again with its ID, three times in
 all, then ends `lost`, applied as `failed`, though it may have run: `startWorker`'s leaves
-`exited`, and `startTurn`'s holds its claim until `observe` finds or ends the turn. `listenConnected` sends a command held away again as one of its three. One answered `retryable` names what it waits on (`waitsOn`: a host, or the recipe-machine lock) and goes again once that clears (a listing hears the host, a machine command ends, or `listen`'s settings change), its send unspent unless its last was such a one. One `waking` gets its send back for 30 minutes.
+`exited`, and `startTurn`'s holds its claim until `observe` finds or ends the turn. `listenConnected` sends a command held away again as one of its three. One answered `retryable` names its wait (`waitsOn`: a host, the recipe-machine lock, or Orca) and goes again once that clears (a listing hears the host or Orca, a machine command ends, or `listen`'s settings change), its send unspent unless its last was one too. One `waking` gets its send back for 30 minutes.
 
 **A stop owed.** In `halted`, `merged` and `stopping`, a halt's, cancel's or
 owner's stop goes every 2 minutes until confirmed by the newest stop's success,
@@ -632,7 +632,7 @@ Read as the request transitions are.
 - A recipe machine is made, woken, slept, updated or destroyed only by a fleet command, one in flight at a time across all repos, idempotent by what `listen` finds.
 - A request with nowhere to go has a machine of its repo woken or made, unless one is on its way, and otherwise the fleet records why not.
 - No `suspendHost` or `updateHost` goes to a host while a grant names it, a worker's command waits on it or a request is pinned to it, and `updateHost` only to one asleep.
-- Every command is safe to run again by what `listen` finds, and every post carries an ID made from its command's.
+- Every command is safe to run again by what `listen` finds, and every post carries an ID made from its command's. Only a read waits on Orca absent; a write's Orca failure fails.
 - `listen` types only fixed text, into an agent it has just listed as not at a prompt, or times into a session's turn open in the conversations checkout.
 - The machine hands a warm turn only an owner's message in a conversation, after it answered the request it was given; a hand-over that may not have landed closes it, and its end decides the request again.
 - A stop is owed until confirmed, through a merge too; an agent seen working before then, or a start that may have begun one there, is stopped again. A turn's stop says "Stopped." once.

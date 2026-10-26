@@ -194,13 +194,14 @@ fn carried(config: &Config, ports: &mut Ports, command: &Command, order: &Order,
         }
         // Nothing asks for a completion's context again, so a transient failure is tried
         // again on the command's resends, and its claim, given back, lets one start it. Not
-        // Orca's: a terminal it opened before failing would be opened twice.
+        // Orca's: a terminal it opened before failing would be opened twice. A wait keeps what it
+        // waits on (`Finished::of`).
         Order::StartContext => match context::context_for(config, ports, &command.issue_id, beat) {
             Ok(context) => {
                 trace::event(context);
                 Ok(Finished::ok(json!({})))
             }
-            Err(error) if matches!(Failure::of(&error), Failure::Transient) && !error.orcas() => {
+            Err(error) if matches!(Failure::of(&error), Failure::Transient) && !error.orcas() && !error.later() => {
                 trace::event(Work::Transient(error));
                 Ok(Finished::retryable())
             }

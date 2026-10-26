@@ -325,12 +325,12 @@ export type Command = {
 };
 
 // What a retryable command waits on, sent again as soon as it clears (queue.ts, `clearedBy`): a
-// paired host, by its ID, that a listing hears, or no recipe machine being made, woken or put
-// to sleep.
-export type WaitsOn = { host: string } | { lock: true };
-// What cleared: the hosts a listing heard, the lock, as a machine command ended, or anything,
-// as `listen`'s settings changed.
-export type Clears = { hosts?: readonly string[]; lock?: boolean; all?: boolean };
+// paired host, by its ID, that a listing hears, no recipe machine being made, woken or put
+// to sleep, or `listen`'s own Orca, which any listing heard.
+export type WaitsOn = { host: string } | { lock: true } | { orca: true };
+// What cleared: the hosts a listing heard, the lock, as a machine command ended, Orca, as a
+// listing came, or anything, as `listen`'s settings changed.
+export type Clears = { hosts?: readonly string[]; lock?: boolean; orca?: boolean; all?: boolean };
 
 // An event leaving the store, written with the transition that sends it. Its ID is its
 // kind, the sending store and that store's outbox sequence.
