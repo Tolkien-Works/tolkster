@@ -60,6 +60,9 @@ pub trait Machines {
     // The awake machine `name`, paired as `host`, put to sleep if `rests`, asked with
     // placement stopped, says no agent works on it (`recipe::sleep::suspend`): whether it slept.
     fn suspend(&self, name: &str, host: &str, rests: &mut dyn FnMut() -> Result<bool, Error>) -> Result<bool, Error>;
+    // The asleep machine `name` moved onto its recipe's image in place (`recipe::update::update`):
+    // whether it was.
+    fn update(&self, name: &str) -> Result<bool, Error>;
     // The dormant machine `name` destroyed once `reaped` says nothing on it is lost, else kept
     // (`recipe::retire::retire`): whether it went.
     fn retire(&self, name: &str, reaped: &mut Reaped) -> Result<bool, Error>;

@@ -306,3 +306,22 @@ fn a_wake_wakes_an_admitted_machine_asleep_or_unheard() {
     config.machines.remove("mini");
     assert_eq!(began(&config), json!(false));
 }
+
+// An update goes only to a machine that sleeps, asleep as machines.json has it, and waits while
+// a make, wake or sleep runs, so it never restarts a machine an agent could be at work on.
+#[test]
+fn an_update_goes_only_to_an_asleep_machine() {
+    let (linear, records, world) = fakes();
+    let mut config = full_here(&world, &records);
+    let made = |asleep: bool| crate::config::Machine { recipe: "cloud".into(), repo: "Tolkster".into(), made: true, sleeps: true, asleep, environment: asleep.then(|| "mini".into()), revision: Some("4".into()) };
+    let update = order("fleet.4", Order::UpdateHost { name: "mini".into() });
+    let updated = |config: &Config| carried(config, &linear, &records, &mut fake::Orca::on(&world), &update).map(|done| done.detail["updated"].clone());
+    config.machines.insert("mini".into(), made(false));
+    assert_eq!(updated(&config).unwrap(), json!(false));
+    config.machines.insert("mini".into(), made(true));
+    world.borrow_mut().making = true;
+    assert!(matches!(updated(&config), Err(Error::Waits(Waits::Lock, _))));
+    world.borrow_mut().making = false;
+    assert_eq!(updated(&config).unwrap(), json!(true));
+    assert_eq!(world.borrow().updated, ["mini"]);
+}

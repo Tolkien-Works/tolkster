@@ -133,6 +133,7 @@ fn the_contract_fixture_has_each_report_as_this_writes_it() {
     config.slots = BTreeMap::from([("local".into(), 6), ("mac".into(), 2)]);
     config.repos = crate::hosts::tests::opted_in(2);
     config.machines.insert("tolkster-1".into(), crate::config::Machine { recipe: "cloud".into(), repo: "Tolkster".into(), made: true, sleeps: true, asleep: true, environment: Some("tolkster-1".into()), revision: Some("4".into()) });
+    config.revisions.insert("Tolkster".into(), "5".into());
     assert_eq!(line(config_line(&config)), reports[10]);
     // A cap past what the relay takes goes as the most it takes, as `hosts::total` sums it.
     config.slots.insert("local".into(), MAX_SLOTS + 50);

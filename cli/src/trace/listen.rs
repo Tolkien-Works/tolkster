@@ -132,6 +132,10 @@ pub enum Host {
     Making { repo: String, name: String, counted: usize, machines: i64, issue: String },
     Waking { name: String, issue: String },
     Sleeping { name: String },
+    // An asleep machine's in-place update onto its recipe's image, once `updateHost` passed its
+    // checks, and its end (recipe/update.rs).
+    Updating { name: String },
+    Updated { name: String },
     // A `suspendHost` declined: by name when Orca says it.
     NotSleeping { name: Option<String>, id: String, why: Unslept },
     // A machine's destroy by its recipe (recipe.rs), from `host rm` or a failed make.
@@ -317,6 +321,8 @@ impl Host {
             }
             Host::Waking { name, issue } => Line::routine(Parts::of(format!("waking {name} for {issue}"))).area("host"),
             Host::Sleeping { name } => Line::routine(Parts::of(format!("putting {name} to sleep"))).area("host"),
+            Host::Updating { name } => Line::routine(Parts::of(format!("updating {name} to its recipe's image"))).area("host"),
+            Host::Updated { name } => Line::routine(Parts::of(format!("{name} updated to its recipe's image"))).area("host"),
             Host::NotSleeping { name, id, why } => {
                 let why = match why {
                     Unslept::NotAnswering => "it isn't answering",

@@ -25,7 +25,7 @@ struct World {
 }
 
 fn recipe() -> Recipe {
-    Recipe { id: "cloud".into(), repo: "tolkster".into(), github: "Tolkien-Works/tolkster".into(), folder: "/src/tolkster".into(), create: "./create.sh".into(), destroy: "./destroy.sh".into(), sleep: None, prepare: None }
+    Recipe { id: "cloud".into(), repo: "tolkster".into(), github: "Tolkien-Works/tolkster".into(), folder: "/src/tolkster".into(), create: "./create.sh".into(), destroy: "./destroy.sh".into(), sleep: None, prepare: None, update: None }
 }
 
 fn created() -> String {
@@ -213,16 +213,28 @@ fn a_prepare_with_nothing_to_do_logs_nothing() {
     assert!(matches!(prepare_said("Tolkster", ended(false, 1)), Some(trace::Host::NotPrepared { repo: Some(_), .. })));
 }
 
+// The revision the fleet brings machines to comes from a `prepare` that ran or had nothing to
+// do, never one that failed, nor one of a shape the Durable Object refuses.
+#[test]
+fn a_prepare_reports_its_revision_unless_it_failed() {
+    let ended = |ok: bool, code: i32, stdout: &str| Output { ok, code: Some(code), stdout: stdout.into(), stderr: String::new() };
+    assert_eq!(prepared_revision(&ended(true, 0, r#"{"base":"b1","revision":"5"}"#)), Some("5".into()));
+    assert_eq!(prepared_revision(&ended(false, 3, "{\"revision\":\"5\"}\n")), Some("5".into()));
+    assert_eq!(prepared_revision(&ended(false, 1, r#"{"revision":"5"}"#)), None);
+    assert_eq!(prepared_revision(&ended(false, 3, "")), None);
+    assert_eq!(prepared_revision(&ended(true, 0, r#"{"revision":"5 6"}"#)), None);
+}
+
 // The repo's own orca.yaml reads as Orca writes it; a recipe without a destroy is no recipe
 // host add runs.
 #[test]
 fn a_recipe_is_read_from_orca_yaml_only_with_a_destroy() {
-    let ours = "scripts:\n  setup: |\n    x\nenvironmentRecipes:\n  - id: agent37\n    name: Agent37\n    create: node scripts/orca-vm/agent37-recipe.ts create\n    suspend: node scripts/orca-vm/agent37-recipe.ts suspend\n    resume: node scripts/orca-vm/agent37-recipe.ts resume\n    destroy: node scripts/orca-vm/agent37-recipe.ts destroy\n    prepare: node scripts/orca-vm/agent37-recipe.ts prepare\n";
+    let ours = "scripts:\n  setup: |\n    x\nenvironmentRecipes:\n  - id: agent37\n    name: Agent37\n    create: node scripts/orca-vm/agent37-recipe.ts create\n    suspend: node scripts/orca-vm/agent37-recipe.ts suspend\n    resume: node scripts/orca-vm/agent37-recipe.ts resume\n    update: node scripts/orca-vm/agent37-recipe.ts update\n    destroy: node scripts/orca-vm/agent37-recipe.ts destroy\n    prepare: node scripts/orca-vm/agent37-recipe.ts prepare\n";
     let line = |phase: &str| format!("node scripts/orca-vm/agent37-recipe.ts {phase}");
     let sleep = Some((line("suspend"), line("resume")));
-    assert_eq!(recipe_lines(ours, "agent37"), Some(Lines { create: line("create"), destroy: line("destroy"), sleep, prepare: Some(line("prepare")) }));
+    assert_eq!(recipe_lines(ours, "agent37"), Some(Lines { create: line("create"), destroy: line("destroy"), sleep, prepare: Some(line("prepare")), update: Some(line("update")) }));
     let yaml = "scripts:\n  setup: x\nenvironmentRecipes: # ours\n- id: a\n  command: \"./a.sh\"\n  cleanup: ./b.sh\n  env:\n    - id: n\n      create: ./n.sh\n      destroy: ./n.sh\n- id: b\n  create: ./c.sh\n  destroy: none\n- id: c\n  create: |\n    ./c.sh\n  destroy: ./d.sh\n- id: d\n  create: ./e.sh\n  destroy: ./f.sh\n- id: d\n  create: ./g.sh\n  destroy: ./h.sh\nother: 1\n";
-    assert_eq!(recipe_lines(yaml, "a"), Some(Lines { create: "./a.sh".into(), destroy: "./b.sh".into(), sleep: None, prepare: None }));
+    assert_eq!(recipe_lines(yaml, "a"), Some(Lines { create: "./a.sh".into(), destroy: "./b.sh".into(), sleep: None, prepare: None, update: None }));
     for id in ["b", "c", "d", "n", "missing"] {
         assert_eq!(recipe_lines(yaml, id), None, "{id}");
     }

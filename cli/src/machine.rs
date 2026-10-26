@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use crate::config::Config;
+use crate::config::repo_map::Entry as RepoEntry;
 use crate::error::{Error, Waits};
 use crate::hosts::{Fleet, MAX_SLOTS};
 use crate::gateway::Failure;
@@ -47,6 +48,7 @@ pub enum Kind {
     MakeHost,
     WakeHost,
     SuspendHost,
+    UpdateHost,
     DestroyHost,
 }
 
@@ -77,7 +79,7 @@ pub const FLEET: &str = "fleet";
 
 // Every command but `postAway`, which the Durable Object's alarm posts itself.
 #[cfg(test)]
-pub const KINDS: [Kind; 24] = [
+pub const KINDS: [Kind; 25] = [
     Kind::ReadIssue,
     Kind::StartWorker,
     Kind::DeliverMessage,
@@ -101,6 +103,7 @@ pub const KINDS: [Kind; 24] = [
     Kind::MakeHost,
     Kind::WakeHost,
     Kind::SuspendHost,
+    Kind::UpdateHost,
     Kind::DestroyHost,
 ];
 
@@ -262,6 +265,8 @@ pub enum Order {
     WakeHost { name: String },
     // The recipe machine to put to sleep, by the ID Orca pairs it under.
     SuspendHost { host: String },
+    // The asleep recipe machine to move onto its recipe's image, by its name in machines.json.
+    UpdateHost { name: String },
     // The recipe machine to destroy, by its name in machines.json.
     DestroyHost { name: String },
 }
@@ -367,7 +372,7 @@ fn envelope(value: &Value) -> Result<Command, String> {
     // The triage machine's and the fleet's commands, and only they, carry `triage` or `fleet` for both.
     let own = match kind {
         Kind::StartTriage | Kind::ObserveTriage => Some(TRIAGE),
-        Kind::MakeHost | Kind::WakeHost | Kind::SuspendHost | Kind::DestroyHost => Some(FLEET),
+        Kind::MakeHost | Kind::WakeHost | Kind::SuspendHost | Kind::UpdateHost | Kind::DestroyHost => Some(FLEET),
         _ => None,
     };
     let identifier = str(value, "/identifier")
@@ -486,6 +491,7 @@ fn order(kind: Kind, args: &Value) -> Option<Order> {
         Kind::MakeHost => Order::MakeHost { repo: str(args, "/repo").filter(|repo| crate::hosts::plain_name(repo))?.to_string() },
         Kind::WakeHost => Order::WakeHost { name: str(args, "/name").filter(|name| plain_host(name))?.to_string() },
         Kind::SuspendHost => Order::SuspendHost { host: str(args, "/host").filter(|host| plain_host(host))?.to_string() },
+        Kind::UpdateHost => Order::UpdateHost { name: str(args, "/name").filter(|name| plain_host(name))?.to_string() },
         Kind::DestroyHost => Order::DestroyHost { name: str(args, "/name").filter(|name| plain_host(name))?.to_string() },
     })
 }
@@ -619,11 +625,16 @@ pub fn terminal_closed_line(terminal: &str, sequence: u64) -> String {
 }
 
 // `listen`'s settings, as the Durable Object's fleet keeps them (src/worker/machine/fleet.ts):
-// this machine's cap, `slots` by host name, each repo's recipe settings by repo, and each
-// machine machines.json records, by name. Names and numbers only. Sent as `listen` connects
-// and whenever it changes.
+// this machine's cap, `slots` by host name, each repo's recipe settings by repo, with the
+// revision its machines are brought to, and each machine machines.json records, by name. Names
+// and numbers only. Sent as `listen` connects and whenever it changes.
 pub fn config_line(config: &Config) -> String {
-    let repos: Map<String, Value> = config.repos.0.iter().filter_map(|entry| Some((entry.repo.clone(), json!(entry.recipe.as_ref()?)))).collect();
+    let recipe = |entry: &RepoEntry| {
+        let mut recipe = json!(entry.recipe.as_ref()?);
+        recipe["revision"] = json!(config.revisions.get(&entry.repo));
+        Some((entry.repo.clone(), recipe))
+    };
+    let repos: Map<String, Value> = config.repos.0.iter().filter_map(recipe).collect();
     let machines: Map<String, Value> = config.machines.iter().map(|(name, made)| (name.clone(), json!({ "repo": made.repo, "made": made.made, "asleep": made.asleep, "environment": made.environment, "revision": made.revision }))).collect();
     json!({ "report": "config", "cap": config.local_slots().min(MAX_SLOTS), "slots": config.slots, "repos": repos, "machines": machines }).to_string()
 }

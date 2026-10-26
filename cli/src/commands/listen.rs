@@ -78,11 +78,12 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
         if let Some(updater) = &updater {
             updater.catch_up();
         }
-        recipe::spawn_prepare();
+        recipe::spawn_prepare(&shared);
         let update = updater.as_ref().map(|u| u.update.clone());
         shown_update.clone_from(&update);
         github::hold();
         let (acting, missing, releasing) = (agent.clone(), agent.clone(), agent.clone());
+        let preparing = Arc::clone(&shared);
         let working = Arc::clone(&shared);
         let tips = Mutex::new(Tips::default());
         let scheduler = scheduler::Scheduler::spawn(Arc::clone(&shared), move |_, job, beat| match job {
@@ -96,13 +97,13 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
                 }
                 base(&acting, &working, repo, after, beat);
                 match updater.as_ref().filter(|u| u.is_own(repo, reference)) {
-                    Some(updater) if lock(&tips).take(after, &mut say, || updater.pass(&mut beating(beat), &mut say, Some(after), |made| build(&releasing, made))) => Acted::Held(BASE_AGAIN),
+                    Some(updater) if lock(&tips).take(after, &mut say, || updater.pass(&mut beating(beat), &mut say, Some(after), |made| build(&releasing, &preparing, made))) => Acted::Held(BASE_AGAIN),
                     _ => Acted::Done,
                 }
             }
             Job::Update => {
                 if let Some(updater) = &updater {
-                    updater.pass(&mut beating(beat), &mut say, None, |made| build(&releasing, made));
+                    updater.pass(&mut beating(beat), &mut say, None, |made| build(&releasing, &preparing, made));
                 }
                 Acted::Done
             }
@@ -290,16 +291,16 @@ fn say(said: trace::Update) {
 // The pull may have changed what a recipe's machines are made from; the restart's start
 // prepares them instead.
 #[cfg(feature = "develop")]
-fn build(agent: &Agent, build: Build) {
-    let agent = agent.clone();
+fn build(agent: &Agent, shared: &Arc<Shared>, build: Build) {
+    let (agent, shared) = (agent.clone(), Arc::clone(shared));
     std::thread::spawn(move || {
         if !build.make(&mut run_command, &mut say, &mut update::swap, &mut |run, dir, head| update::release(&agent, run, dir, head)) {
-            recipe::spawn_prepare();
+            recipe::spawn_prepare(&shared);
         }
     });
 }
 
 #[cfg(not(feature = "develop"))]
-fn build(_agent: &Agent, build: Build) {
+fn build(_agent: &Agent, _shared: &Arc<Shared>, build: Build) {
     match build {}
 }

@@ -38,9 +38,9 @@ pub struct Shared {
 
 impl Shared {
     // `settings` with the hosts holding an admitted credential as `listen` last read them
-    // (Pacing::enrolled).
+    // (Pacing::enrolled), and the revisions the recipes last prepared (Progress::prepared).
     pub fn settings(&self, files: &Files) -> Result<Config, Error> {
-        let config = Config { enrolled: self.pacing.enrolled(), ..settings(files)? };
+        let config = Config { enrolled: self.pacing.enrolled(), revisions: self.recipes.revisions(), ..settings(files)? };
         self.timing.allow(config.timing);
         Ok(config)
     }
@@ -60,6 +60,9 @@ pub struct Progress {
     // What each key's last refusal was: one repeated on every pass of the queue is said once,
     // until its reason changes or a make or wake for the key begins.
     declined: Mutex<BTreeMap<String, trace::Declined>>,
+    // The image revision each repo's recipe last said its machines are brought to, by repo, as
+    // its `prepare` printed it (recipe.rs, `spawn_prepare`): none until one has run.
+    revisions: Mutex<BTreeMap<String, String>>,
 }
 
 impl Progress {
@@ -96,6 +99,14 @@ impl Progress {
     // A make or wake for `key` began, so its next refusal is said.
     pub fn began(&self, key: &str) {
         lock(&self.declined).remove(key);
+    }
+
+    pub fn prepared(&self, repo: &str, revision: String) {
+        lock(&self.revisions).insert(repo.to_string(), revision);
+    }
+
+    pub fn revisions(&self) -> BTreeMap<String, String> {
+        lock(&self.revisions).clone()
     }
 }
 
