@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+reviews:
+  profile: chill
+  high_level_summary: false
+  poem: false
+  review_status: false
+  collapse_walkthrough: true
+  request_changes_workflow: false
+knowledge_base:
+  code_guidelines:
+    filePatterns:
+      - AGENTS.md
+      - docs/*.md

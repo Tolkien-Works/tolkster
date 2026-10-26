@@ -14,7 +14,8 @@ otherwise the round gives its changes a light pass.
   `repos` entry's own `review` replaces the global settings it sets for its repo's PRs
   (`Config::review_for`; [setup](setup.md#6-orca-repos-and-tolkster-listen)); with none
   for a PR's repo, the PR isn't checked. The bot that authored the PR is never blessed on
-  it: its comments are the worker's own replies.
+  it: its comments are the worker's own replies. CodeRabbit reviews each PR
+  (`.coderabbit.yaml`) but isn't listed, so its comments count for nothing.
 - **The last round** is the newest the work machine started on the PR ([Facts](state-machine.md#facts)).
   Feedback, a failed check and a moved base count only when newer than it.
 - **Resume** when any of these is new:
