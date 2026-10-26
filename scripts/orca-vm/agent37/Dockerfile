@@ -5,7 +5,7 @@
 # Everything goes outside /home/node: the instance's volume masks it at runtime.
 
 # The base's tag for one Orca release, pinned so a new Orca comes in by a reviewed raise here.
-ARG ORCA_VERSION=1.4.235
+ARG ORCA_VERSION=1.4.241
 FROM ghcr.io/tolkien-works/tolkster-worker-base:orca-${ORCA_VERSION}
 
 USER root
