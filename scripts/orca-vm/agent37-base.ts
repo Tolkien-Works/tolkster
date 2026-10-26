@@ -8,7 +8,7 @@
 // (docs/hosts.md). `orca-ide serve` never runs on the base, so no fork inherits another's Orca
 // identity.
 
-import { execFileSync, execSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
@@ -32,10 +32,16 @@ export async function buildImage(): Promise<State> {
   const path = process.platform === "win32" ? `${process.env.SystemRoot}\\System32;${process.env.PATH}` : process.env.PATH;
   // The CLI needs no git token.
   const { GH_TOKEN: _gh, GITHUB_TOKEN: _github, ...env } = process.env;
-  execSync(`npx --yes agent37@0.4.1 templates build . --name ${TEMPLATE}`, {
-    cwd: IMAGE_DIR,
-    env: { ...env, PATH: path },
-    stdio: ["ignore", process.stderr, process.stderr],
+  // Awaited, not run synchronously, so `prepare`'s lock is still touched through a long build.
+  await new Promise<void>((done, failed) => {
+    const build = spawn(`npx --yes agent37@0.4.1 templates build . --name ${TEMPLATE}`, {
+      cwd: IMAGE_DIR,
+      env: { ...env, PATH: path },
+      shell: true,
+      stdio: ["ignore", process.stderr, process.stderr],
+    });
+    build.on("error", failed);
+    build.on("exit", (code) => (code === 0 ? done() : failed(new Error(`the template build failed (exit ${code})`))));
   });
   return mergeState({ template: TEMPLATE, orcaVersion });
 }
