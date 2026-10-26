@@ -16,14 +16,16 @@ says what holds those commands together; the commands and reports themselves are
   issue Tolkster created, is a request a turn takes in that thread, opening no session ([A reply in Tolkster's thread](#a-reply-in-tolksters-thread)).
 - **The watcher** exists because no webhook says a worker's terminal closed. `listen`
   lists Orca's terminals (`Watcher` in `watch.rs`) when a terminal it waits on exits or a job
-  changes its worktrees or terminals, and every 60 s as the backstop, and reports each worktree's agent as `agentWorking`,
-  `agentIdle`, `agentWaiting` or `agentExited` when it changes. It reads agents' states
-  and times only, never a terminal's contents. The machine's deadlines do the rest
-  ([Work transitions](state-machine.md#work-transitions)). A failed listing is skipped; a
-  failed read of the states alone keeps the last one, so exits are still seen.
-  A wait's `exited` is no proof (Orca gave it for a terminal it still listed): a terminal
-  `listen` opened ends only when a fresh listing lacks it, else its wait restarts a few
-  times and then the regular listings decide.
+  changes its worktrees or terminals, once when a frame shows a worker running, idle or held
+  that the newest listing lacks (its agent's first hook follows the listing its launch asked
+  for; a slot unlisted after that stays `unseen`), and every 60 s as the backstop. It reports
+  each worktree's agent as `agentWorking`, `agentIdle`, `agentWaiting` or `agentExited` when
+  it changes, reading states and times only, never a terminal's contents. The machine's
+  deadlines do the rest ([Work transitions](state-machine.md#work-transitions)). A failed
+  listing is skipped; a failed read of the states alone keeps the last one, so exits are
+  still seen. A wait's `exited` is no proof (Orca gave it for a terminal it still listed): a
+  terminal `listen` opened ends only when a fresh listing lacks it, else its wait restarts a
+  few times and then the regular listings decide.
 - **The same listing** ends turns and triage: a turn's terminal closing is `turnEnded`,
   the triage session's closing starts the next batch ([Triage](triage.md)), and the last
   terminal closing in a conversations checkout refreshes it. The Durable Object also

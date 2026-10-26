@@ -354,6 +354,11 @@ impl Scheduler {
         Scheduler { watcher: Some(watcher), ..self }
     }
 
+    // The frame shows a worker the newest listing lacks: list again now, not at the backstop.
+    pub fn list_now(&self) {
+        self.lanes.0.list_now();
+    }
+
     fn watch_agents(&mut self) -> bool {
         let Some(watcher) = &self.watcher else { return true };
         let seen: Vec<Seen> = watcher.seen.try_iter().collect();
