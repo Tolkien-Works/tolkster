@@ -1,0 +1,25 @@
+{
+  "name": "tolkster",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "node --test \"test/*.test.ts\"",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260925.1",
+    "@types/node": "^24.13.6",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.140.0"
+  },
+  "dependencies": {
+    "@linear/sdk": "^96.0.0"
+  }
+}

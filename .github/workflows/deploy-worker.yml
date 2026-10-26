@@ -1,0 +1,47 @@
+name: Deploy Worker
+
+# Only main deploys. Pull requests never trigger this workflow.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "src/worker/**"
+      - "src/shared/**"
+      - "wrangler.jsonc"
+      - "package*.json"
+
+# One deploy at a time, in merge order. A queued run isn't cancelled by a running one.
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Only the Worker's checks gate a deploy. The Rust tests already ran on the PR, and
+  # run again in main's CI at the same time as this.
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # The token can only edit Workers scripts in this one account, so a deploy can't
+      # land anywhere else. The Worker's LINEAR_* secrets stay in Cloudflare.
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check the Cloudflare secrets are set
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Set the CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repo secrets (docs/setup.md, step 3)."
+            exit 1
+          fi
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npx wrangler deploy

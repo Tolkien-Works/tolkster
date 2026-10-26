@@ -1,0 +1,7 @@
+{
+  "enabledPlugins": {
+    "shopify-ai-toolkit@claude-plugins-official": false,
+    "playwright@claude-plugins-official": false,
+    "csharp-lsp@claude-plugins-official": false
+  }
+}

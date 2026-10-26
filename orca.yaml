@@ -1,0 +1,10 @@
+scripts:
+  setup: node -e "process.chdir(process.env.ORCA_WORKTREE_PATH||'.');import(require('url').pathToFileURL('scripts/setup.ts'))"
+setupAgentStartupPolicy: start-immediately
+environmentRecipes:
+  - id: agent37
+    name: Agent37
+    create: node scripts/orca-vm/agent37-recipe.ts create
+    suspend: node scripts/orca-vm/agent37-recipe.ts suspend
+    resume: node scripts/orca-vm/agent37-recipe.ts resume
+    destroy: node scripts/orca-vm/agent37-recipe.ts destroy

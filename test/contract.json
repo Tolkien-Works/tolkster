@@ -1,0 +1,246 @@
+{
+  "change": {
+    "read": { "pr": 7, "at": "2026-09-26T01:08:30.000Z" },
+    "conversation": { "agentSession": "0a1b2c3d-0000-4000-8000-000000000003", "terminal": "term_1", "at": "2026-09-26T01:11:00.000Z" }
+  },
+  "record": {
+    "reads": [{ "pr": 7, "at": "2026-09-26T01:08:30.000Z" }],
+    "conversation": { "agentSession": "0a1b2c3d-0000-4000-8000-000000000003", "terminal": "term_1", "at": "2026-09-26T01:11:00.000Z" }
+  },
+  "enums": {
+    "rungFrom": ["claim", "noEstimate", "worker"]
+  },
+  "harnesses": { "claude": ["low", "medium", "high", "xhigh", "max"] },
+  "worker": { "issue": "TW-1", "worktreeId": "r1::D:/wt/tw-1", "sessionId": "s-1", "at": "2026-09-26T01:00:00.000Z", "launch": { "harness": "claude", "model": "claude-opus-5-5", "effort": "medium" }, "rungFrom": "noEstimate" },
+  "delegation": { "issueId": "i-2", "parentIssueId": "i-1", "sessionId": "s-1", "at": "2026-09-26T01:00:00.000Z" },
+  "checkout": { "repoId": "r1", "worktreeId": "r1::D:/wt/conversations", "at": "2026-09-26T01:00:00.000Z" },
+  "contextComment": { "issueId": "i-1", "commentId": "c0c0c0c0-0000-4000-8000-000000000001", "at": "2026-09-26T01:00:00.000Z" },
+  "triaging": { "session": "s-1", "identifier": "TW-1" },
+  "session": { "op": "session", "sessionId": "5e5e5e5e-0000-4000-8000-000000000001" },
+  "reading": { "readThrough": "2026-09-26T01:01:00.000Z", "turnReadThrough": "2026-09-26T01:02:00.000Z", "answeredThrough": null },
+  "supersededClose": 4000,
+  "unsetSettings": ["OWNER_USER_ID", "REALTIME_SECRET"],
+  "buildTargets": ["linux-x64", "macos-arm64", "windows-x64"],
+  "linearWebhookTypes": ["AgentSessionEvent", "Comment", "Issue"],
+  "githubPurposes": ["autoMerge", "create", "describe", "merge", "push", "read", "reply", "resolve", "updateBranch"],
+  "baseTip": { "type": "base", "repo": "Tolkien-Works/tolkster", "ref": "refs/heads/main", "after": "a1fe200000000000000000000000000000000000" },
+  "fleetBegan": { "began": true },
+  "fleetCoolDown": { "began": false, "coolDown": true },
+  "fleet": [
+    { "cap": 2, "fleet": { "held": 3, "hosts": [], "projects": {} }, "total": 3 },
+    { "cap": 2, "fleet": { "held": 0, "hosts": [{ "id": "id-mac", "name": "mac", "cap": 2, "admitted": true, "answering": true, "ready": ["github:acme/app"], "held": 1 }], "projects": {} }, "total": 4 },
+    { "cap": 2, "fleet": { "held": 1, "hosts": [{ "id": "id-tolkster-1", "name": "tolkster-1", "cap": 0, "admitted": true, "answering": false, "ready": [], "held": 1 }], "projects": {} }, "total": 3 },
+    { "cap": 2, "fleet": { "held": 0, "hosts": [{ "id": "id-mac", "name": "mac", "cap": 2, "admitted": true, "answering": true, "ready": ["github:acme/app"], "held": 4 }, { "id": "id-pi", "name": "pi", "cap": 3, "admitted": true, "answering": true, "ready": [], "held": 1 }], "projects": {} }, "total": 7 }
+  ],
+  "frame": {
+    "type": "frame",
+    "cap": 6,
+    "hosts": [{ "id": "tolkster-1", "name": "tolkster-1", "cap": 3, "answering": true }],
+    "slots": [
+      { "issue": "i-1", "identifier": "TW-1", "reserved": false, "sinceMs": 1790000000000, "host": "tolkster-1", "work": "running", "background": true, "deadline": { "kind": "own", "dueMs": 1790000120000 }, "pr": { "number": 7, "checks": "failed", "mergeState": "CLEAN", "rounds": 3, "capped": true, "autoMerge": true }, "anomaly": false },
+      { "issue": "i-2", "identifier": "TW-2", "reserved": true, "sinceMs": 1790000060000, "host": null, "work": null, "background": false, "deadline": null, "pr": null, "anomaly": true }
+    ],
+    "queue": [
+      { "issue": "i-3", "identifier": "TW-3", "waiting": "slot", "blockers": [], "at": "2026-09-26T01:00:00.000Z" },
+      { "issue": "i-4", "identifier": null, "waiting": "blockers", "blockers": ["TW-8"], "at": "2026-09-26T01:01:00.000Z" }
+    ],
+    "parked": [
+      { "issue": "i-6", "identifier": "TW-6", "work": "exited", "stalled": true, "pr": { "number": 8, "checks": "pending", "mergeState": null, "rounds": 0, "capped": false, "autoMerge": null } },
+      { "issue": "i-8", "identifier": "TW-8", "work": "rest", "stalled": false, "pr": { "number": 9, "checks": "passed", "mergeState": "CLEAN", "rounds": 0, "capped": false, "autoMerge": false } }
+    ],
+    "chains": [{ "issue": "i-7", "identifier": "TW-7", "run": "run-1", "issues": 3, "answered": 1 }],
+    "triage": { "state": "retrying", "dueMs": 1790000030000, "failures": 2 },
+    "why": { "tolkster": "allMade", "r9": "noRecipe" }
+  },
+  "worktreeIds": [
+    { "id": "r1::D:/wt/tw-1", "host": null, "repo": "r1", "path": "D:/wt/tw-1" },
+    { "id": "mac-mini@9f0c2a1e-0000-4000-8000-000000000001::/Users/sam/orca/workspaces/tolkster/tw-1", "host": "mac-mini", "repo": "9f0c2a1e-0000-4000-8000-000000000001", "path": "/Users/sam/orca/workspaces/tolkster/tw-1" },
+    { "id": "studio.local@r_1::/srv/a::b@c", "host": "studio.local", "repo": "r_1", "path": "/srv/a::b@c" }
+  ],
+  "notWorktreeIds": ["", "r1", "r1:D:/wt", "::D:/wt", "r1::", "r.1::D:/wt", "@r1::/wt", "-mac@r1::/wt", "mac@@r1::/wt", "my mac@r1::/wt", "mac@r1@x::/wt", "r1::/wt\u0007"],
+  "terminals": [
+    { "handle": "term_1a2b", "host": null, "orca": "term_1a2b" },
+    { "handle": "mac-mini@term_1a2b", "host": "mac-mini", "orca": "term_1a2b" },
+    { "handle": "studio.local@tab_1:leaf-2", "host": "studio.local", "orca": "tab_1:leaf-2" }
+  ],
+  "notTerminals": ["", "-term_1", "mac@-term_1", "term.1", "term 1", "@term_1", "-mac@term_1", "mac@", "mac@@term_1", "my mac@term_1", "mac@term.1"],
+  "times": [
+    { "ms": 0, "iso": "1970-01-01T00:00:00.000Z" },
+    { "ms": 951782400000, "iso": "2000-02-29T00:00:00.000Z" },
+    { "ms": 1727312523456, "iso": "2024-09-26T01:02:03.456Z" },
+    { "ms": 1790000000000, "iso": "2026-09-21T14:13:20.000Z" },
+    { "ms": 4102444799999, "iso": "2099-12-31T23:59:59.999Z" }
+  ],
+  "notTimes": [
+    "2026-09-28T10:52:52Z",
+    "2026-09-28T10:52:52.5Z",
+    "2026-09-28T10:52:52.5930Z",
+    "2026-09-28T10:52:52.593+00:00",
+    "2026-09-28T10:52:52.593",
+    "2026-09-28 10:52:52.593Z",
+    "2026-09-28",
+    ""
+  ],
+  "machine": {
+    "requestStates": ["requested", "queued", "claimed", "done", "stopping"],
+    "workStates": ["launching", "running", "idle", "held", "exited", "rest", "halted", "merged", "reaped"],
+    "triageStates": ["idle", "starting", "running", "retrying"],
+    "events": {
+      "sessionStarted": ["request"],
+      "ownerPrompted": ["request"],
+      "ownerStopped": ["request"],
+      "delegateChanged": ["request", "work"],
+      "issueStateChanged": ["request", "work"],
+      "blockersChanged": ["request"],
+      "prOpened": ["work"],
+      "prPushed": ["work"],
+      "prReviewed": ["work"],
+      "checksCompleted": ["work"],
+      "prMerged": ["work"],
+      "prClosed": ["work"],
+      "ownerCommented": ["work"],
+      "autoMergeDisabled": ["work"],
+      "mergeAsked": ["work"],
+      "basePushed": ["work"],
+      "agentWorking": ["work"],
+      "agentBackground": ["work"],
+      "agentIdle": ["work"],
+      "agentWaiting": ["work"],
+      "agentExited": ["work"],
+      "worktreeGone": ["work"],
+      "landed": ["work"],
+      "turnEnded": ["request"],
+      "turnIdle": ["request"],
+      "priorityChanged": ["request"],
+      "workerRead": ["request"],
+      "workerAnswered": ["request", "work"],
+      "deadline": ["request", "work", "triage"],
+      "commandResult": ["request", "work", "triage"],
+      "workRequested": ["work"],
+      "stopRequested": ["work"],
+      "workChanged": ["request"],
+      "slotGranted": ["request"],
+      "slotWaiting": ["request"],
+      "childChanged": ["request"],
+      "parentHalted": ["request", "work"],
+      "chainRecorded": ["work"],
+      "triageAsked": ["triage"],
+      "triageEnded": ["triage"],
+      "listenConnected": ["request", "triage"],
+      "listenGone": ["request", "triage"]
+    },
+    "coordinator": ["slotAsked", "slotHeld", "slotReleased", "blockersRead", "blockerChanged", "prRecorded", "repoPushed"],
+    "commands": ["readIssue", "startWorker", "deliverMessage", "readComment", "resumeWorker", "startRound", "stopWorker", "startTurn", "stopTurn", "evaluatePr", "observe", "closeAgent", "reapWorktree", "postNotice", "takeBackChain", "startContext", "startTriage", "observeTriage", "updateBranch", "mergePr", "makeHost", "wakeHost", "suspendHost", "destroyHost", "postAway"],
+    "notices": ["blocked", "busy", "held", "notDelegated", "noLongerMine", "cancelled", "alreadyDone", "noRepo", "stopped", "stalled", "paused", "heldAtPrompt", "couldntPass", "roundsCap", "prClosed", "autoMergeOff", "ciCouldntRun", "checksPending", "copilotWontApprove", "stopUnnamed", "roundUnnamed", "unheard"],
+    "results": ["ok", "failed", "retryable", "held", "gone"],
+    "fleetReasons": ["hereHasRoom", "hostHasRoom", "running", "hostComing", "allMade", "coolingDown", "noRecipe"],
+    "maxListed": 1000,
+    "maxSlots": 100
+  },
+  "resultData": {
+    "readIssue": { "read": {
+      "updatedAt": "2026-09-26T01:09:00.000Z", "delegate": "owner", "state": "open", "triage": false, "stateChangedAt": "2026-09-26T01:09:00.000Z", "priority": 2,
+      "blockers": [{ "id": "1b2c3d4e-0000-4000-8000-000000000084", "done": true, "updatedAt": "2026-09-26T01:03:00.000Z" }], "moreBlockers": false,
+      "parent": { "id": "1b2c3d4e-0000-4000-8000-000000000080", "delegated": true, "by": "chain", "state": "cancelled", "priority": 3, "updatedAt": "2026-09-26T01:05:00.000Z" },
+      "children": [{ "id": "1b2c3d4e-0000-4000-8000-000000000085", "done": false, "triage": false, "updatedAt": "2026-09-26T01:04:00.000Z" }, { "id": "1b2c3d4e-0000-4000-8000-000000000086", "done": false, "triage": true, "updatedAt": "2026-09-26T01:06:00.000Z" }], "moreChildren": false,
+      "repo": "tolkster",
+      "sessions": [
+        { "id": "5e5e5e5e-0000-4000-8000-000000000001", "kind": "delegation", "createdAt": "2026-09-26T01:00:00.000Z" },
+        { "id": "5e5e5e5e-0000-4000-8000-000000000002", "kind": "delegation", "createdAt": "2026-09-26T01:00:00.000Z", "inDescription": true }
+      ]
+    } },
+    "startWorker": { "worktree": { "id": "repo-1::D:/worktrees/tw-1", "branch": "fix-it-tw-1" }, "madeWorktree": true, "launched": true },
+    "startWorkerFailed": { "madeWorktree": false, "said": true },
+    "startRoundTyped": { "typed": true },
+    "resumeWorkerWaking": { "waking": true, "waitsOn": { "host": "mini" } },
+    "destroyHostLocked": { "waitsOn": { "lock": true } },
+    "updateBranchMoved": { "moved": true },
+    "updateBranchRefused": { "refused": true },
+    "startTurn": { "terminal": "term_1a2b" },
+    "reapWorktree": { "reaped": false },
+    "readComment": { "comment": { "kind": "noteReply", "newestOwnerAt": "2026-09-26T01:02:00.000Z", "state": "open", "root": "c0c0c0c0-0000-4000-8000-000000000001" } },
+    "readCommentGone": { "comment": { "kind": "gone", "newestOwnerAt": null, "state": "open" } }
+  },
+  "commands": [
+    { "type": "command", "id": "c-1", "kind": "readIssue", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 3, "urgent": false, "args": {} },
+    { "type": "command", "id": "c-2", "kind": "startWorker", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 4, "urgent": false, "args": { "sessionId": "s-1", "orchestrate": true } },
+    { "type": "command", "id": "c-20", "kind": "startWorker", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 4, "urgent": false, "args": { "sessionId": "s-1", "orchestrate": false, "host": "mac" } },
+    { "type": "command", "id": "c-3", "kind": "deliverMessage", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 5, "urgent": false, "args": { "worktreeId": "r1::D:/wt/tw-1", "sessionId": "s-1" } },
+    { "type": "command", "id": "c-16", "kind": "deliverMessage", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 18, "urgent": false, "args": { "worktreeId": "r1::D:/wt/tw-1", "sessionId": null, "comment": true } },
+    { "type": "command", "id": "c-15", "kind": "readComment", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 17, "urgent": false, "args": { "commentId": "cm-1" } },
+    { "type": "command", "id": "c-4", "kind": "resumeWorker", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 6, "urgent": false, "args": { "sessionId": "s-1", "childrenEnd": false, "childrenAdded": false } },
+    { "type": "command", "id": "c-5", "kind": "startRound", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 7, "urgent": false, "args": { "repo": "Tolkien-Works/tolkster", "number": 7, "head": "2878d3d000000000000000000000000000000000", "round": 2, "sessionId": "s-1", "rebaseOnly": false } },
+    { "type": "command", "id": "c-6", "kind": "stopWorker", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 8, "urgent": true, "args": { "worktreeId": "r1::D:/wt/tw-1", "sessionId": "s-1" } },
+    { "type": "command", "id": "c-7", "kind": "startTurn", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 9, "urgent": false, "args": { "sessionId": "s-2", "thread": false, "request": "2026-09-26T01:01:00.000Z", "after": "2026-09-26T01:00:00.000Z" } },
+    { "type": "command", "id": "c-8", "kind": "stopTurn", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 10, "urgent": true, "args": { "sessionId": "s-2" } },
+    { "type": "command", "id": "c-9", "kind": "evaluatePr", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 11, "urgent": false, "args": { "repo": "Tolkien-Works/tolkster", "number": 7 } },
+    { "type": "command", "id": "c-10", "kind": "observe", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 12, "urgent": false, "args": { "worktreeIds": ["r1::D:/wt/tw-1"], "sessionId": "s-2" } },
+    { "type": "command", "id": "c-11", "kind": "closeAgent", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 13, "urgent": false, "args": { "worktreeId": "r1::D:/wt/tw-1" } },
+    { "type": "command", "id": "c-12", "kind": "reapWorktree", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 14, "urgent": false, "args": { "worktreeId": "r1::D:/wt/tw-1", "rule": { "kind": "merged", "number": 7, "head": "2878d3d000000000000000000000000000000000" } } },
+    { "type": "command", "id": "c-13", "kind": "postNotice", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 15, "urgent": false, "args": { "sessionId": "s-1", "notice": "blocked", "blockers": ["1b2c3d4e-0000-4000-8000-000000000084", "1b2c3d4e-0000-4000-8000-000000000085"], "queued": { "waiting": "blockers", "at": "2026-09-26T01:01:00.000Z", "blockers": ["1b2c3d4e-0000-4000-8000-000000000084", "1b2c3d4e-0000-4000-8000-000000000085"] } } },
+    { "type": "command", "id": "c-14", "kind": "takeBackChain", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 16, "urgent": true, "args": { "children": ["0a1b-2d", "0a1b-2e"] } },
+    { "type": "command", "id": "c-17", "kind": "startContext", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 0, "urgent": false, "args": {} },
+    { "type": "command", "id": "triage.1", "kind": "startTriage", "issueId": "triage", "identifier": "triage", "version": 1, "urgent": false, "args": { "issueIds": ["0a1b-2c"] } },
+    { "type": "command", "id": "triage.2", "kind": "observeTriage", "issueId": "triage", "identifier": "triage", "version": 2, "urgent": false, "args": { "sessionId": "s-3", "terminal": "term_2" } },
+    { "type": "command", "id": "c-18", "kind": "updateBranch", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 19, "urgent": false, "args": { "repo": "Tolkien-Works/tolkster", "number": 7, "head": "2878d3d000000000000000000000000000000000" } },
+    { "type": "command", "id": "c-19", "kind": "mergePr", "issueId": "0a1b-2c", "identifier": "TW-1", "version": 20, "urgent": false, "args": { "repo": "Tolkien-Works/tolkster", "number": 7, "head": "2878d3d000000000000000000000000000000000" } },
+    { "type": "command", "id": "fleet.1", "kind": "makeHost", "issueId": "fleet", "identifier": "fleet", "version": 1, "urgent": false, "args": { "repo": "tolkster" } },
+    { "type": "command", "id": "fleet.2", "kind": "wakeHost", "issueId": "fleet", "identifier": "fleet", "version": 2, "urgent": false, "args": { "name": "tolkster-1" } },
+    { "type": "command", "id": "fleet.3", "kind": "suspendHost", "issueId": "fleet", "identifier": "fleet", "version": 3, "urgent": false, "args": { "host": "mac" } },
+    { "type": "command", "id": "fleet.4", "kind": "destroyHost", "issueId": "fleet", "identifier": "fleet", "version": 4, "urgent": false, "args": { "name": "tolkster-1" } }
+  ],
+  "reports": [
+    { "report": "commandResult", "id": "c-1", "issueId": "0a1b-2c", "version": 3, "result": "ok", "detail": { "stateType": "started" } },
+    { "report": "agentWorking", "worktreeId": "r1::D:/wt/tw-1", "sequence": 1 },
+    { "report": "agentIdle", "worktreeId": "r1::D:/wt/tw-1", "sequence": 2 },
+    { "report": "agentWaiting", "worktreeId": "r1::D:/wt/tw-1", "sequence": 3 },
+    { "report": "agentExited", "worktreeId": "r1::D:/wt/tw-1", "sequence": 4 },
+    { "report": "worktreeGone", "worktreeId": "r1::D:/wt/tw-1", "sequence": 5 },
+    { "report": "turnEnded", "sessionId": "s-2", "sequence": 6 },
+    { "report": "workerRead", "sessionId": "s-1", "activityId": "a-1", "at": "2026-09-26T01:01:00.000Z", "reader": "worker" },
+    { "report": "workerAnswered", "sessionId": "s-1", "activityId": "a-2", "at": "2026-09-26T01:02:00.000Z", "reader": "turn" },
+    { "report": "chainRecorded", "issueId": "0a1b-2c", "sessionId": "s-1", "run": "r-1", "children": ["0a1b-2d", "0a1b-2e"] },
+    { "report": "config", "cap": 6, "slots": { "local": 6, "mac": 2 }, "repos": { "Tolkster": { "id": "cloud", "machines": 2, "slotsEach": 3, "idleMinutes": 30, "destroyAfter": 600 } }, "machines": { "tolkster-1": { "repo": "Tolkster", "made": true, "asleep": true, "environment": "tolkster-1", "revision": "4" } } },
+    { "report": "commandResult", "id": "c-9", "issueId": "0a1b-2c", "version": 11, "result": "ok", "detail": { "pr": { "number": 7, "status": "open", "at": "2026-09-26T01:04:00.000Z", "head": "2878d3d000000000000000000000000000000000", "base": "ba5e111111111111111111111111111111111111", "mergeState": "BEHIND", "autoMergeOff": false, "autoMerge": true, "mergeable": false, "manualMerge": false, "checks": "pending", "feedback": { "at": "2026-09-26T01:03:00.000Z", "reviewerAt": "2026-09-26T01:02:00.000Z" }, "copilotWontApprove": false, "maxRounds": 5 } } },
+    { "report": "agentIdle", "worktreeId": "r1::D:/wt/tw-1", "at": "2026-09-26T01:05:00.000Z", "elapsedMs": 2000 },
+    { "report": "terminalClosed", "terminal": "term_2", "sequence": 7 },
+    { "report": "commandResult", "id": "triage.1", "issueId": "triage", "version": 1, "result": "ok", "detail": { "session": { "id": "s-3", "terminal": "term_2", "issues": ["TW-1", "TW-2"] }, "waiting": ["0a1b2c3d-0000-4000-8000-000000000002"] } },
+    { "report": "commandResult", "id": "triage.2", "issueId": "triage", "version": 2, "result": "ok", "detail": { "open": false } },
+    { "report": "listing", "at": "2026-09-26T01:06:00.000Z", "elapsedMs": 3000, "agents": { "r1::D:/wt/tw-1": "working", "r1::D:/wt/tw-2": "idle", "r1::D:/wt/tw-3": "waiting" }, "listed": ["r1::D:/wt/tw-1", "r1::D:/wt/tw-2", "r1::D:/wt/tw-3", "r1::D:/wt/tw-4"], "hosts": ["mac"], "paired": ["mac", "pi"], "idle": { "mac": 30 }, "dormant": { "tolkster-1": 1440 }, "fleet": { "held": 1, "hosts": [{ "id": "mac", "name": "mac", "cap": 2, "admitted": true, "answering": true, "ready": ["github:acme/app"], "held": 1 }, { "id": "pi", "name": "pi", "cap": 0, "admitted": false, "answering": false, "ready": [], "held": 0 }], "projects": { "r1": "github:acme/app" }, "recipes": { "r1": "tolkster" } } },
+    { "report": "listing", "at": "2026-09-26T01:07:00.000Z", "elapsedMs": 0, "agents": {}, "listed": null, "hosts": [], "paired": [], "idle": {}, "dormant": null, "fleet": { "held": 0, "hosts": [], "projects": {} } },
+    { "report": "turnIdle", "sessionId": "s-2", "terminal": "term_2", "at": "2026-09-26T01:03:00.000Z" },
+    { "report": "landed", "issueId": "0a1b-2c", "sessionId": "s-1", "head": "2878d3d000000000000000000000000000000000" },
+    { "report": "agentBackground", "worktreeId": "r1::D:/wt/tw-1", "at": "2026-09-26T01:05:00.000Z", "elapsedMs": 2000 },
+    { "report": "mergeAsked", "issueId": "0a1b-2c", "sessionId": "s-1", "pr": 7 }
+  ],
+  "timing": {
+    "kinds": ["start", "resume", "round", "rebase"],
+    "checks": ["cargoTest", "clippy", "cargoCheck", "nodeTest", "simulator", "typecheck", "gate"],
+    "by": ["main", "subAgent"],
+    "mostChecks": 1000,
+    "report": { "op": "report", "report": "sessionTiming", "worktreeId": "r1::D:/wt/tw-1", "timing": {
+        "session": "0a1b2c3d-0000-4000-8000-000000000001", "launched": "2026-09-26T00:59:59.000Z", "kind": "start", "build": "2878d3d000000000000000000000000000000000",
+        "at": "2026-09-26T01:00:00.000Z", "wall": 970, "active": 370, "model": 37,
+        "tools": { "read": 1, "edit": 1, "check": 330, "git": 2, "bookkeeping": 8, "agent": 200, "other": 0 },
+        "apiTurns": 9, "toolTurns": 8,
+        "offsets": { "firstEdit": 10, "firstCommit": 80, "firstGate": 690, "reviewStart": 692, "reviewEnd": 900, "pr": null },
+        "checks": [
+          { "kind": "cargoTest", "failed": false, "edited": true, "seconds": 60, "at": 15, "by": "main" },
+          { "kind": "gate", "failed": true, "edited": false, "seconds": 270, "at": 690, "by": "main" },
+          { "kind": "clippy", "failed": null, "edited": false, "seconds": 30, "at": 710, "by": "subAgent" }
+        ]
+      } },
+    "forward": { "type": "timing", "issueId": "0a1b-2c", "timing": {
+        "session": "0a1b2c3d-0000-4000-8000-000000000001", "launched": "2026-09-26T00:59:59.000Z", "kind": "start", "build": "2878d3d000000000000000000000000000000000",
+        "at": "2026-09-26T01:00:00.000Z", "wall": 970, "active": 370, "model": 37,
+        "tools": { "read": 1, "edit": 1, "check": 330, "git": 2, "bookkeeping": 8, "agent": 200, "other": 0 },
+        "apiTurns": 9, "toolTurns": 8,
+        "offsets": { "firstEdit": 10, "firstCommit": 80, "firstGate": 690, "reviewStart": 692, "reviewEnd": 900, "pr": null },
+        "checks": [
+          { "kind": "cargoTest", "failed": false, "edited": true, "seconds": 60, "at": 15, "by": "main" },
+          { "kind": "gate", "failed": true, "edited": false, "seconds": 270, "at": 690, "by": "main" },
+          { "kind": "clippy", "failed": null, "edited": false, "seconds": 30, "at": 710, "by": "subAgent" }
+        ]
+      } }
+  }
+}

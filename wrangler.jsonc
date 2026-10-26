@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "tolkster",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-09-25",
+  // Workers Logs and traces, every invocation. The Worker logs one object per line,
+  // IDs only (src/worker/log.ts); traces time each fetch to Linear and each Durable
+  // Object call and storage operation. No invocation logs: the Worker's own lines and
+  // its traces cover them, and each is one more event against the daily logs cap.
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "invocation_logs": false, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 1 }
+  },
+  "vars": {
+    // The repo whose CI builds the `tolkster` the Worker serves to hosts (GET /build).
+    "BUILD_REPO": "Tolkien-Works/tolkster"
+  },
+  // The owner's realtime relay (src/worker/relay.ts).
+  "durable_objects": {
+    "bindings": [{ "name": "RELAY", "class_name": "Relay" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Relay"] }]
+  // Secrets, set with `wrangler secret put`: LINEAR_WEBHOOK_SECRET,
+  // LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET, REALTIME_SECRET, GITHUB_WEBHOOK_SECRET, and
+  // OWNER_USER_ID, the Linear user id of the only person whose delegations Tolkster accepts.
+}

@@ -1,0 +1,63 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|Agent|Task",
+        "hooks": [
+          { "type": "command", "command": "tolkster hook start", "timeout": 15 }
+        ]
+      },
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "tolkster hook tool", "async": true, "timeout": 7200 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "tolkster hook after", "async": true, "timeout": 30 }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "tolkster hook after", "async": true, "timeout": 30 }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "tolkster hook state", "timeout": 15 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "tolkster hook state", "timeout": 15 }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt|elicitation_dialog",
+        "hooks": [
+          { "type": "command", "command": "tolkster hook state", "timeout": 15 }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          { "type": "command", "command": "tolkster hook state", "timeout": 15 }
+        ]
+      }
+    ]
+  }
+}

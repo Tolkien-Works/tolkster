@@ -1,0 +1,179 @@
+{
+  "states": {
+    "acknowledging": {
+      "use": "The Worker's answer to a delegation, within Linear's ten seconds. Ephemeral: the pickup replaces it.",
+      "phrases": [
+        "On it.",
+        "Mine now.",
+        "Taking this one.",
+        "Consider it taken.",
+        "Right. Having a look.",
+        "Noted. Wings unfolding.",
+        "Understood. Talons out.",
+        "Very well. Off the branch."
+      ]
+    },
+    "heard": {
+      "use": "The Worker's answer to a mention or a reply, within Linear's ten seconds.",
+      "phrases": [
+        "Reading this now.",
+        "Heard you.",
+        "Got your message.",
+        "Seen it. Reading.",
+        "Right. Let me read that.",
+        "Noted. Reading now.",
+        "One eye open. Reading.",
+        "Head turned. Reading."
+      ]
+    },
+    "looking": {
+      "use": "A conversation's pickup: something to answer, not to change.",
+      "phrases": [
+        "Having a look…",
+        "Looking into it…",
+        "Checking what's there…",
+        "Gathering the facts…",
+        "Finding out, properly…",
+        "Looking before I answer…",
+        "Considering the question, carefully…",
+        "Peering in…",
+        "Scanning from a high branch…"
+      ]
+    },
+    "starting": {
+      "use": "Starting on work when there's no issue to link to.",
+      "phrases": [
+        "Making a start, properly…",
+        "Getting my bearings…",
+        "Under way…",
+        "Settling in to this one…",
+        "Starting where it matters…",
+        "Getting the lie of the land first…",
+        "Off the branch…",
+        "Taking off…"
+      ]
+    },
+    "reading-reply": {
+      "use": "A reply passed on to the work already under way.",
+      "phrases": [
+        "Reading your reply…",
+        "Taking your point…",
+        "Weighing your answer…",
+        "Reading what you said, carefully…",
+        "Turning your reply over…",
+        "Adjusting course to your reply…",
+        "Taking that on board…",
+        "Head tilted, reading your reply…"
+      ]
+    },
+    "reading-issue": {
+      "use": "Reading the issue and its comments.",
+      "phrases": [
+        "Reading the issue, twice…",
+        "Squinting at the fine print…",
+        "Working out what's actually wanted…",
+        "Reading between the lines…",
+        "Checking the constraints…",
+        "Going through the comments…",
+        "Taking stock of the issue…",
+        "Studying the request…",
+        "Reading it, unblinking…"
+      ]
+    },
+    "reading-code": {
+      "use": "Reading the code before changing it.",
+      "phrases": [
+        "Reading the code. Some of it twice…",
+        "Finding the right seam…",
+        "Following the call sites home…",
+        "Seeing who calls what…",
+        "Reading the tests too. Especially the tests…",
+        "Learning the lie of this module…",
+        "Tracing the data, unblinking…",
+        "Turning my head further than is comfortable…"
+      ]
+    },
+    "investigating": {
+      "use": "Working out a cause, or an answer to a question.",
+      "phrases": [
+        "Following a hunch…",
+        "Narrowing it down…",
+        "Ruling things out, one by one…",
+        "Checking a theory…",
+        "Tracing it back to the source…",
+        "Looking for the cause, not the symptom…",
+        "Closing in on it…",
+        "Listening for what's off…",
+        "Poking under the leaves…",
+        "Waiting for the cause to move…"
+      ]
+    },
+    "reading-review": {
+      "use": "Reading review feedback on a PR.",
+      "phrases": [
+        "Reading the review…",
+        "Weighing each point…",
+        "Hearing the reviewers out…",
+        "Sorting the fixes from the rest…",
+        "Reviewing the review…",
+        "Checking each comment on its merits…",
+        "Taking the feedback in, without sulking…",
+        "Reading the review, one eye narrowed…"
+      ]
+    },
+    "rebasing": {
+      "use": "Rebasing onto main.",
+      "phrases": [
+        "Catching up with main…",
+        "Replaying my commits on main…",
+        "Bringing the branch up to date…",
+        "Untangling the branch…",
+        "Lining up with main…",
+        "Rebasing, carefully…",
+        "Sorting out the history…",
+        "Hopping to a fresher branch…"
+      ]
+    },
+    "stopping": {
+      "use": "The Worker's answer to a stop, until the stop is done.",
+      "phrases": [
+        "Stopping, as asked…",
+        "Setting it down neatly…",
+        "Putting it down, no fuss…",
+        "Leaving it tidy…",
+        "Stopping mid-branch…",
+        "Folding my wings…",
+        "Coming in to land…",
+        "Landing…"
+      ]
+    }
+  },
+  "tools": {
+    "editing": { "use": "A worker's hook: an edit to a file, or a command that writes one. `path` names it, repo-relative.", "path": "Editing `{path}`", "plain": "Editing the code" },
+    "reading": { "use": "A worker's hook: a file read, or a command that prints one.", "path": "Reading `{path}`", "plain": "Reading the code" },
+    "searching": { "use": "A worker's hook: a search of the code or its files.", "plain": "Searching the code" },
+    "testing": { "use": "A worker's hook: the tests.", "plain": "Running the tests" },
+    "building": { "use": "A worker's hook: a build, type check or lint.", "plain": "Checking the build" },
+    "committing": { "use": "A worker's hook: a commit.", "plain": "Committing a slice" },
+    "pushing": { "use": "A worker's hook: a push.", "plain": "Pushing the branch" },
+    "rebasing": { "use": "A worker's hook: a fetch, rebase, pull or merge.", "plain": "Bringing the branch up to date" },
+    "history": { "use": "A worker's hook: any other git command.", "plain": "Looking through the history" },
+    "working": { "use": "A worker's hook: a script run, whose text says nothing of what it does.", "plain": "Working on the code" },
+    "command": { "use": "A worker's hook: any other command. Never echoes it.", "plain": "Running a command" },
+    "delegating": { "use": "A worker's hook: a sub-agent, such as the deep review's.", "plain": "Handing part of it to a second pair of eyes" },
+    "looking-up": { "use": "A worker's hook: a web search or fetch.", "plain": "Looking something up" }
+  },
+  "phases": {
+    "understanding": "Understanding the task",
+    "changing": "Changing the code",
+    "checking": "Running the checks",
+    "shipping": "Shipping the change"
+  },
+  "actions": {
+    "testing": "Running the tests",
+    "building": "Checking the build",
+    "pushing": "Pushing the branch",
+    "rebasing": "Bringing the branch up to date",
+    "delegating": "Asking a second pair of eyes"
+  }
+}

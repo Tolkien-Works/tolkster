@@ -1,0 +1,39 @@
+[package]
+name = "tolkster"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+publish = false
+license = "MIT"
+
+[dependencies]
+crossterm = { version = "0.29.0", default-features = false, features = ["events", "windows"] }
+# The `listen` panel (panel.rs), drawn through crossterm, the backend it shares.
+ratatui = { version = "0.30.2", default-features = false, features = ["crossterm"] }
+# SHA-256 for image cache names. Already in the tree through rustls.
+ring = "0.17.14"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tungstenite = { version = "0.30.0", default-features = false, features = ["handshake", "rustls-tls-webpki-roots"] }
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+
+[features]
+# `tolkster listen` pulls its checkout and rebuilds itself on a merge (src/update/develop.rs).
+# Off, it takes the Worker's build of the pushed commit instead (src/update/release.rs).
+develop = []
+
+[profile.release]
+lto = "thin"
+strip = true
+
+# The workstation's own builds (`cargo install`, a `develop` listen's self-build): symbols must
+# come from the build that runs, as line tables and stripping change the code and the link.
+# Inheriting release keeps build.rs's commit stamp (PROFILE is still "release").
+[profile.local]
+inherits = "release"
+debug = "line-tables-only"
+strip = "none"
+
+# Backtraces keep file and line; full debug info only slowed builds and grew cli/target.
+[profile.dev]
+debug = "line-tables-only"

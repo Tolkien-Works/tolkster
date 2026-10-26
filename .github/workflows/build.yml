@@ -1,0 +1,133 @@
+name: Build
+
+# A prebuilt `tolkster` per target, kept as a workflow artifact and published as main's
+# latest release. A push to a public repo builds every target; to a private one, whose
+# macOS and Windows minutes are billed, Linux only, unless a manual run asks for `all`.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      all:
+        description: Build all targets
+        type: boolean
+        default: false
+
+concurrency:
+  group: build-${{ github.sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  LINUX: '[{"target":"linux-x64","os":"ubuntu-latest","bin":"tolkster"}]'
+  OTHERS: '[{"target":"macos-arm64","os":"macos-latest","bin":"tolkster"},{"target":"windows-x64","os":"windows-latest","bin":"tolkster.exe"}]'
+
+jobs:
+  # The matrix can't read `env`, so the targets are chosen here.
+  # Only main builds: a manual run from another branch would name a branch's binary like
+  # main's, and a host runs what it downloads.
+  targets:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - id: pick
+        env:
+          ALL: ${{ inputs.all || !github.event.repository.private }}
+        run: |
+          if [ "$ALL" = true ]; then
+            echo "matrix={\"include\":$(jq -c ". + $OTHERS" <<< "$LINUX")}" >> "$GITHUB_OUTPUT"
+          else
+            echo "matrix={\"include\":$LINUX}" >> "$GITHUB_OUTPUT"
+          fi
+
+  build:
+    needs: targets
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.targets.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v5
+      # The commit is stamped into the binary: a host swaps its own for the primary's by it.
+      - run: cargo build --release --locked --manifest-path cli/Cargo.toml
+        env:
+          TOLKSTER_COMMIT: ${{ github.sha }}
+          TOLKSTER_REPO: ${{ github.repository }}
+      # Runs the built binary as it is, before anything is kept, and checks its stamp.
+      - run: cli/target/release/${{ matrix.bin }} version | grep -q "${{ github.sha }}"
+      # A tarball keeps the executable bit, which an artifact's zip drops.
+      - name: Package
+        run: tar -C cli/target/release -czf "tolkster-${{ matrix.target }}-${{ github.sha }}.tar.gz" "${{ matrix.bin }}"
+      - uses: actions/upload-artifact@v5
+        with:
+          name: tolkster-${{ matrix.target }}-${{ github.sha }}
+          path: tolkster-${{ matrix.target }}-${{ github.sha }}.tar.gz
+          if-no-files-found: error
+          overwrite: true
+          # Hosts fetch only the build of the commit the primary's `listen` runs, which keeps
+          # up with main, so a day is ample; Actions storage bills every day one is kept.
+          retention-days: 1
+
+  # The builds of main's tip as one release, the newest alone kept: a newcomer's first
+  # install, at `releases/latest/download/tolkster-<target>.tar.gz`. A host takes a
+  # commit's build from its artifact, never a release, which anyone who can push can edit.
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      actions: read
+    # One at a time, so a run's check that it is main's tip holds until it has published. A
+    # job queued here cancels the one waiting, which may be the tip's, and a failed target
+    # skips its run's release: either leaves "latest" on an older build until the next push,
+    # which costs nothing, as a `listen` takes the tip's build as it connects.
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SHA: ${{ github.sha }}
+    steps:
+      - name: Publish
+        # `bash` alone sets pipefail: a failed listing fails the step before the tag sweep runs.
+        shell: bash
+        run: |
+          tip=$(gh api "repos/$GH_REPO/commits/main" --jq .sha)
+          if [ "$tip" != "$SHA" ]; then
+            echo "main is at $tip: not releasing $SHA"
+            exit 0
+          fi
+          gh run download "$GITHUB_RUN_ID" --dir out
+          for tarball in out/*/*.tar.gz; do
+            mv "$tarball" "$(basename "$tarball" "-$SHA.tar.gz").tar.gz"
+          done
+          tag="main-$SHA"
+          # A re-run, or a manual run adding targets, finds the release made, maybe a draft a
+          # killed create left, and uploads only what it lacks, so no download meets a gap.
+          if gh release view "$tag" > /dev/null 2>&1; then
+            held=$(gh release view "$tag" --json assets --jq '.assets[] | select(.state == "uploaded") | .name')
+            for asset in tolkster-*.tar.gz; do
+              grep -qxF "$asset" <<< "$held" || gh release upload "$tag" "$asset" --clobber
+            done
+            gh release edit "$tag" --draft=false --latest
+          else
+            gh release create "$tag" tolkster-*.tar.gz --target "$SHA" --title "tolkster ${SHA::7}" --notes "Built from main at $SHA." --latest
+          fi
+          # Tags apart from releases, so a tag whose release went first is swept too.
+          gh release list --limit 1000 --json tagName --jq '.[].tagName | select(startswith("main-"))' | while read -r old; do
+            [ "$old" = "$tag" ] || gh release delete "$old" --yes
+          done
+          gh api --paginate "repos/$GH_REPO/git/matching-refs/tags/main-" --jq '.[].ref' | while read -r ref; do
+            [ "$ref" = "refs/tags/$tag" ] || gh api -X DELETE "repos/$GH_REPO/git/$ref"
+          done

@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Tolkster config.json",
+  "description": "The owner's settings, ~/.tolkster/config.json. A key outside this schema exits 2.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string", "description": "This schema's path, written by init and host join." },
+    "owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "description": "The owner's Linear user ID." },
+        "name": { "type": "string", "description": "The owner's first name, as the agent's lines call them." },
+        "coAuthor": { "type": "string", "description": "The Co-authored-by trailer on commits: Name <email>." }
+      }
+    },
+    "worker": { "type": "string", "pattern": "^(https://|http://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?/?$)", "description": "The Worker's address: https, or http only for localhost." },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "reviewers": { "type": "array", "items": { "type": "string", "minLength": 1 }, "description": "GitHub logins whose PR feedback counts." },
+        "maxRounds": { "type": "integer", "minimum": 1, "description": "Review rounds before Copilot's reviews go to the owner." },
+        "deepAt": { "enum": ["XS", "S", "M", "L", "XL", "XXL", "XXXL"], "description": "The size at which a pre-push review goes deep." }
+      }
+    },
+    "triage": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "batch": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "ladder": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rungs", "default"],
+      "properties": {
+        "rungs": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "model", "effort"],
+            "properties": {
+              "name": { "type": "string", "maxLength": 40 },
+              "harness": { "enum": ["claude"] },
+              "model": { "type": "string" },
+              "effort": { "type": "string", "description": "One the harness spells." },
+              "upTo": { "enum": ["zero", "XS", "S", "M", "L", "XL", "XXL", "XXXL"], "description": "The largest size the rung takes; rising from rung to rung, left out only on the last." }
+            }
+          }
+        },
+        "default": { "type": "integer", "minimum": 1, "description": "The rung, counted from 1, an issue with no size takes." }
+      }
+    },
+    "repos": {
+      "type": "object",
+      "description": "Keyed by an Orca repo's display name.",
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "projects": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "teams": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+          "review": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "reviewers": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+              "maxRounds": { "type": "integer", "minimum": 1 }
+            }
+          },
+          "recipe": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "machines", "slotsEach"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1, "description": "The recipe's id in the repo's orca.yaml." },
+              "machines": { "type": "integer", "minimum": 1, "description": "Machines that may exist at once." },
+              "slotsEach": { "type": "integer", "minimum": 1, "description": "Workers at once on each machine." },
+              "idleMinutes": { "type": "integer", "minimum": 1 },
+              "destroyAfter": { "type": "integer", "minimum": 60, "description": "Minutes a machine stays asleep, or idle when its recipe can't sleep, before it is destroyed." }
+            }
+          },
+          "land": { "enum": ["pr", "direct"], "description": "How a worker's change reaches the default branch: a PR (the default), or tolkster land's push straight onto it." },
+          "trace": { "type": "boolean", "description": "Workers' sessions show what they write between calls and each call, redacted (docs/voice.md). Off unless set." }
+        }
+      }
+    },
+    "releasePipeline": { "type": "string", "minLength": 1, "description": "The ID of the Linear release pipeline a development build's rebuild syncs a release to (docs/realtime.md). tolkster setup sets it." },
+    "timing": { "type": "boolean", "description": "Whether workers' sessions are timed and the listen host keeps it (docs/timing.md). On unless false." },
+    "slots": { "type": "object", "additionalProperties": { "type": "integer", "minimum": 0 }, "description": "Workers at once by host name, \"local\" for this machine (6 unless set). A paired host with no entry, or 0, takes no work; a recipe machine takes its repo's slotsEach." }
+  }
+}
