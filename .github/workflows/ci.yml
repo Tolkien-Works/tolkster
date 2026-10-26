@@ -1,129 +1,111 @@
 name: CI
 
-# A required check that does no work: it gives GitHub's auto-merge an event to fire on.
-# The worker's gate runs the real checks before each push.
-on:
-  pull_request:
-
-permissions: {}
-
-jobs:
-  check:
-    runs-on: ubuntu-latest
-    timeout-minutes: 1
-    steps:
-      - run: echo ok
-
-
-# below is the original version
-
-
 # Runs on every change, because `check` is a required status check and a skipped run
 # would sit "pending" forever. A change to docs alone (any .md file, or design/) skips
 # the expensive steps inside the job instead, and the job still finishes green. The
 # .md files tests read, AGENTS.md, README.md, cli/briefs/ and docs/, count as code.
-# on:
-#   pull_request:
-#   push:
-#     branches: [main]
-#
-# # A new push to a PR cancels that PR's older run. Runs on main are never cancelled.
-# concurrency:
-#   group: ci-${{ github.event.pull_request.number || github.sha }}
-#   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-#
-# permissions:
-#   contents: read
-#
-# jobs:
-#   # One job on purpose: two would bill two minutes a run. Rust also has to run when
-#   # only TypeScript changes, because its tests read src/ for parity.
-#   check:
-#     runs-on: ubuntu-latest
-#     timeout-minutes: 10
-#     env:
-#       CARGO_INCREMENTAL: 0
-#     steps:
-#       # Two commits deep, so a pull request's merge commit has its base (HEAD^1) to diff.
-#       - uses: actions/checkout@v5
-#         with:
-#           fetch-depth: 2
-#       # Anything it can't diff (a new branch, a force push) counts as code, so the
-#       # steps run. The rest skip only when `docs` is true. `--no-renames` lists both
-#       # sides of a rename: git otherwise lists only the new path, so renaming code to
-#       # a .md file would look docs-only.
-#       - name: Look for changes beyond docs
-#         id: changes
-#         env:
-#           EVENT: ${{ github.event_name }}
-#           BEFORE: ${{ github.event.before }}
-#           FORCED: ${{ github.event.forced }}
-#         run: |
-#           if [ "$EVENT" = pull_request ]; then
-#             base=$(git rev-parse HEAD^1)
-#           elif [ "$FORCED" = true ]; then
-#             base=
-#           else
-#             base=$BEFORE
-#             git fetch --quiet --depth=1 origin "$base" || base=
-#           fi
-#           docs=false
-#           if [ -n "$base" ] && files=$(git diff --name-only --no-renames "$base" HEAD) && [ -n "$files" ]; then
-#             grep -Eq '^AGENTS\.md$|^README\.md$|^cli/briefs/|^docs/' <<< "$files" || grep -Eqv '\.md$|^design/' <<< "$files" || docs=true
-#           fi
-#           echo "docs=$docs" >> "$GITHUB_OUTPUT"
-#       - name: Read the Rust version
-#         if: steps.changes.outputs.docs != 'true'
-#         id: rust
-#         run: echo "version=$(rustc -V)" >> "$GITHUB_OUTPUT"
-#       # Only main saves the cache (below), so a pull request can't poison it.
-#       - name: Restore the cargo cache
-#         if: steps.changes.outputs.docs != 'true'
-#         id: cargo-cache
-#         uses: actions/cache/restore@v6
-#         with:
-#           path: |
-#             ~/.cargo/registry/index
-#             ~/.cargo/registry/cache
-#             cli/target
-#           key: cargo-${{ runner.os }}-${{ steps.rust.outputs.version }}-${{ hashFiles('cli/Cargo.lock') }}
-#           restore-keys: |
-#             cargo-${{ runner.os }}-${{ steps.rust.outputs.version }}-
-#             cargo-${{ runner.os }}-
-#       # Runs alongside the Node steps; the wait below fails the job if it fails. A
-#       # background step and its wait take no `if`, so the docs skip is in the script.
-#       - name: cargo test and clippy
-#         id: cargo
-#         env:
-#           DOCS: ${{ steps.changes.outputs.docs }}
-#         run: |
-#           if [ "$DOCS" = true ]; then exit 0; fi
-#           cargo test --locked --manifest-path cli/Cargo.toml
-#           cargo clippy --locked --manifest-path cli/Cargo.toml --all-targets -- -D warnings
-#           cargo test --locked --manifest-path cli/Cargo.toml --features develop
-#           cargo clippy --locked --manifest-path cli/Cargo.toml --all-targets --features develop -- -D warnings
-#         background: true
-#       - uses: actions/setup-node@v5
-#         if: steps.changes.outputs.docs != 'true'
-#         with:
-#           node-version: 24
-#           cache: npm
-#       - run: npm ci
-#         if: steps.changes.outputs.docs != 'true'
-#       - run: npm run typecheck
-#         if: steps.changes.outputs.docs != 'true'
-#       - run: npm test
-#         if: steps.changes.outputs.docs != 'true'
-#       - run: npx wrangler deploy --dry-run --outdir dist
-#         if: steps.changes.outputs.docs != 'true'
-#       - name: Wait for cargo test and clippy
-#         wait: cargo
-#       - name: Save the cargo cache
-#         if: steps.changes.outputs.docs != 'true' && github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
-#         uses: actions/cache/save@v6
-#         with:
-#           path: |
-#             ~/.cargo/registry/index
-#             ~/.cargo/registry/cache
-#             cli/target
-#           key: cargo-${{ runner.os }}-${{ steps.rust.outputs.version }}-${{ hashFiles('cli/Cargo.lock') }}
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to a PR cancels that PR's older run. Runs on main are never cancelled.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # One job on purpose: two would bill two minutes a run. Rust also has to run when
+  # only TypeScript changes, because its tests read src/ for parity.
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CARGO_INCREMENTAL: 0
+    steps:
+      # Two commits deep, so a pull request's merge commit has its base (HEAD^1) to diff.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+      # Anything it can't diff (a new branch, a force push) counts as code, so the
+      # steps run. The rest skip only when `docs` is true. `--no-renames` lists both
+      # sides of a rename: git otherwise lists only the new path, so renaming code to
+      # a .md file would look docs-only.
+      - name: Look for changes beyond docs
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          FORCED: ${{ github.event.forced }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            base=$(git rev-parse HEAD^1)
+          elif [ "$FORCED" = true ]; then
+            base=
+          else
+            base=$BEFORE
+            git fetch --quiet --depth=1 origin "$base" || base=
+          fi
+          docs=false
+          if [ -n "$base" ] && files=$(git diff --name-only --no-renames "$base" HEAD) && [ -n "$files" ]; then
+            grep -Eq '^AGENTS\.md$|^README\.md$|^cli/briefs/|^docs/' <<< "$files" || grep -Eqv '\.md$|^design/' <<< "$files" || docs=true
+          fi
+          echo "docs=$docs" >> "$GITHUB_OUTPUT"
+      - name: Read the Rust version
+        if: steps.changes.outputs.docs != 'true'
+        id: rust
+        run: echo "version=$(rustc -V)" >> "$GITHUB_OUTPUT"
+      # Only main saves the cache (below), so a pull request can't poison it.
+      - name: Restore the cargo cache
+        if: steps.changes.outputs.docs != 'true'
+        id: cargo-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            cli/target
+          key: cargo-${{ runner.os }}-${{ steps.rust.outputs.version }}-${{ hashFiles('cli/Cargo.lock') }}
+          restore-keys: |
+            cargo-${{ runner.os }}-${{ steps.rust.outputs.version }}-
+            cargo-${{ runner.os }}-
+      # Runs alongside the Node steps; the wait below fails the job if it fails. A
+      # background step and its wait take no `if`, so the docs skip is in the script.
+      - name: cargo test and clippy
+        id: cargo
+        env:
+          DOCS: ${{ steps.changes.outputs.docs }}
+        run: |
+          if [ "$DOCS" = true ]; then exit 0; fi
+          cargo test --locked --manifest-path cli/Cargo.toml
+          cargo clippy --locked --manifest-path cli/Cargo.toml --all-targets -- -D warnings
+          cargo test --locked --manifest-path cli/Cargo.toml --features develop
+          cargo clippy --locked --manifest-path cli/Cargo.toml --all-targets --features develop -- -D warnings
+        background: true
+      - uses: actions/setup-node@v5
+        if: steps.changes.outputs.docs != 'true'
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+        if: steps.changes.outputs.docs != 'true'
+      - run: npm run typecheck
+        if: steps.changes.outputs.docs != 'true'
+      - run: npm test
+        if: steps.changes.outputs.docs != 'true'
+      - run: npx wrangler deploy --dry-run --outdir dist
+        if: steps.changes.outputs.docs != 'true'
+      - name: Wait for cargo test and clippy
+        wait: cargo
+      - name: Save the cargo cache
+        if: steps.changes.outputs.docs != 'true' && github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            cli/target
+          key: cargo-${{ runner.os }}-${{ steps.rust.outputs.version }}-${{ hashFiles('cli/Cargo.lock') }}
