@@ -7,7 +7,7 @@ its progress to the issue, opens a PR as its own GitHub App, and answers your
 reviewers' feedback. Reply in the session's thread to talk to that worker, or press Stop
 to end it. It acts for its owner alone: anyone else is refused.
 
-"Tolkster" is what we called ours; give yours any name ([setup](docs/setup.md) says
+"Tolkster" is what we named ours; give yours any name ([setup](docs/setup.md) says
 where each lives).
 
 ## What you need
