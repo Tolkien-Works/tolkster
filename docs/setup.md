@@ -194,8 +194,8 @@ git login or Claude sign-in for Tolkster's sake.
    delegate a throwaway issue (step 7): its worker lands under the new host.
 
 A new worktree's setup seeds `cli/target/debug` from the primary checkout's when their `Cargo.lock` and
-`Cargo.toml` match, else builds cold. Rerun `scripts/orca-vm/agent37-base.ts base` after a dependency or
-`[profile]` change, or a recipe's seed stops helping.
+`Cargo.toml` match, else builds cold. After a dependency or `[profile]` change, drop `baseInputs` from
+`scripts/orca-vm/agent37-state.json` and rerun `agent37-recipe.ts prepare`, or a recipe's seed stops helping.
 
 A host keeps itself on `listen`'s build. A private repo's push to `main` builds Linux x64
 alone: for a macOS or Windows host there, run the `Build` workflow with "Build all targets"
