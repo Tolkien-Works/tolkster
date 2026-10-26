@@ -48,8 +48,8 @@ step skips what is done, so after a failure run it again. It prints each step `d
    than one set `CLOUDFLARE_ACCOUNT_ID`.
 3. **Deploy**, unless the Worker exists, and write `worker`. Later deploys are
    `.github/workflows/deploy-worker.yml`'s, on a push to `main` that touches the Worker, with
-   two repo secrets: `CLOUDFLARE_API_TOKEN`, a custom token with exactly **Account · Workers
-   Scripts · Edit** on your account only, and `CLOUDFLARE_ACCOUNT_ID`. Deploying by hand, when
+   two repo secrets: `CLOUDFLARE_API_TOKEN`, a custom token with the
+   **Editor** role on the one Worker step 3 just deployed (Individual Workers), and `CLOUDFLARE_ACCOUNT_ID`. Deploying by hand, when
    Actions couldn't run, is yours, never a worker's.
 4. **The Linear app**, from an OAuth app manifest: `setup` opens Linear's create page filled in with
    `<AGENT>`, the Worker's callback, its webhook on exactly the types it handles, and the client
