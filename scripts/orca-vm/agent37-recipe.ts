@@ -68,27 +68,34 @@ async function resume() {
 // in place, as `prepare` moves the base: Agent37 keeps its home volume, so its next `resume`
 // boots the new image. Exit 3 for one not stopped, whose update would restart it, or a template
 // on another revision, which the next `prepare` reports. It is marked asleep, so one found
-// running before the update is stopped, the update going with the next ask, and one the update
-// left starting or running is stopped once it runs: a failure there fails the phase, and the
-// next ask stops it.
+// running before the update is stopped, the update going with a later ask, and one the update
+// leaves running is stopped once it settles: a failure there fails the phase, and the machine is
+// asked again. One already on the revision is only recorded.
 async function update() {
   const id = payloadInstance();
   const stopped = async () => {
-    const { status } = await api("GET", `/instances/${id}`);
-    if (status === "running") await api("POST", `/instances/${id}/stop`);
-    return status === "stopped";
+    const instance = await api("GET", `/instances/${id}`);
+    if (instance.status === "running") await api("POST", `/instances/${id}/stop`);
+    return instance.status === "stopped" ? instance : null;
   };
   const { template } = readState();
   const wanted = process.env.TOLKSTER_REVISION;
   const now = template && revision({ template_revision: (await api("GET", `/templates/${template}`)).revision });
-  if (!(await stopped()) || !wanted || now !== wanted) {
+  const instance = await stopped();
+  if (!instance || !wanted || now !== wanted) {
     process.exitCode = 3;
     return;
   }
-  const updated = await api("POST", `/instances/${id}/update`);
-  if ((await api("GET", `/instances/${id}`)).status !== "stopped") {
-    await waitRunning(id);
-    await api("POST", `/instances/${id}/stop`);
+  const updated = revision(instance) === wanted ? instance : await api("POST", `/instances/${id}/update`);
+  for (let i = 0; ; i++) {
+    const { status } = await api("GET", `/instances/${id}`);
+    if (status === "stopped") break;
+    if (status === "running") {
+      await api("POST", `/instances/${id}/stop`);
+      break;
+    }
+    if (i === 120) throw new Error(`instance ${id} is ${status} after its update`);
+    await sleep(5000);
   }
   return { schemaVersion: 1, userData: { provider: "agent37", resourceId: id, revision: revision(updated) } };
 }
