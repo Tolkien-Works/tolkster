@@ -609,10 +609,11 @@ test("a command waiting on its worker's machine to wake spends no send until WAK
 
 // docs/state-machine.md, Commands: a waiting command goes again the moment its cause clears,
 // spending no send, and only then; with every clearing lost, its timeout still sends it.
-test("a command waiting on a host or the lock is sent again as soon as that clears, and at its timeout without it", async () => {
+test("a command waiting on a host, the lock or Orca is sent again as soon as that clears, and at its timeout without it", async () => {
   for (const [waitsOn, clears, others] of [
     [{ host: "mini" }, { hosts: ["mac", "mini"] }, [{ hosts: ["mac"] }, { lock: true }]],
     [{ lock: true }, { lock: true }, [{ hosts: ["mini"] }]],
+    [{ orca: true }, { hosts: [], orca: true }, [{ hosts: ["mini"] }, { lock: true }]],
     [{ host: "mini" }, { all: true }, []],
   ] as const) {
     const storage = new MemoryStorage();

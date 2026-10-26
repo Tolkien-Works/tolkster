@@ -68,7 +68,7 @@ export function resent(c: Command, nowMs: number): Command | null {
 // Whether `clears` frees what `waitsOn` names.
 export function frees(clears: Clears, waitsOn: WaitsOn | null | undefined): boolean {
   if (waitsOn == null) return false;
-  return clears.all === true || ("host" in waitsOn ? clears.hosts?.includes(waitsOn.host) === true : clears.lock === true);
+  return clears.all === true || ("host" in waitsOn ? clears.hosts?.includes(waitsOn.host) === true : "orca" in waitsOn ? clears.orca === true : clears.lock === true);
 }
 
 // Whether the command, in flight and answered `retryable`, waits on what `clears` frees, with a

@@ -707,9 +707,9 @@ export class World {
       // calls for it: neither is sent a third time.
       this.answered(session);
     } else if (result === "retryable") {
-      // What it waits on: the paired host, which a listing hearing it clears, or the lock, which
-      // a nap's command ending does.
-      data = { waitsOn: c.sends % 2 === 1 ? { host: NAP_HOSTS[0] } : { lock: true } };
+      // What it waits on: the paired host, which a listing hearing it clears, Orca, which any
+      // listing does, or the lock, which a nap's command ending does.
+      data = { waitsOn: c.sends % 3 === 1 ? { host: NAP_HOSTS[0] } : c.sends % 3 === 2 ? { orca: true } : { lock: true } };
     }
     // The replay's fakes hold this machine alone, so nothing on a paired host is replayed.
     const here = world.worktree === null ? wire?.args.host === undefined : !world.worktree.includes("@");
