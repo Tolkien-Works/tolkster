@@ -540,6 +540,7 @@ fn is_local(host: &str) -> bool {
     matches!(name, "localhost" | "127.0.0.1" | "[::1]")
 }
 
+pub mod changes;
 pub mod ladder;
 pub mod repo_map;
 

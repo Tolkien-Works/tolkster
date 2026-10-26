@@ -6,6 +6,7 @@ use std::time::Instant;
 use ureq::Agent;
 
 use crate::args::{Kind, parse};
+use crate::config::changes::Reread;
 use crate::config::{files, realtime};
 use crate::error::{Context, Error};
 use crate::exec::{beating, run_command};
@@ -134,6 +135,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
         // Each agent's terminal, by its handle, with its worktree's issue, for the line its exit makes.
         let issues_of: Arc<Mutex<HashMap<String, String>>> = Arc::default();
         let issue_of = Arc::clone(&issues_of);
+        let mut reread = Reread::new(&config, Some(worker_url.base().as_str()));
         let (listing, mut config, watching) = (agent.clone(), config, Arc::clone(&shared));
         let agents = move || {
             let began = Instant::now();
@@ -184,12 +186,16 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
             let mut now = Agents { running: agent_worktrees(&terminals), open: terminal_worktrees(&terminals), terminals: open_terminals(&terminals, None).into_iter().map(String::from).collect(), agents: agent_handles(&terminals, &workers).into_iter().map(String::from).collect(), idle, waiting, listed, others, hosts, paired, fleet: Fleet::default(), config: String::new(), idle_hosts: BTreeMap::new(), dormant: None }.keeping(&before, &orca.unanswered());
             // The caps as config.json has them now, as the fleet reports them, and the hosts
             // holding an admitted credential, which a command reads as last listed here. A read
-            // that fails keeps the last.
+            // that fails keeps the last. What the owner changed is said once (`Reread`).
             let fresh = crate::config::files().and_then(|files| {
                 watching.pacing.read_enrolled(State::open(&listing, &files).and_then(|state| state.enrolled_hosts()));
-                watching.settings(&files)
+                let worker = crate::config::worker_url(&files).ok().map(|url| url.base());
+                watching.settings(&files).map(|config| (config, worker))
             });
-            if let Ok(fresh) = fresh {
+            if let Some(said) = reread.after(fresh.as_ref().map(|(config, worker)| (config, worker.as_deref()))) {
+                trace::event(said);
+            }
+            if let Ok((fresh, _)) = fresh {
                 config = fresh;
             }
             let config = &config;
