@@ -210,6 +210,7 @@ fn carried(config: &Config, ports: &mut Ports, command: &Command, order: &Order,
         Order::MakeHost { repo } => executor::machines::make_host(config, ports, command, repo),
         Order::WakeHost { name } => executor::machines::wake_host(config, ports, command, name),
         Order::SuspendHost { host } => executor::machines::suspend_host(config, ports, host),
+        Order::UpdateHost { name } => executor::machines::update_host(config, ports, name),
         Order::DestroyHost { name } => executor::machines::destroy_host(config, ports, name),
         // A terminal Orca no longer lists has closed, and its session with it. Triage runs on
         // this machine alone.

@@ -45,6 +45,7 @@ pub fn config(briefs_dir: &str) -> Config {
         host: None,
         machines: Default::default(),
         enrolled: Vec::new(),
+        revisions: std::collections::BTreeMap::new(),
         ladder: Ladder::default(),
         repos: RepoMap::default(),
     }
@@ -338,6 +339,10 @@ impl crate::ports::Machines for Machines {
             self.0.borrow_mut().asleep.push(name.into());
         }
         Ok(slept)
+    }
+    fn update(&self, name: &str, revision: &str) -> Result<bool, Error> {
+        self.0.borrow_mut().updated.push(format!("{name}@{revision}"));
+        Ok(true)
     }
     // On the host named as its ID, as Orca's hosts are here, which answers once woken.
     fn retire(&self, name: &str, reaped: &mut crate::ports::Reaped) -> Result<bool, Error> {

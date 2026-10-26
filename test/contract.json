@@ -130,7 +130,7 @@
       "listenGone": ["request", "triage"]
     },
     "coordinator": ["slotAsked", "slotHeld", "slotReleased", "blockersRead", "blockerChanged", "prRecorded", "repoPushed"],
-    "commands": ["readIssue", "startWorker", "deliverMessage", "readComment", "resumeWorker", "startRound", "stopWorker", "startTurn", "stopTurn", "evaluatePr", "observe", "closeAgent", "reapWorktree", "postNotice", "takeBackChain", "startContext", "startTriage", "observeTriage", "updateBranch", "mergePr", "makeHost", "wakeHost", "suspendHost", "destroyHost", "postAway"],
+    "commands": ["readIssue", "startWorker", "deliverMessage", "readComment", "resumeWorker", "startRound", "stopWorker", "startTurn", "stopTurn", "evaluatePr", "observe", "closeAgent", "reapWorktree", "postNotice", "takeBackChain", "startContext", "startTriage", "observeTriage", "updateBranch", "mergePr", "makeHost", "wakeHost", "suspendHost", "updateHost", "destroyHost", "postAway"],
     "notices": ["blocked", "busy", "held", "notDelegated", "noLongerMine", "cancelled", "alreadyDone", "noRepo", "stopped", "stalled", "paused", "heldAtPrompt", "couldntPass", "roundsCap", "prClosed", "autoMergeOff", "ciCouldntRun", "checksPending", "copilotWontApprove", "stopUnnamed", "roundUnnamed", "unheard"],
     "results": ["ok", "failed", "retryable", "held", "gone"],
     "fleetReasons": ["hereHasRoom", "hostHasRoom", "running", "hostComing", "allMade", "coolingDown", "noRecipe"],
@@ -187,7 +187,8 @@
     { "type": "command", "id": "fleet.1", "kind": "makeHost", "issueId": "fleet", "identifier": "fleet", "version": 1, "urgent": false, "args": { "repo": "tolkster" } },
     { "type": "command", "id": "fleet.2", "kind": "wakeHost", "issueId": "fleet", "identifier": "fleet", "version": 2, "urgent": false, "args": { "name": "tolkster-1" } },
     { "type": "command", "id": "fleet.3", "kind": "suspendHost", "issueId": "fleet", "identifier": "fleet", "version": 3, "urgent": false, "args": { "host": "mac" } },
-    { "type": "command", "id": "fleet.4", "kind": "destroyHost", "issueId": "fleet", "identifier": "fleet", "version": 4, "urgent": false, "args": { "name": "tolkster-1" } }
+    { "type": "command", "id": "fleet.4", "kind": "updateHost", "issueId": "fleet", "identifier": "fleet", "version": 4, "urgent": false, "args": { "name": "tolkster-1" } },
+    { "type": "command", "id": "fleet.5", "kind": "destroyHost", "issueId": "fleet", "identifier": "fleet", "version": 5, "urgent": false, "args": { "name": "tolkster-1" } }
   ],
   "reports": [
     { "report": "commandResult", "id": "c-1", "issueId": "0a1b-2c", "version": 3, "result": "ok", "detail": { "stateType": "started" } },
@@ -200,7 +201,7 @@
     { "report": "workerRead", "sessionId": "s-1", "activityId": "a-1", "at": "2026-09-26T01:01:00.000Z", "reader": "worker" },
     { "report": "workerAnswered", "sessionId": "s-1", "activityId": "a-2", "at": "2026-09-26T01:02:00.000Z", "reader": "turn" },
     { "report": "chainRecorded", "issueId": "0a1b-2c", "sessionId": "s-1", "run": "r-1", "children": ["0a1b-2d", "0a1b-2e"] },
-    { "report": "config", "cap": 6, "slots": { "local": 6, "mac": 2 }, "repos": { "Tolkster": { "id": "cloud", "machines": 2, "slotsEach": 3, "idleMinutes": 30, "destroyAfter": 600 } }, "machines": { "tolkster-1": { "repo": "Tolkster", "made": true, "asleep": true, "environment": "tolkster-1", "revision": "4" } } },
+    { "report": "config", "cap": 6, "slots": { "local": 6, "mac": 2 }, "repos": { "Tolkster": { "id": "cloud", "machines": 2, "slotsEach": 3, "idleMinutes": 30, "destroyAfter": 600, "revision": "5" } }, "machines": { "tolkster-1": { "repo": "Tolkster", "made": true, "asleep": true, "environment": "tolkster-1", "revision": "4" } } },
     { "report": "commandResult", "id": "c-9", "issueId": "0a1b-2c", "version": 11, "result": "ok", "detail": { "pr": { "number": 7, "status": "open", "at": "2026-09-26T01:04:00.000Z", "head": "2878d3d000000000000000000000000000000000", "base": "ba5e111111111111111111111111111111111111", "mergeState": "BEHIND", "autoMergeOff": false, "autoMerge": true, "mergeable": false, "manualMerge": false, "checks": "pending", "feedback": { "at": "2026-09-26T01:03:00.000Z", "reviewerAt": "2026-09-26T01:02:00.000Z" }, "copilotWontApprove": false, "maxRounds": 5 } } },
     { "report": "agentIdle", "worktreeId": "r1::D:/wt/tw-1", "at": "2026-09-26T01:05:00.000Z", "elapsedMs": 2000 },
     { "report": "terminalClosed", "terminal": "term_2", "sequence": 7 },

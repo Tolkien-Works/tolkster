@@ -87,6 +87,7 @@ fn defaults_name_no_one_and_print_grouped() {
             host: None,
             machines: Default::default(),
             enrolled: vec![],
+            revisions: std::collections::BTreeMap::new(),
             briefs_dir: home.join(".claude").join("<repo>-briefs").display().to_string(),
         }
     );

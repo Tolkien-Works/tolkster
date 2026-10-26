@@ -1,5 +1,5 @@
-// orca.yaml's `agent37` recipe: `create`, `suspend`, `resume` or `destroy` one workspace's
-// Agent37 instance, or `prepare` the image and the base. A workspace is a fork of the stopped
+// orca.yaml's `agent37` recipe: `create`, `suspend`, `resume`, `update` or `destroy` one
+// workspace's Agent37 instance, or `prepare` the image and the base. A workspace is a fork of the stopped
 // base instance (agent37-base.ts), so it boots with the image, Claude Code and the checkout, as
 // old as the base: `tolkster host add --recipe` fetches it through the host's own credential
 // once it joins, so no git token is handed to the instance here.
@@ -64,6 +64,42 @@ async function resume() {
   return result(await boot(id, await pairingAddress(id)), id, revision(instance));
 }
 
+// The stopped instance moved onto the template's revision `listen` asks for (TOLKSTER_REVISION)
+// in place, as `prepare` moves the base: Agent37 keeps its home volume, so its next `resume`
+// boots the new image. Exit 3 for one not stopped, whose update would restart it, or a template
+// on another revision, which the next `prepare` reports. It is marked asleep, so one found
+// running before the update is stopped, the update going with a later ask, and one the update
+// leaves running is stopped once it settles: a failure there fails the phase, and the machine is
+// asked again. One already on the revision is only recorded.
+async function update() {
+  const id = payloadInstance();
+  const stopped = async () => {
+    const instance = await api("GET", `/instances/${id}`);
+    if (instance.status === "running") await api("POST", `/instances/${id}/stop`);
+    return instance.status === "stopped" ? instance : null;
+  };
+  const { template } = readState();
+  const wanted = process.env.TOLKSTER_REVISION;
+  const now = template && revision({ template_revision: (await api("GET", `/templates/${template}`)).revision });
+  const instance = await stopped();
+  if (!instance || !wanted || now !== wanted) {
+    process.exitCode = 3;
+    return;
+  }
+  const updated = revision(instance) === wanted ? instance : await api("POST", `/instances/${id}/update`);
+  for (let i = 0; ; i++) {
+    const { status } = await api("GET", `/instances/${id}`);
+    if (status === "stopped") break;
+    if (status === "running") {
+      await api("POST", `/instances/${id}/stop`);
+      break;
+    }
+    if (i === 120) throw new Error(`instance ${id} is ${status} after its update`);
+    await sleep(5000);
+  }
+  return { schemaVersion: 1, userData: { provider: "agent37", resourceId: id, revision: revision(updated) } };
+}
+
 async function destroy() {
   const id = payloadInstance();
   await api("DELETE", `/instances/${id}`).catch((error: Error) => {
@@ -75,7 +111,8 @@ async function destroy() {
 // a template rebuilt when agent37/ changed or another checkout published the newest revision,
 // then the base moved to it in place, as Agent37's update keeps the home volume and leaves a
 // stopped instance stopped, or a new base built alongside when this file's setup changed.
-// `create` forks the old base until the new one is ready. Exit 3 when nothing changed.
+// `create` forks the old base until the new one is ready. Exit 3 when nothing changed. Either
+// way it prints the template's revision, which `listen` brings its machines to.
 async function prepare() {
   // Read before any wait: a pull meanwhile must not be recorded as built by this run's code.
   const [image, setup] = [inputs([IMAGE_DIR]), inputs([BASE_SETUP])];
@@ -126,7 +163,7 @@ async function prepare() {
   }
   if (Object.keys(done).length === 0) {
     process.exitCode = 3;
-    return;
+    return template ? { revision: template } : undefined;
   }
   return { ...done, revision: template };
 }
@@ -198,10 +235,10 @@ function alive(pid: number): boolean {
   }
 }
 
-const phases: Record<string, () => Promise<unknown>> = { create, suspend, resume, destroy, prepare };
+const phases: Record<string, () => Promise<unknown>> = { create, suspend, resume, update, destroy, prepare };
 const phase = phases[process.argv[2] ?? ""];
 if (!phase) {
-  console.error("usage: agent37-recipe.ts create|suspend|resume|destroy|prepare");
+  console.error("usage: agent37-recipe.ts create|suspend|resume|update|destroy|prepare");
   process.exit(2);
 }
 run(phase);

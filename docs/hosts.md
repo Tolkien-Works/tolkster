@@ -52,8 +52,11 @@ keeps its own credentials and the realtime secret.
   and after a pull that restarts nothing, brings its image and base up to the repo, so a
   merge is the rollout. The `agent37` recipe's rebuilds the template when `agent37/` changes
   and updates the stopped base to it in place, keeping its disk, or builds a new base when
-  `agent37-base.ts` changes. A machine's `userData` holds its template revision, which
-  `listen` reports to the fleet.
+  `agent37-base.ts` changes. A machine's `userData` holds its template revision and
+  `prepare` prints the template's, which `listen` reports to the fleet. One asleep on another
+  gets `updateHost`, and `listen` runs the recipe's `update` as orca.yaml has it now: the
+  `agent37` one moves the stopped instance in place, keeping its disk, worktrees and pairing, and
+  its next wake boots the new image.
 - **Builds.** `GET /build/<target>/<commit>` serves a host the `tolkster` CI kept for that
   commit ([Set it up](setup.md#2-the-cli)), a new host's first by its untraded enrolment
   code. It serves no "newest". The Worker reads the artifact as
@@ -98,7 +101,7 @@ keeps its own credentials and the realtime secret.
 - A destroy takes no work: a machine goes only once its complete listing shows nothing on it
   but its checkouts and no worker being set up; one asleep and unpaired, once no record names
   it; a mark, with no make running in `listen` and an hour at least, past any `host add`.
-- A sleep or wake never pairs or unpairs a machine: only `create` and `destroy` do.
+- A sleep, wake or update never pairs or unpairs a machine: only `create` and `destroy` do.
 - A rollout always leaves a base to fork: the old one goes only once its replacement is ready,
   and a `create` whose fork finds it gone forks the new one.
 - An Agent37 machine runs one Orca server: a boot and a `resume` start it one at a time,

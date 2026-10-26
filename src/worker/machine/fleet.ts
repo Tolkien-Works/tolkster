@@ -20,7 +20,9 @@ const MAX_ENTRIES = 1000;
 // The most ready projects kept of a host (cli/src/orca.rs, MAX_READY).
 const MAX_READY = 100;
 
-export type Recipe = { id: string; machines: number; slotsEach: number; idleMinutes: number; destroyAfter: number };
+// `revision`: the image revision its machines are brought to, as its last `prepare` said, null
+// before one has.
+export type Recipe = { id: string; machines: number; slotsEach: number; idleMinutes: number; destroyAfter: number; revision: string | null };
 export type Made = { repo: string; made: boolean; asleep: boolean; environment: string | null; revision: string | null };
 // The config report's: this machine's cap, `slots` by host name, each repo's recipe settings by
 // repo, and each recipe machine `machines.json` records, by name.
@@ -48,7 +50,9 @@ const entries = (v: unknown): [string, unknown][] | null => (object(v) && Object
 
 function recipe(v: unknown): Recipe | null {
   if (!object(v) || !name(v.id) || ![v.machines, v.slotsEach, v.idleMinutes, v.destroyAfter].every(count)) return null;
-  return { id: v.id, machines: v.machines as number, slotsEach: v.slotsEach as number, idleMinutes: v.idleMinutes as number, destroyAfter: v.destroyAfter as number };
+  const revision = v.revision ?? null;
+  if (revision !== null && (typeof revision !== "string" || !REVISION.test(revision))) return null;
+  return { id: v.id, machines: v.machines as number, slotsEach: v.slotsEach as number, idleMinutes: v.idleMinutes as number, destroyAfter: v.destroyAfter as number, revision };
 }
 
 function made(v: unknown): Made | null {
@@ -121,7 +125,7 @@ export async function loadFleet(storage: Storage): Promise<Fleet> {
 }
 
 // The fleet's own machine (docs/state-machine.md, "Fleet"): one for the owner, beside the
-// triage machine, deciding every recipe machine's make, wake, sleep and destroy from the record
+// triage machine, deciding every recipe machine's make, wake, sleep, update and destroy from the record
 // above, the ledger and its own clocks, so a restart of `listen` neither sleeps a machine early
 // nor forgets one. `reconcileFleet` is pure and idempotent, run after every event that changes
 // what any of them holds, and sends at most one machine command at a time across all repos.
@@ -138,6 +142,9 @@ export const DESTROY_RETRY_MS = 60 * MINUTE;
 export const MAX_IDLE_MINUTES = 1_000_000;
 // A make or wake that failed holds back its repo's next for this long, as `listen`'s own does.
 export const COOL_DOWN_MS = 10 * MINUTE;
+// An update asked of a machine holds it from another this long, unless its revision is its
+// recipe's sooner.
+export const UPDATE_RETRY_MS = 30 * MINUTE;
 // A machine marked awake whose host is silent this long is woken, once in REVIVE_EVERY_MS.
 export const UNHEARD_GRACE_MS = 3 * MINUTE;
 export const REVIVE_EVERY_MS = 30 * MINUTE;
@@ -175,6 +182,8 @@ export type Run = {
   // or a wake of it wasn't begun, which holds it from another for REVIVE_EVERY_MS.
   unheard: Record<string, number>;
   revived: Record<string, number>;
+  // By machine name, when an update of it was last asked and ended (UPDATE_RETRY_MS).
+  updated: Record<string, number>;
   // By repo, lower-cased, when its make failed or wasn't begun, or a wake of it failed or met
   // `listen`'s cool-down.
   cooling: Record<string, number>;
@@ -205,7 +214,7 @@ export function fleetData(detail: Record<string, unknown>, waitsOn: WaitsOn | un
 export type FleetView = { fleet: Fleet; c: Coordinator; room: Room; admitted: string[] };
 
 export function newRun(): Run {
-  return { rev: 0, commandSeq: 0, command: null, running: null, idle: {}, dormant: {}, wanted: {}, unheard: {}, revived: {}, cooling: {}, why: {} };
+  return { rev: 0, commandSeq: 0, command: null, running: null, idle: {}, dormant: {}, wanted: {}, unheard: {}, revived: {}, updated: {}, cooling: {}, why: {} };
 }
 
 function dueAt(clock: Clock): number {
@@ -254,6 +263,9 @@ export function stepFleet(before: Run, e: FleetEvent, nowMs: number): FleetStepp
         if (e.result === "ok" && e.data?.began === true) r.running = { repo, sinceMs: nowMs };
         else if (kept) r.revived[String(c.params.name)] = nowMs;
         else r.cooling[repo.toLowerCase()] = nowMs;
+      } else if (c.kind === "updateHost") {
+        // Done, kept or failed, it isn't asked again before the config report can say its revision.
+        r.updated[String(c.params.name)] = nowMs;
       } else {
         const [held, key, retry] = c.kind === "suspendHost" ? [r.idle, String(c.params.host), NAP_RETRY_MS] : [r.dormant, String(c.params.name), DESTROY_RETRY_MS];
         // Done or kept, its clock ends, and a listing naming it again begins a new one.
@@ -295,7 +307,8 @@ function same(a: Run, b: Run): boolean {
 // with nowhere to go wakes an asleep machine of its repo, else makes one under its `machines`,
 // neither while an awake machine of it has been silent under UNHEARD_GRACE_MS.
 // A machine marked awake but silent past UNHEARD_GRACE_MS is woken once. A host idle its
-// minutes, or a machine dormant its own, that nothing holds awake is put to sleep, or destroyed.
+// minutes, or a machine dormant its own, that nothing holds awake is put to sleep, or destroyed,
+// before an asleep machine off its recipe's revision, admitted and held by nothing, is updated.
 // Nothing new is asked while a command is in flight or a make or wake runs.
 export function reconcileFleet(before: Run, v: FleetView, nowMs: number): FleetStepped {
   const settings = v.fleet.settings;
@@ -310,6 +323,16 @@ export function reconcileFleet(before: Run, v: FleetView, nowMs: number): FleetS
   for (const name of Object.keys(r.unheard)) if (!Object.hasOwn(settings.machines, name)) delete r.unheard[name];
   for (const name of Object.keys(r.revived)) if (nowMs - r.revived[name] >= REVIVE_EVERY_MS) delete r.revived[name];
   for (const repo of Object.keys(r.cooling)) if (nowMs - r.cooling[repo] >= COOL_DOWN_MS) delete r.cooling[repo];
+  // A machine behind: its recipe has said a revision, and it runs another or hasn't said one.
+  const recipeOf = (m: Made) => Object.entries(settings.repos).find(([repo]) => repo.toLowerCase() === m.repo.toLowerCase())?.[1];
+  const behind = (m: Made) => {
+    const wanted = recipeOf(m)?.revision ?? null;
+    return wanted !== null && m.revision !== wanted;
+  };
+  for (const name of Object.keys(r.updated)) {
+    const m = settings.machines[name];
+    if (m === undefined || !behind(m) || nowMs - r.updated[name] >= UPDATE_RETRY_MS) delete r.updated[name];
+  }
   for (const host of Object.keys(r.wanted)) if (nowMs - r.wanted[host] >= WANTED_MS || heard.some((h) => h.id === host && h.answering)) delete r.wanted[host];
   if (r.running !== null && nowMs - r.running.sinceMs >= RUN_MAX_MS) r.running = null;
 
@@ -369,6 +392,10 @@ export function reconcileFleet(before: Run, v: FleetView, nowMs: number): FleetS
     const name = Object.keys(r.dormant).find((n) => due(r.dormant[n], hostOf(n)));
     if (name !== undefined) ask = { kind: "destroyHost", params: { name } };
   }
+  if (ask === null && !busy) {
+    const outdated = machines.find(([name, m]) => m.made && m.asleep && m.environment !== null && v.admitted.includes(m.environment) && !held.has(m.environment) && behind(m) && !Object.hasOwn(r.updated, name));
+    if (outdated !== undefined) ask = { kind: "updateHost", params: { name: outdated[0] } };
+  }
   r.why = why;
   const send: Command[] = [];
   if (ask !== null) {
@@ -390,6 +417,7 @@ export function fleetDue(r: Run): number | null {
     due.push(...Object.values(r.idle).map(dueAt), ...Object.values(r.dormant).map(dueAt));
     due.push(...Object.entries(r.unheard).map(([name, since]) => (Object.hasOwn(r.revived, name) ? r.revived[name] + REVIVE_EVERY_MS : since + UNHEARD_GRACE_MS)));
     due.push(...Object.values(r.cooling).map((at) => at + COOL_DOWN_MS), ...Object.values(r.revived).map((at) => at + REVIVE_EVERY_MS));
+    due.push(...Object.values(r.updated).map((at) => at + UPDATE_RETRY_MS));
   }
   return due.length === 0 ? null : Math.min(...due);
 }

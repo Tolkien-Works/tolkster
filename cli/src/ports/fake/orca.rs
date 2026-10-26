@@ -68,12 +68,13 @@ pub struct World {
     // The hosts where every repo is set up and ready.
     pub ready_on: Vec<String>,
     // A recipe machine is being made, the refusal a make or wake meets, the repos one was asked
-    // for, the machines woken, those put to sleep and those destroyed (`Machines`).
+    // for, the machines woken, those put to sleep, updated and destroyed (`Machines`).
     pub making: bool,
     pub declined: Option<Option<crate::trace::Declined>>,
     pub made_for: Vec<String>,
     pub woken: Vec<String>,
     pub asleep: Vec<String>,
+    pub updated: Vec<String>,
     pub destroyed: Vec<String>,
     pub tolksters_there: Tolksters,
     // Every branch's PRs, as a step on another host reads them from GitHub.

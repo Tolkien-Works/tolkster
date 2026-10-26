@@ -93,7 +93,8 @@ pure reconcile after every report, event and alarm sends at most one machine com
 a grant, a waiting command or a pinned request needs is woken; a repo's first request with
 nowhere to go wakes an asleep machine of its repo, else makes one, neither while one awake and paired has been silent under 3 minutes; a machine marked awake but
 silent 3 minutes is woken, once in 30; a host idle its minutes is slept, and a machine dormant
-its `destroyAfter` destroyed, each clock running while every complete listing names it. A
+its `destroyAfter` destroyed, each clock running while every complete listing names it; an
+asleep machine off its recipe's revision is updated, once in 30. A
 failed sleep goes again 10 minutes on, a destroy an hour on; a make not begun or failed, or a
 wake failed or in `listen`'s cool-down, cools its repo 10 minutes; a wake kept otherwise holds
 its machine 30; a complete listing frees the lock. Asking none, it records why per repo for the frame: `hereHasRoom`,
@@ -239,6 +240,7 @@ time). Leaving them drops it.
 | `makeHost` | Makes a recipe machine for a repo, or says it didn't begin. |
 | `wakeHost` | Wakes a recipe machine, or says it didn't begin. |
 | `suspendHost` | Puts an idle recipe machine to sleep, or keeps it. |
+| `updateHost` | Moves an asleep recipe machine onto its recipe's image, or keeps it. |
 | `destroyHost` | Destroys a dormant recipe machine, or keeps it. |
 | `postAway` | The away message. |
 
@@ -627,9 +629,9 @@ Read as the request transitions are.
 - A deadline is named by the version that armed it, and dropped once its state is left or it is armed again; `takeBack` only once none is owed.
 - A slot is granted only by the coordinator's ledger, on a host with room, and reaches `claimed` only through a decision on a read landing after the grant, or in the step that asked.
 - A waiting place keeps its age and takes the issue's priority as last asked, its own else its parent's.
-- A recipe machine is made, woken, slept or destroyed only by a fleet command, one in flight at a time across all repos, idempotent by what `listen` finds.
+- A recipe machine is made, woken, slept, updated or destroyed only by a fleet command, one in flight at a time across all repos, idempotent by what `listen` finds.
 - A request with nowhere to go has a machine of its repo woken or made, unless one is on its way, and otherwise the fleet records why not.
-- No `suspendHost` goes to a host while a grant names it, a worker's command waits on it or a request is pinned to it.
+- No `suspendHost` or `updateHost` goes to a host while a grant names it, a worker's command waits on it or a request is pinned to it, and `updateHost` only to one asleep.
 - Every command is safe to run again by what `listen` finds, and every post carries an ID made from its command's.
 - `listen` types only fixed text, into an agent it has just listed as not at a prompt, or times into a session's turn open in the conversations checkout.
 - The machine hands a warm turn only an owner's message in a conversation, after it answered the request it was given; a hand-over that may not have landed closes it, and its end decides the request again.

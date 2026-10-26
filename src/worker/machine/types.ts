@@ -17,7 +17,8 @@ export type WorkState = (typeof WORK_STATES)[number];
 export const COMMANDS = [
   "readIssue", "startWorker", "deliverMessage", "readComment", "resumeWorker", "startRound", "stopWorker", "startTurn",
   "stopTurn", "evaluatePr", "observe", "closeAgent", "reapWorktree", "postNotice", "takeBackChain", "startContext",
-  "startTriage", "observeTriage", "updateBranch", "mergePr", "makeHost", "wakeHost", "suspendHost", "destroyHost",
+  "startTriage", "observeTriage", "updateBranch", "mergePr", "makeHost", "wakeHost", "suspendHost", "updateHost",
+  "destroyHost",
 ] as const;
 // `listen`'s commands, and `postAway`, which the Durable Object posts itself (queue.ts, `LOCAL`).
 export type CommandKind = (typeof COMMANDS)[number] | "postAway";

@@ -185,6 +185,10 @@ pub struct Config {
     // (Pacing::enrolled). No other host takes a worker.
     #[serde(skip)]
     pub enrolled: Vec<String>,
+    // Not a setting: the image revision each repo's recipe brings its machines to, by repo
+    // (Progress::prepared).
+    #[serde(skip)]
+    pub revisions: BTreeMap<String, String>,
     // Not a setting: the harness's, holding `<repo>`, filled in with the repo's display name
     // for each brief.
     #[serde(skip)]
@@ -245,6 +249,7 @@ fn from_files(files: &Files, owner_id: String, home: &Path, co_author: Option<St
         host: host(files)?,
         machines: BTreeMap::new(),
         enrolled: Vec::new(),
+        revisions: BTreeMap::new(),
         briefs_dir: briefs_dir(home).display().to_string(),
     }
     .settled())
@@ -391,7 +396,7 @@ pub(crate) fn machines(made: &Value) -> BTreeMap<String, Machine> {
 }
 
 // As `REVISION` in src/worker/machine/fleet.ts.
-fn plain_revision(revision: &str) -> bool {
+pub(crate) fn plain_revision(revision: &str) -> bool {
     (1..=100).contains(&revision.len()) && revision.bytes().all(|b| b.is_ascii_alphanumeric() || b"_.:-".contains(&b))
 }
 
