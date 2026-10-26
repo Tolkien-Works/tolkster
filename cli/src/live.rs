@@ -38,8 +38,8 @@ impl Machines for Recipes<'_> {
     fn suspend(&self, name: &str, host: &str, rests: &mut dyn FnMut() -> Result<bool, Error>) -> Result<bool, Error> {
         crate::recipe::sleep::suspend(self.shared, name, host, rests)
     }
-    fn update(&self, name: &str) -> Result<bool, Error> {
-        crate::recipe::update::update(self.shared, name)
+    fn update(&self, name: &str, revision: &str) -> Result<bool, Error> {
+        crate::recipe::update::update(self.shared, name, revision)
     }
     fn retire(&self, name: &str, reaped: &mut Reaped) -> Result<bool, Error> {
         crate::recipe::retire::retire(self.agent, self.shared, name, self.seen, reaped, self.beat)

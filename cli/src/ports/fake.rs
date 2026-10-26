@@ -340,8 +340,8 @@ impl crate::ports::Machines for Machines {
         }
         Ok(slept)
     }
-    fn update(&self, name: &str) -> Result<bool, Error> {
-        self.0.borrow_mut().updated.push(name.into());
+    fn update(&self, name: &str, revision: &str) -> Result<bool, Error> {
+        self.0.borrow_mut().updated.push(format!("{name}@{revision}"));
         Ok(true)
     }
     // On the host named as its ID, as Orca's hosts are here, which answers once woken.

@@ -18,21 +18,23 @@ use crate::plain::plain_host;
 use crate::runtime::{Making, Shared};
 use crate::trace;
 
-// The machine `name` updated: whether it was. No make, wake, sleep or destroy runs meanwhile,
+// The machine `name` updated to `revision`, its recipe's as `listen` reported it: whether it was. No make, wake, sleep or destroy runs meanwhile,
 // so it stays asleep throughout: one asked while another runs waits on the lock. Ok(false): it
-// is no asleep machine, its recipe has no `update`, or the recipe found it running.
-pub fn update(shared: &Arc<Shared>, name: &str) -> Result<bool, Error> {
+// is no asleep machine, its recipe has no `update`, or the recipe found it running or its image
+// on another revision.
+pub fn update(shared: &Arc<Shared>, name: &str, revision: &str) -> Result<bool, Error> {
     if !plain_host(name) {
         return Ok(false);
     }
     let Some(updating) = Making::alone(shared) else { return Err(Error::Waits(Waits::Lock, "a recipe machine is being made, woken or put to sleep".into())) };
     let Some(kept) = recorded_machines()?.get(name).cloned() else { return Ok(false) };
     let Some((recipe, true)) = sleeper(&kept) else { return Ok(false) };
-    let Some(line) = find(&mut run_command, &recipe.id, Some(&recipe.repo))?.update else { return Ok(false) };
+    let found = find(&mut run_command, &recipe.id, Some(&recipe.repo))?;
+    let Some(line) = &found.update else { return Ok(false) };
     let path = machines_file()?;
     let mut entries = |change: &mut Change| written(&path, change);
     trace::event(trace::Host::Updating { name: name.into() });
-    let updated = updated(&mut unshown, &line, name, &kept, &mut entries);
+    let updated = updated(&mut unshown, (line, &found.folder), name, revision, &kept, &mut entries);
     // An ask on settings read before it changed them is asked again, as after a make.
     if !matches!(updated, Ok(false)) {
         shared.recipes.end();
@@ -44,11 +46,13 @@ pub fn update(shared: &Arc<Shared>, name: &str) -> Result<bool, Error> {
     updated
 }
 
-// `update`'s steps: `line` run on the stopped machine with what `create` printed, then its entry,
-// still asleep, with the `userData` it printed, which holds the revision it now runs.
-pub(crate) fn updated(script: &mut Script, line: &str, name: &str, kept: &Value, entries: &mut Entries) -> Result<bool, Error> {
+// `update`'s steps: `line` run in the folder it was read from, on the stopped machine with what
+// `create` printed, then its entry, still asleep, with the `userData` it printed, which holds the
+// revision it now runs.
+pub(crate) fn updated(script: &mut Script, (line, folder): (&str, &str), name: &str, revision: &str, kept: &Value, entries: &mut Entries) -> Result<bool, Error> {
     let Some((recipe, true)) = sleeper(kept) else { return Ok(false) };
-    let out = script(line, &recipe.folder, &env(&recipe, name), &payload(&recipe, kept))?;
+    let [recipe_id, instance] = env(&recipe, name);
+    let out = script(line, folder, &[recipe_id, instance, ("TOLKSTER_REVISION", revision)], &payload(&recipe, kept))?;
     if out.code == Some(NOTHING_TO_DO) {
         return Ok(false);
     }

@@ -307,8 +307,9 @@ fn a_wake_wakes_an_admitted_machine_asleep_or_unheard() {
     assert_eq!(began(&config), json!(false));
 }
 
-// An update goes only to a machine that sleeps, asleep as machines.json has it, and waits while
-// a make, wake or sleep runs, so it never restarts a machine an agent could be at work on.
+// An update goes only to a machine that sleeps, asleep as machines.json has it, at the revision
+// its recipe said, and waits while a make, wake or sleep runs, so it never restarts a machine an
+// agent could be at work on.
 #[test]
 fn an_update_goes_only_to_an_asleep_machine() {
     let (linear, records, world) = fakes();
@@ -319,9 +320,11 @@ fn an_update_goes_only_to_an_asleep_machine() {
     config.machines.insert("mini".into(), made(false));
     assert_eq!(updated(&config).unwrap(), json!(false));
     config.machines.insert("mini".into(), made(true));
+    assert_eq!(updated(&config).unwrap(), json!(false));
+    config.revisions.insert("tolkster".into(), "5".into());
     world.borrow_mut().making = true;
     assert!(matches!(updated(&config), Err(Error::Waits(Waits::Lock, _))));
     world.borrow_mut().making = false;
     assert_eq!(updated(&config).unwrap(), json!(true));
-    assert_eq!(world.borrow().updated, ["mini"]);
+    assert_eq!(world.borrow().updated, ["mini@5"]);
 }

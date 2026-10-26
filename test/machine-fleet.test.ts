@@ -195,7 +195,7 @@ test("the fleet's command is resent at its timeout, lost after its sends, and se
 });
 
 // TW-878: a rollout reaches each machine while it sleeps, one at a time, after any machine a
-// request needs, and never one something holds awake.
+// request needs and any sleep or destroy due, and never one something holds awake.
 test("an asleep machine behind its recipe's revision is updated, once until it says the new one", () => {
   const rolled = (machines: Record<string, Made>, revision: string | null = "5") => {
     const f = fleet(machines);
@@ -210,6 +210,10 @@ test("an asleep machine behind its recipe's revision is updated, once until it s
   for (const f of [rolled({ "tolkster-1": { ...asleep, revision: "5" } }), rolled({ "tolkster-1": { ...awake, revision: "4" } }), rolled({ "tolkster-1": behind }, null)]) {
     assert.deepEqual(run(newRun(), f, idle, NOW).send, []);
   }
+  // One whose credential the Durable Object doesn't hold isn't; a host due to sleep goes first.
+  assert.deepEqual(run(newRun(), rolled({ "tolkster-1": behind }), idle, NOW, []).send, []);
+  const napping = step(newRun(), { kind: "listed", idle: { "h-2": 30 }, dormant: {}, elapsedMs: 0 }, NOW);
+  assert.deepEqual(asked(run(napping, rolled({ "tolkster-1": behind }), idle, NOW + 30 * MIN).send), [["suspendHost", "h-2"]]);
   // A request pinned to it wakes it on the old image instead; a waiting command holds it too.
   const pinned = newCoordinator();
   pinned.queue = [waits("q", { on: "h-1" })];

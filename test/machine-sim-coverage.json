@@ -1,6 +1,6 @@
 {
   "src/worker/machine/chain.ts": 35,
-  "src/worker/machine/coordinator.ts": 17,
+  "src/worker/machine/coordinator.ts": 16,
   "src/worker/machine/ctx.ts": 5,
   "src/worker/machine/facts.ts": 17,
   "src/worker/machine/fleet.ts": 73,

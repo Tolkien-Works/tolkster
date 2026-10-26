@@ -306,9 +306,9 @@ function same(a: Run, b: Run): boolean {
 // a waiting place pinned to it needs is woken. The first waiting place of each repo in turn
 // with nowhere to go wakes an asleep machine of its repo, else makes one under its `machines`,
 // neither while an awake machine of it has been silent under UNHEARD_GRACE_MS.
-// A machine marked awake but silent past UNHEARD_GRACE_MS is woken once. An asleep machine
-// whose revision isn't its recipe's, that nothing holds awake, is updated. A host idle its
-// minutes, or a machine dormant its own, that nothing holds awake is put to sleep, or destroyed.
+// A machine marked awake but silent past UNHEARD_GRACE_MS is woken once. A host idle its
+// minutes, or a machine dormant its own, that nothing holds awake is put to sleep, or destroyed,
+// before an asleep machine off its recipe's revision, admitted and held by nothing, is updated.
 // Nothing new is asked while a command is in flight or a make or wake runs.
 export function reconcileFleet(before: Run, v: FleetView, nowMs: number): FleetStepped {
   const settings = v.fleet.settings;
@@ -377,10 +377,6 @@ export function reconcileFleet(before: Run, v: FleetView, nowMs: number): FleetS
       r.revived[unheard] = nowMs;
     }
   }
-  if (ask === null && !busy) {
-    const outdated = machines.find(([name, m]) => m.made && m.asleep && m.environment !== null && !held.has(m.environment) && behind(m) && !Object.hasOwn(r.updated, name));
-    if (outdated !== undefined) ask = { kind: "updateHost", params: { name: outdated[0] } };
-  }
   // A clock due on a machine something holds awake waits NAP_RETRY_MS, or the event that frees it.
   const due = (clock: Clock, host: string | undefined) => {
     if (dueAt(clock) > nowMs) return false;
@@ -395,6 +391,10 @@ export function reconcileFleet(before: Run, v: FleetView, nowMs: number): FleetS
   if (ask === null && !busy) {
     const name = Object.keys(r.dormant).find((n) => due(r.dormant[n], hostOf(n)));
     if (name !== undefined) ask = { kind: "destroyHost", params: { name } };
+  }
+  if (ask === null && !busy) {
+    const outdated = machines.find(([name, m]) => m.made && m.asleep && m.environment !== null && v.admitted.includes(m.environment) && !held.has(m.environment) && behind(m) && !Object.hasOwn(r.updated, name));
+    if (outdated !== undefined) ask = { kind: "updateHost", params: { name: outdated[0] } };
   }
   r.why = why;
   const send: Command[] = [];

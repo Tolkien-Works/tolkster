@@ -17,8 +17,9 @@ struct World {
 
 fn update(world: &RefCell<World>, kept: &Value, out: Output) -> Result<bool, Error> {
     let mut out = Some(out);
-    let mut script = |line: &str, folder: &str, _: &[(&str, &str)], stdin: &str| {
-        assert_eq!(folder, "/src/tolkster");
+    let mut script = |line: &str, folder: &str, env: &[(&str, &str)], stdin: &str| {
+        assert_eq!(folder, "/src/now");
+        assert!(env.contains(&("TOLKSTER_REVISION", "5")));
         world.borrow_mut().scripts.push((line.into(), stdin.into()));
         Ok(out.take().expect("one run"))
     };
@@ -28,15 +29,16 @@ fn update(world: &RefCell<World>, kept: &Value, out: Output) -> Result<bool, Err
         w.config.extend(changed);
         Ok(made)
     };
-    updated(&mut script, "./update.sh", "box", kept, &mut entries)
+    updated(&mut script, ("./update.sh", "/src/now"), "box", "5", kept, &mut entries)
 }
 
 fn world() -> RefCell<World> {
     RefCell::new(World { scripts: Vec::new(), config: Map::from_iter([("box".into(), sleeping())]) })
 }
 
-// An update runs on what `create` printed and records the revision it printed, the machine still
-// asleep and paired as it was, so its next wake boots the new image.
+// An update runs, in the folder its line was read from and asking for the recipe's revision, on
+// what `create` printed, and records the revision it printed, the machine still asleep and
+// paired as it was, so its next wake boots the new image.
 #[test]
 fn an_update_records_the_new_revision_and_keeps_the_machine_asleep() {
     let world = world();

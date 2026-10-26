@@ -100,16 +100,16 @@ pub fn suspend_host(config: &Config, ports: &mut Ports, host: &str) -> Result<Fi
 
 // `updateHost` (docs/hosts.md, Rolling out): the asleep recipe machine `name` moved onto its
 // recipe's image in place (`recipe::update`), checked here: no make, wake or sleep runs, and it
-// is a machine that sleeps, asleep as machines.json has it now. `updated` says whether it was;
-// one kept is asked again once its revision still trails.
+// is a machine that sleeps, asleep as machines.json has it now, and its repo's recipe has said
+// the revision it goes to. `updated` says whether it was; one kept is asked again once its
+// revision still trails.
 pub fn update_host(config: &Config, ports: &mut Ports, name: &str) -> Result<Finished, Error> {
     if ports.machines.making() {
         return Err(Error::Waits(Waits::Lock, "a recipe machine is being made, woken or put to sleep".into()));
     }
-    if !config.machines.get(name).is_some_and(|made| made.sleeps && made.asleep) {
-        return Ok(Finished::ok(json!({ "updated": false })));
-    }
-    Ok(Finished::ok(json!({ "updated": ports.machines.update(name)? })))
+    let wanted = config.machines.get(name).filter(|made| made.sleeps && made.asleep).and_then(|made| config.revisions.iter().find(|(repo, _)| repo.eq_ignore_ascii_case(&made.repo)));
+    let Some((_, revision)) = wanted else { return Ok(Finished::ok(json!({ "updated": false }))) };
+    Ok(Finished::ok(json!({ "updated": ports.machines.update(name, revision)? })))
 }
 
 // `destroyHost` (docs/hosts.md, Destroying): the recipe machine `name` destroyed, checked here:
