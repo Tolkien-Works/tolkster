@@ -8,6 +8,7 @@ import { AGENT_STATES, AT_REST_WORK, MINUTE, SENDS, type Event, type Store } fro
 import { AGENT_REPORTS } from "../src/worker/machine.ts";
 import type { Seen, View } from "./machine-sim.ts";
 import { ISSUES, RECIPE_REPO, REPO, stuck, type World } from "./machine-sim-world.ts";
+import { NAP_HOSTS, NAP_MACHINES } from "./machine-sim-steps.ts";
 
 function retiredIn(seen: Seen): Set<string> {
   return new Set(seen.retired);
@@ -22,6 +23,7 @@ export class Memo {
   // Each recipe machine every complete listing naming any since `since` has named dormant.
   dormant: Record<string, { since: number; minutes: number }> = {};
   napsSent = new Set<string>();
+  updatesSent = new Set<string>();
   // Each command's and outbox event's content by its ID.
   commands = new Map<string, string>();
   events = new Map<string, string>();
@@ -360,6 +362,18 @@ export const CHECKS: Record<string, CheckFn> = {
       const [key, nap] = command.kind === "destroyHost" ? [String(command.params.name), memo.dormant[command.params.name as string]] : [String(command.params.host), memo.naps[command.params.host as string]];
       if (nap === undefined) return `${command.id} (${command.kind}) names ${key}, which the newest listing doesn't`;
       if (after.nowMs < nap.since + nap.minutes * MINUTE) return `${command.id} (${command.kind}) names ${key} ${after.nowMs - nap.since} ms into its ${nap.minutes} minutes`;
+    }
+    return null;
+  },
+
+  // An update goes only to the asleep machine (m1, paired as h2), and never while a request is
+  // pinned to its host or a worker's command waits on it, before the step and after it.
+  updatesOnlyResting(before, after, seen, memo) {
+    for (const { command } of seen.sent.filter((s) => s.command.issue === FLEET && s.command.kind === "updateHost" && !memo.updatesSent.has(s.command.id))) {
+      memo.updatesSent.add(command.id);
+      if (command.params.name !== NAP_MACHINES[0]) return `${command.id} updates ${String(command.params.name)}, which isn't asleep`;
+      const held = (v: View) => v.coordinator.queue.some((p) => p.on === NAP_HOSTS[1]) || Object.hasOwn(v.run.wanted, NAP_HOSTS[1]);
+      if (held(before) && held(after)) return `${command.id} updates ${NAP_MACHINES[0]} while something holds ${NAP_HOSTS[1]} awake`;
     }
     return null;
   },

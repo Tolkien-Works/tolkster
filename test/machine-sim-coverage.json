@@ -1,9 +1,9 @@
 {
   "src/worker/machine/chain.ts": 35,
-  "src/worker/machine/coordinator.ts": 18,
+  "src/worker/machine/coordinator.ts": 17,
   "src/worker/machine/ctx.ts": 5,
   "src/worker/machine/facts.ts": 17,
-  "src/worker/machine/fleet.ts": 70,
+  "src/worker/machine/fleet.ts": 73,
   "src/worker/machine/prune.ts": 3,
   "src/worker/machine/queue.ts": 0,
   "src/worker/machine/requests.ts": 87,

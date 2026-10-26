@@ -19,8 +19,9 @@ export const PROJECT = "github:owner/repo";
 // The repo's recipe, as the config report says it, by the name the settings give the repo: of
 // its three machines the paired host is one, awake, and another is asleep, so a worker with
 // nowhere to go waits for the first, wakes the second, or, while a wake is held back, asks for
-// the third to be made.
-export const RECIPE: Recipe = { id: "recipe", machines: 3, slotsEach: 1, idleMinutes: 30, destroyAfter: 60 };
+// the third to be made. The asleep one runs an older revision than the recipe's, which no report
+// ever moves, so it is updated again after each UPDATE_RETRY_MS.
+export const RECIPE: Recipe = { id: "recipe", machines: 3, slotsEach: 1, idleMinutes: 30, destroyAfter: 60, revision: "2" };
 export const RECIPE_REPO = "repo-name";
 // A PR's repo is GitHub's `owner/name`, where a read names the repo by listen's setting.
 export const PR_REPO = "owner/repo";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { newCoordinator, type Coordinator, type Place } from "../src/worker/machine/coordinator.ts";
-import { COOL_DOWN_MS, DESTROY_RETRY_MS, expireFleet, fleetData, fleetDue, NAP_RETRY_MS, newRun, reconcileFleet, REASONS, REVIVE_EVERY_MS, roomOf, SETTLE_MS, stepFleet, UNHEARD_GRACE_MS, type Fleet, type FleetEvent, type Heard, type Made, type Run } from "../src/worker/machine/fleet.ts";
+import { COOL_DOWN_MS, DESTROY_RETRY_MS, expireFleet, fleetData, fleetDue, NAP_RETRY_MS, newRun, reconcileFleet, REASONS, REVIVE_EVERY_MS, roomOf, SETTLE_MS, stepFleet, UNHEARD_GRACE_MS, UPDATE_RETRY_MS, type Fleet, type FleetEvent, type Heard, type Made, type Run } from "../src/worker/machine/fleet.ts";
 import { fleetEvent, fleetReconciled, fleetReported, inFlight, keptAtReset, loadRun, machineTimer, reconcile } from "../src/worker/machine/store.ts";
 import { COMMAND_TIMEOUT_MS, SENDS, type Command } from "../src/worker/machine/types.ts";
 import { parseReport } from "../src/worker/machine.ts";
@@ -10,7 +10,7 @@ import contract from "./contract.json" with { type: "json" };
 import { MIN, NOW, T0 } from "./machine-fixture.ts";
 import { MemoryStorage } from "./storage.ts";
 
-const RECIPE = { id: "agent37", machines: 2, slotsEach: 1, idleMinutes: 30, destroyAfter: 1440 };
+const RECIPE = { id: "agent37", machines: 2, slotsEach: 1, idleMinutes: 30, destroyAfter: 1440, revision: null };
 const awake: Made = { repo: "tolkster", made: true, asleep: false, environment: null, revision: null };
 const asleep: Made = { ...awake, asleep: true, environment: "h-1" };
 const host = (id: string, name: string, more: Partial<Heard> = {}): Heard => ({ id, name, cap: 1, admitted: true, answering: true, ready: ["github:acme/tolkster"], held: 0, ...more });
@@ -194,8 +194,46 @@ test("the fleet's command is resent at its timeout, lost after its sends, and se
   assert.equal(step(waiting, { kind: "commandResult", command: "naps.4", result: "ok" }, NOW), waiting);
 });
 
+// TW-878: a rollout reaches each machine while it sleeps, one at a time, after any machine a
+// request needs, and never one something holds awake.
+test("an asleep machine behind its recipe's revision is updated, once until it says the new one", () => {
+  const rolled = (machines: Record<string, Made>, revision: string | null = "5") => {
+    const f = fleet(machines);
+    f.settings!.repos.tolkster = { ...RECIPE, revision };
+    return f;
+  };
+  const behind = { ...asleep, revision: "4" };
+  const idle = newCoordinator();
+  assert.deepEqual(asked(run(newRun(), rolled({ "tolkster-1": behind }), idle, NOW).send), [["updateHost", "tolkster-1"]]);
+  // One with no revision said is behind too; one on it, awake, or before any `prepare` said one, isn't.
+  assert.deepEqual(asked(run(newRun(), rolled({ "tolkster-1": asleep }), idle, NOW).send), [["updateHost", "tolkster-1"]]);
+  for (const f of [rolled({ "tolkster-1": { ...asleep, revision: "5" } }), rolled({ "tolkster-1": { ...awake, revision: "4" } }), rolled({ "tolkster-1": behind }, null)]) {
+    assert.deepEqual(run(newRun(), f, idle, NOW).send, []);
+  }
+  // A request pinned to it wakes it on the old image instead; a waiting command holds it too.
+  const pinned = newCoordinator();
+  pinned.queue = [waits("q", { on: "h-1" })];
+  assert.deepEqual(asked(run(newRun(), rolled({ "tolkster-1": behind }), pinned, NOW).send), [["wakeHost", "tolkster-1"]]);
+  const wanted = step(newRun(), { kind: "wanted", host: "h-1" }, NOW);
+  assert.deepEqual(run(wanted, rolled({ "tolkster-1": behind }), idle, NOW, []).send, []);
+  // Done or failed, it isn't asked again until UPDATE_RETRY_MS, unless the config report says
+  // the new revision first; the next behind goes then.
+  const two = rolled({ "tolkster-1": behind, "tolkster-2": { ...behind, environment: "h-2" } });
+  for (const result of ["ok", "failed"] as const) {
+    const asking = run(newRun(), two, idle, NOW).run;
+    const ended = step(asking, { kind: "commandResult", command: asking.command!.id, result }, NOW);
+    assert.deepEqual(asked(run(ended, two, idle, NOW).send), [["updateHost", "tolkster-2"]]);
+    const one = rolled({ "tolkster-1": behind });
+    const held = run(ended, one, idle, NOW);
+    assert.deepEqual(held.send, []);
+    assert.equal(fleetDue(held.run), NOW + UPDATE_RETRY_MS);
+    assert.deepEqual(asked(run(held.run, one, idle, NOW + UPDATE_RETRY_MS).send), [["updateHost", "tolkster-1"]]);
+    assert.deepEqual(run(held.run, rolled({ "tolkster-1": { ...behind, revision: "5" } }), idle, NOW).run.updated, {});
+  }
+});
+
 test("the fleet's wires are the fixture's, and its reasons the CLI's", () => {
-  for (const [kind, params] of [["suspendHost", { host: "mac" }], ["destroyHost", { name: "tolkster-1" }], ["makeHost", { repo: "tolkster" }], ["wakeHost", { name: "tolkster-1", repo: "tolkster" }]] as const) {
+  for (const [kind, params] of [["suspendHost", { host: "mac" }], ["destroyHost", { name: "tolkster-1" }], ["makeHost", { repo: "tolkster" }], ["wakeHost", { name: "tolkster-1", repo: "tolkster" }], ["updateHost", { name: "tolkster-1" }]] as const) {
     const wire = contract.commands.find((c) => c.kind === kind)!;
     const command: Command = { id: wire.id, issue: "fleet", kind, machine: "fleet", version: wire.version, params, class1: false, firstSentMs: NOW, sentMs: NOW, sends: 1, superseded: false };
     assert.deepEqual(fleetWire(command), wire);

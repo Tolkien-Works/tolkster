@@ -229,7 +229,7 @@ class Sim {
     await hostOp(this.storage, { op: "admitHost", host: NAP_HOSTS[1] }, true, this.nowMs);
     const hosts = { held: 0, hosts: [], projects: {}, recipes: { [REPO]: RECIPE_REPO } };
     await fleetReported(this.storage, { hosts }, this.nowMs, this.sender);
-    await fleetReported(this.storage, { settings: { cap: 1, slots: {}, repos: { [RECIPE_REPO]: RECIPE }, machines: { [NAP_HOSTS[0]]: { repo: RECIPE_REPO, made: true, asleep: false, environment: null, revision: null }, [NAP_MACHINES[0]]: { repo: RECIPE_REPO, made: true, asleep: true, environment: NAP_HOSTS[1], revision: null } } } }, this.nowMs, this.sender);
+    await fleetReported(this.storage, { settings: { cap: 1, slots: {}, repos: { [RECIPE_REPO]: RECIPE }, machines: { [NAP_HOSTS[0]]: { repo: RECIPE_REPO, made: true, asleep: false, environment: null, revision: null }, [NAP_MACHINES[0]]: { repo: RECIPE_REPO, made: true, asleep: true, environment: NAP_HOSTS[1], revision: "1" } } } }, this.nowMs, this.sender);
     await fleetReported(this.storage, { hosts }, this.nowMs, this.sender);
   }
 
