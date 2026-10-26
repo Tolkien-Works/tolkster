@@ -154,6 +154,7 @@
     "startRoundTyped": { "typed": true },
     "resumeWorkerWaking": { "waking": true, "waitsOn": { "host": "mini" } },
     "destroyHostLocked": { "waitsOn": { "lock": true } },
+    "readIssueOrcaAbsent": { "waitsOn": { "orca": true } },
     "updateBranchMoved": { "moved": true },
     "updateBranchRefused": { "refused": true },
     "startTurn": { "terminal": "term_1a2b" },

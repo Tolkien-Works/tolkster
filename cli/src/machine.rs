@@ -569,6 +569,7 @@ fn waits_on(waits: &Waits) -> (String, Value) {
     let on = match waits {
         Waits::Host(host) => json!({ "host": host }),
         Waits::Lock => json!({ "lock": true }),
+        Waits::Orca => json!({ "orca": true }),
     };
     ("waitsOn".into(), on)
 }

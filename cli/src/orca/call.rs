@@ -7,7 +7,7 @@ use serde::{Deserialize, Deserializer};
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-use crate::error::{Context, Error, Unsent};
+use crate::error::{Context, Error, Unsent, Waits};
 use crate::exec::{Run, failure};
 use crate::json::{decode, loose};
 use crate::trace::{self, Call};
@@ -20,11 +20,21 @@ pub fn call(run: &mut Run, args: &[&str]) -> Result<String, Error> {
 
 // As `call`, with what a failed run printed on stdout, where `orca --json` puts its error.
 pub(super) fn call_said(run: &mut Run, args: &[&str]) -> (Result<String, Error>, Option<String>) {
-    let (result, said) = match run("orca", args, None) {
-        Ok(output) if output.ok => (Ok(output.stdout), None),
+    let (result, said, _) = called(run, args);
+    (result, said)
+}
+
+// As `call_said`, with whether Orca was absent: not found to run, or its app not running
+// (`runtime_unavailable`; a paired host's is `remote_runtime_unavailable`).
+fn called(run: &mut Run, args: &[&str]) -> (Result<String, Error>, Option<String>, bool) {
+    let (result, said, absent) = match run("orca", args, None) {
+        Ok(output) if output.ok => (Ok(output.stdout), None, false),
         // On Windows every `orca` call writes a crashpad line to stderr, so Orca's own error comes first.
-        Ok(output) => (Err(Error::Orca(failure("orca", args, &output, orca_error(&output.stdout)))), Some(output.stdout)),
-        Err(error) => (Err(Error::Orca(format!("orca {} failed: {error}", args[..args.len().min(2)].join(" ")))), None),
+        Ok(output) => {
+            let absent = Said::of(&output.stdout).is_some_and(|said| said.code() == Some("runtime_unavailable"));
+            (Err(Error::Orca(failure("orca", args, &output, orca_error(&output.stdout)))), Some(output.stdout), absent)
+        }
+        Err(error) => (Err(Error::Orca(format!("orca {} failed: {error}", args[..args.len().min(2)].join(" ")))), None, error.not_found()),
     };
     if args.get(..2).is_some_and(|verb| LISTING_WRITES.contains(&verb.join(" ").as_str())) {
         STALE.with(|stale| stale.set(true));
@@ -32,7 +42,7 @@ pub(super) fn call_said(run: &mut Run, args: &[&str]) -> (Result<String, Error>,
     if let Some((site, detail)) = written(args) {
         trace::event(Call::Wrote { site, detail, failed: result.as_ref().err().cloned() });
     }
-    (result, said)
+    (result, said, absent)
 }
 
 // What a failed `orca --json` call printed on stdout: Orca's error, or its refusal of a send.
@@ -165,7 +175,11 @@ fn written(args: &[&str]) -> Option<(String, String)> {
 }
 
 pub(super) fn orca_json(run: &mut Run, args: &[&str]) -> Result<Value, Error> {
-    serde_json::from_str(&call(run, args)?).context(format!("Orca's answer to {}", args.first().unwrap_or(&"")))
+    json_of(&call(run, args)?, args)
+}
+
+fn json_of(answer: &str, args: &[&str]) -> Result<Value, Error> {
+    serde_json::from_str(answer).context(format!("Orca's answer to {}", args.first().unwrap_or(&"")))
 }
 
 // Orca's envelope around what a call answers.
@@ -175,9 +189,15 @@ pub struct Answer<T> {
 }
 
 // `args`' answer, decoded at once as `T`: a field `T` relies on and the answer lacks fails
-// naming the call's verb, e.g. "Orca's answer to repo list".
+// naming the call's verb, e.g. "Orca's answer to repo list". A read opens and types nothing,
+// so one that found Orca absent waits on it (`Waits::Orca`), for the Durable Object to send
+// its command again once a listing hears Orca; a write's failure stays `Error::Orca`.
 pub(super) fn orca_read<T: DeserializeOwned>(run: &mut Run, args: &[&str]) -> Result<T, Error> {
-    decode(orca_json(run, args)?, &answer_to(args))
+    let answer = match called(run, args) {
+        (Err(error), _, true) => return Err(Error::Waits(Waits::Orca, error.to_string())),
+        (answer, ..) => answer?,
+    };
+    decode(json_of(&answer, args)?, &answer_to(args))
 }
 
 pub(super) fn answer_to(args: &[&str]) -> String {

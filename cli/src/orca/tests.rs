@@ -199,6 +199,24 @@ it." } });
     assert_eq!(call(&mut noisy, &args).unwrap_err().to_string(), "orca terminal send failed: remote_runtime_unavailable: Could not connect.");
 }
 
+// A read that finds Orca absent waits on it, as it opened nothing; a write, which may have, and
+// a read Orca answered with any other failure, fail as Orca's.
+#[test]
+fn a_read_that_finds_orca_absent_waits_on_it_but_a_write_fails() {
+    use crate::error::{Context, Waits};
+    let said = |code: &'static str| move |_: &str, _: &[&str], _: Option<&str>| Ok(Output { ok: false, code: Some(1), stdout: json!({ "ok": false, "error": { "code": code, "message": "down" } }).to_string(), stderr: String::new() });
+    let mut missing = |_: &str, _: &[&str], _: Option<&str>| Err(std::io::Error::new(std::io::ErrorKind::NotFound, "program not found")).context("orca");
+    let mut denied = |_: &str, _: &[&str], _: Option<&str>| Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "denied")).context("orca");
+    assert!(matches!(repos(&mut said("runtime_unavailable"), None), Err(Error::Waits(Waits::Orca, _))));
+    assert!(matches!(repos(&mut missing, None), Err(Error::Waits(Waits::Orca, _))));
+    assert!(matches!(repos(&mut said("remote_runtime_unavailable"), Some("mac")), Err(Error::Orca(_))));
+    assert!(matches!(repos(&mut said("invalid_argument"), None), Err(Error::Orca(_))));
+    assert!(matches!(repos(&mut denied, None), Err(Error::Orca(_))));
+    let send = ["terminal", "send", "--terminal", "t1", "--json"];
+    assert!(matches!(call(&mut said("runtime_unavailable"), &send), Err(Error::Orca(_))));
+    assert!(matches!(call(&mut missing, &send), Err(Error::Orca(_))));
+}
+
 // A `Cli` that retries a refused send at once, not seconds apart.
 fn quick<'r>(run: &'r mut Run<'r>) -> Cli<'r> {
     Cli { refused_pause: Duration::ZERO, ..Cli::alone(run) }
