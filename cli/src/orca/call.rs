@@ -24,8 +24,9 @@ pub(super) fn call_said(run: &mut Run, args: &[&str]) -> (Result<String, Error>,
     (result, said)
 }
 
-// As `call_said`, with whether Orca was absent: not found to run, or its app not running
-// (`runtime_unavailable`; a paired host's is `remote_runtime_unavailable`).
+// As `call_said`, with whether Orca was absent: not found to run, or its runtime unreachable
+// (`runtime_unavailable`, its app not running or a request it lost; a paired host's is
+// `remote_runtime_unavailable`).
 fn called(run: &mut Run, args: &[&str]) -> (Result<String, Error>, Option<String>, bool) {
     let (result, said, absent) = match run("orca", args, None) {
         Ok(output) if output.ok => (Ok(output.stdout), None, false),
