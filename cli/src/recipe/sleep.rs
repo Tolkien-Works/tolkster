@@ -26,7 +26,7 @@ pub(crate) fn sleeper(kept: &Value) -> Option<(Recipe, bool)> {
     let text = |key: &str| kept[key].as_str().filter(|text| !text.is_empty()).map(String::from);
     kept["userData"].as_object()?;
     let sleep = Some((text("suspend")?, text("resume")?));
-    let recipe = Recipe { id: text("recipe")?, repo: text("repo")?, github: String::new(), folder: text("folder")?, create: String::new(), destroy: text("destroy")?, sleep };
+    let recipe = Recipe { id: text("recipe")?, repo: text("repo")?, github: String::new(), folder: text("folder")?, create: String::new(), destroy: text("destroy")?, sleep, prepare: None };
     Some((recipe, kept["asleep"] == true))
 }
 

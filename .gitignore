@@ -4,4 +4,5 @@ dist/
 .dev.vars
 cli/target/
 cli/target.seeding/
-scripts/orca-vm/agent37-state.json
+scripts/orca-vm/agent37-state.json*
+scripts/orca-vm/agent37-prepare.lock

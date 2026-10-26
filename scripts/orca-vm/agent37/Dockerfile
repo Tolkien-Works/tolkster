@@ -1,7 +1,7 @@
 # The image every Tolkster workspace on Agent37 runs: the public worker base (Node 24, git and
 # Orca's Linux app, signed in to nothing; github.com/Tolkien-Works/tolkster-worker-base), plus
-# Tolkster's Rust as its repo layer. Built in Agent37's cloud by
-# `node scripts/orca-vm/agent37-base.ts image`.
+# Tolkster's Rust as its repo layer. Built in Agent37's cloud by the recipe's `prepare`
+# (agent37-recipe.ts) whenever this directory changes.
 # Everything goes outside /home/node: the instance's volume masks it at runtime.
 
 # The base's tag for one Orca release, pinned so a new Orca comes in by a reviewed raise here.

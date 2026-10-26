@@ -48,6 +48,12 @@ keeps its own credentials and the realtime secret.
   the repo; the image only runs it. Claude Code's terms keep it out of the image; the base
   installs it unless the platform ships one. `tolkster` and every credential arrive
   after the machine starts, so no layer holds one for a fork or pulled image to hand on.
+- **Rolling out.** A recipe's optional `prepare`, run by `listen` one at a time as it starts
+  and after a pull that restarts nothing, brings its image and base up to the repo, so a
+  merge is the rollout. The `agent37` recipe's rebuilds the template when `agent37/` changes
+  and updates the stopped base to it in place, keeping its disk, or builds a new base when
+  `agent37-base.ts` changes. A machine's `userData` holds its template revision, which
+  `listen` reports to the fleet.
 - **Builds.** `GET /build/<target>/<commit>` serves a host the `tolkster` CI kept for that
   commit ([Set it up](setup.md#2-the-cli)), a new host's first by its untraded enrolment
   code. It serves no "newest". The Worker reads the artifact as
@@ -93,6 +99,8 @@ keeps its own credentials and the realtime secret.
   but its checkouts and no worker being set up; one asleep and unpaired, once no record names
   it; a mark, with no make running in `listen` and an hour at least, past any `host add`.
 - A sleep or wake never pairs or unpairs a machine: only `create` and `destroy` do.
+- A rollout always leaves a base to fork: the old one goes only once its replacement is ready,
+  and a `create` whose fork finds it gone forks the new one.
 - An Agent37 machine runs one Orca server: a boot and a `resume` start it one at a time,
   each once the last has exited, and a boot script replaced since its run began starts none.
 - The Durable Object stores no credential, only its digest, and a storage reset keeps the

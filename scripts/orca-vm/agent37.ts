@@ -4,29 +4,40 @@
 // AGENT37_API_KEY and the base's git token `gh auth token`: neither is written anywhere.
 
 import { execFileSync } from "node:child_process";
-import { randomBytes } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash, randomBytes } from "node:crypto";
+import { existsSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const API = "https://api.agent37.com/v1";
 const SANDBOX = "https://sandbox.agent37.app/v1";
-const STATE = fileURLToPath(new URL("agent37-state.json", import.meta.url));
+const HERE = fileURLToPath(new URL(".", import.meta.url));
+const STATE = join(HERE, "agent37-state.json");
 
 // The port `orca-ide serve` listens on in a workspace, published through a public port.
 export const SERVE_PORT = 6768;
 export const HOME = "/home/node";
 export const PROJECT_ROOT = `${HOME}/tolkster`;
 
-// Ids and names only, never a credential.
-export type State = { template?: string; orcaVersion?: string; baseInstanceId?: string; baseReady?: boolean; repoUrl?: string; repoRef?: string };
+// Ids, names and digests only, never a credential. `baseInstanceId` is set only once its base
+// is ready to fork. The inputs are the digests (`inputs`) the template and the base were last
+// built from, and `imageRevision` the revision that build published; `buildingBase` is a base
+// being built and `retired` the instances left to delete, which a cut-off `prepare` leaves to
+// the next one.
+export type State = {
+  template?: string; orcaVersion?: string; baseInstanceId?: string; repoUrl?: string; repoRef?: string;
+  imageInputs?: string; imageRevision?: string; baseInputs?: string; buildingBase?: string; retired?: string[];
+};
 
 export function readState(): State {
   return existsSync(STATE) ? (JSON.parse(readFileSync(STATE, "utf8")) as State) : {};
 }
 
+// Renamed into place, so a `create` reading it as `prepare` writes never reads half a file.
 export function mergeState(change: State): State {
   const state = { ...readState(), ...change };
-  writeFileSync(STATE, `${JSON.stringify(state, null, 2)}\n`);
+  writeFileSync(`${STATE}.${process.pid}`, `${JSON.stringify(state, null, 2)}\n`);
+  renameSync(`${STATE}.${process.pid}`, STATE);
   return state;
 }
 
@@ -53,7 +64,7 @@ function key(): string {
   return value;
 }
 
-const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
+export const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
 // One API call; `try_again` and a capacity miss are retried, as Agent37 asks.
 export async function api<T = any>(method: string, path: string, body?: unknown, base = API): Promise<T> {
@@ -74,10 +85,11 @@ export async function api<T = any>(method: string, path: string, body?: unknown,
   }
 }
 
-export async function waitRunning(id: string): Promise<void> {
+// The instance object, once it runs.
+export async function waitRunning(id: string): Promise<any> {
   for (let i = 0; i < 120; i++) {
     const instance = await api("GET", `/instances/${id}`);
-    if (instance.status === "running") return;
+    if (instance.status === "running") return instance;
     if (instance.status === "failed") throw new Error(`instance ${id} failed to start`);
     await sleep(5000);
   }
@@ -212,9 +224,37 @@ export async function pairingAddress(id: string): Promise<string> {
   return entry.url.replace(/^https:/, "wss:");
 }
 
-// The recipe result Orca reads: serve's JSON, with the instance id for the lifecycle scripts.
-export function result(serve: Record<string, unknown>, id: string): Record<string, unknown> {
-  return { ...serve, schemaVersion: 1, userData: { provider: "agent37", resourceId: id } };
+// The recipe result Orca reads: serve's JSON, with the instance id for the lifecycle scripts
+// and the template revision it runs, which `listen` reports for the machine.
+export function result(serve: Record<string, unknown>, id: string, revision: string): Record<string, unknown> {
+  return { ...serve, schemaVersion: 1, userData: { provider: "agent37", resourceId: id, revision } };
+}
+
+// The template revision an instance object says it runs: Agent37 reads a missing one as 1.
+export function revision(instance: { template_revision?: number | null }): string {
+  return String(instance.template_revision ?? 1);
+}
+
+// A digest of the files under `paths`, each a file or a directory's whole tree: their paths
+// below this directory and their text, CRLF read as LF so a checkout's line endings move nothing.
+export function inputs(paths: string[]): string {
+  const files = paths.flatMap((path) =>
+    statSync(path).isDirectory()
+      ? readdirSync(path, { recursive: true, encoding: "utf8" }).map((file) => join(path, file)).filter((file) => statSync(file).isFile())
+      : [path],
+  );
+  const named = files.map((file) => [relative(HERE, file).replaceAll("\\", "/"), file]).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  const hash = createHash("sha256");
+  for (const [name, file] of named) hash.update(`${name}\0${readFileSync(file, "utf8").replaceAll("\r\n", "\n")}\0`);
+  return `sha256:${hash.digest("hex")}`;
+}
+
+// What `prepare` does to the base, given the base's inputs now, the revision the ready base
+// runs (undefined without one) and the template's: a base built from other inputs is replaced,
+// as its setup is on its disk; one on an older image is moved to the new one in place.
+export function baseStep(state: State, setup: string, baseRevision: string | undefined, templateRevision: string): "new" | "update" | "none" {
+  if (baseRevision === undefined || state.baseInputs !== setup) return "new";
+  return baseRevision === templateRevision ? "none" : "update";
 }
 
 // The instance id from the lifecycle payload Orca passes on stdin.

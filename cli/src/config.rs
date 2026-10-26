@@ -266,7 +266,8 @@ pub struct Machine {
     pub asleep: bool,
     // The host ID an asleep machine stays paired as, which its worktrees' IDs carry.
     pub environment: Option<String>,
-    // The image revision its recipe recorded it running, if any.
+    // The image revision its recipe's `create` or `resume` printed in `userData`, if any of the
+    // shape the Durable Object takes: one of another would drop the machine from its report.
     pub revision: Option<String>,
 }
 
@@ -385,8 +386,13 @@ pub(crate) fn machines(made: &Value) -> BTreeMap<String, Machine> {
     let kept = made.as_object().into_iter().flatten();
     // As recipe/sleep.rs's `sleeper` reads an entry.
     let sleeps = |entry: &Value| entry["userData"].is_object() && ["recipe", "repo", "folder", "destroy", "suspend", "resume"].iter().all(|key| text(entry, key).is_some_and(|text| !text.is_empty()));
-    let made = |entry: &Value| Some(Machine { recipe: text(entry, "recipe")?, repo: text(entry, "repo").unwrap_or_default(), made: entry["userData"].is_object(), sleeps: sleeps(entry), asleep: entry["asleep"] == true, environment: text(entry, "environment"), revision: text(entry, "revision") });
+    let made = |entry: &Value| Some(Machine { recipe: text(entry, "recipe")?, repo: text(entry, "repo").unwrap_or_default(), made: entry["userData"].is_object(), sleeps: sleeps(entry), asleep: entry["asleep"] == true, environment: text(entry, "environment"), revision: text(&entry["userData"], "revision").filter(|revision| plain_revision(revision)) });
     kept.filter_map(|(name, entry)| Some((name.clone(), made(entry)?))).collect()
+}
+
+// As `REVISION` in src/worker/machine/fleet.ts.
+fn plain_revision(revision: &str) -> bool {
+    (1..=100).contains(&revision.len()) && revision.bytes().all(|b| b.is_ascii_alphanumeric() || b"_.:-".contains(&b))
 }
 
 // Both files, checked as config::check and check_credentials read them.

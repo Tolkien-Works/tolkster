@@ -11,7 +11,7 @@ use std::io::Write;
 use std::path::Path;
 use std::process::{Command as Process, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Deserializer};
@@ -30,11 +30,13 @@ use crate::prebuilt;
 use crate::ports::Begun;
 use crate::runtime::{Making, Shared, settings};
 use crate::state::State;
+use crate::sync::lock;
 use crate::trace;
 
 // A recipe as one repo's orca.yaml has it: the repo by its display name here and on GitHub,
-// the folder its scripts run in, and its `create` and `destroy` lines, and `sleep`, its
-// `suspend` and `resume` when it has both: a machine with only one would sleep for good.
+// the folder its scripts run in, and its `create` and `destroy` lines, `sleep`, its
+// `suspend` and `resume` when it has both: a machine with only one would sleep for good, and
+// `prepare`, which brings what its machines are made from up to the repo (`spawn_prepare`).
 pub(crate) struct Recipe {
     pub id: String,
     pub repo: String,
@@ -43,6 +45,7 @@ pub(crate) struct Recipe {
     pub create: String,
     pub destroy: String,
     pub sleep: Option<(String, String)>,
+    pub prepare: Option<String>,
 }
 
 // A recipe's script line run on this machine in `folder`, with `env` and `stdin`: how it ended
@@ -135,6 +138,66 @@ fn off_lanes(
     });
     Ok(())
 }
+
+// Each repo's opted-in recipe's `prepare` run, on a thread of its own, as it may rebuild for
+// many minutes: `listen` asks as it starts and after each pull it doesn't restart for, so a
+// merged change to what the recipe's machines are made from rolls out with no one running it.
+// The recipe decides what changed, exiting 3 when nothing did. One run at a time: an ask while
+// one runs makes one more after it, as the run may have read the checkout before the pull.
+pub fn spawn_prepare() {
+    // Whether a run is going, and whether another was asked for since it began.
+    static PREPARING: Mutex<(bool, bool)> = Mutex::new((false, false));
+    {
+        let mut preparing = lock(&PREPARING);
+        if preparing.0 {
+            preparing.1 = true;
+            return;
+        }
+        *preparing = (true, false);
+    }
+    std::thread::spawn(|| loop {
+        let _ = std::panic::catch_unwind(prepare_all);
+        let mut preparing = lock(&PREPARING);
+        if !preparing.1 {
+            preparing.0 = false;
+            return;
+        }
+        preparing.1 = false;
+    });
+}
+
+fn prepare_all() {
+    let config = match files().and_then(|files| settings(&files)) {
+        Ok(config) => config,
+        Err(error) => return trace::event(trace::Host::NotPrepared { repo: None, error }),
+    };
+    let mut run = run_command;
+    for (repo, id) in config.repos.0.iter().filter_map(|entry| Some((&entry.repo, &entry.recipe.as_ref()?.id))) {
+        let prepared = find(&mut run, id, Some(repo)).and_then(|recipe| match &recipe.prepare {
+            Some(line) => unshown(line, &recipe.folder, &[("ORCA_RECIPE_ID", &recipe.id)], "").map(Some),
+            None => Ok(None),
+        });
+        if let Some(said) = prepare_said(repo, prepared) {
+            trace::event(said);
+        }
+    }
+}
+
+// What a repo's `prepare` run comes to in the log, None for a recipe without one or with
+// nothing to do, as on most pulls.
+pub(crate) fn prepare_said(repo: &str, prepared: Result<Option<Output>, Error>) -> Option<trace::Host> {
+    let error = match prepared {
+        Ok(None) => return None,
+        Ok(Some(out)) if out.ok => return Some(trace::Host::Prepared { repo: repo.into() }),
+        Ok(Some(out)) if out.code == Some(NOTHING_TO_DO) => return None,
+        Ok(Some(out)) => Error::Failed(format!("its prepare failed{}", out.code.map_or(String::new(), |code| format!(" (exit {code})")))),
+        Err(error) => error,
+    };
+    Some(trace::Host::NotPrepared { repo: Some(repo.into()), error })
+}
+
+// A recipe line's exit when it had nothing to do, as `tolkster`'s own.
+const NOTHING_TO_DO: i32 = 3;
 
 // A make that fails after `create` costs money, so none starts within this of one
 // (`Progress::failed`).
@@ -332,7 +395,7 @@ pub(crate) fn destroyer(host: &str, kept: &Value) -> Result<Recipe, Error> {
     let (Some(id), Some(folder), Some(destroy)) = (text("recipe"), text("folder"), text("destroy")) else {
         return Err(Error::Failed(format!("machines.json's entry for {host} has another shape: destroy its machine by hand, then take the entry out")));
     };
-    Ok(Recipe { id, repo: text("repo").unwrap_or_default(), github: String::new(), folder, create: String::new(), destroy, sleep: None })
+    Ok(Recipe { id, repo: text("repo").unwrap_or_default(), github: String::new(), folder, create: String::new(), destroy, sleep: None, prepare: None })
 }
 
 // From `create` to a host `set_up` made, or, after a failure past `create`, to a destroyed
@@ -494,9 +557,9 @@ pub(crate) fn find(run: &mut Run, id: &str, repo: Option<&str>) -> Result<Recipe
         .into_iter()
         .filter(|(name, _)| repo.is_none_or(|repo| repo.eq_ignore_ascii_case(name)))
         .filter_map(|(name, folder)| {
-            let Lines { create, destroy, sleep } = recipe_lines(&std::fs::read_to_string(Path::new(&folder).join("orca.yaml")).ok()?, id)?;
+            let Lines { create, destroy, sleep, prepare } = recipe_lines(&std::fs::read_to_string(Path::new(&folder).join("orca.yaml")).ok()?, id)?;
             let github = github.iter().find(|(n, repo)| *n == name && split_repo(repo).is_some())?.1.clone();
-            Some(Recipe { id: id.into(), repo: name, github, folder, create, destroy, sleep })
+            Some(Recipe { id: id.into(), repo: name, github, folder, create, destroy, sleep, prepare })
         })
         .collect();
     let mut found = found.into_iter();
@@ -514,13 +577,15 @@ pub(crate) struct Lines {
     pub create: String,
     pub destroy: String,
     pub sleep: Option<(String, String)>,
+    pub prepare: Option<String>,
 }
 
 // A recipe's lines, read as Orca writes the list: items of plain `key: value` lines under
 // `environmentRecipes:`, with its legacy `command` and `cleanup`; a line nested deeper in an
 // item is skipped, so it can't pass for a recipe's. None without a `destroy` (`none` is none),
 // as a paid machine must be one host add can take down, for an id two items share, or for a
-// `create` or `destroy` it can't read as one plain scalar; `suspend` and `resume` so are none.
+// `create` or `destroy` it can't read as one plain scalar; `suspend`, `resume` and `prepare` so
+// are none.
 pub(crate) fn recipe_lines(yaml: &str, id: &str) -> Option<Lines> {
     let header = |line: &str| line.split(" #").next().unwrap_or_default().trim_end() == "environmentRecipes:";
     let mut items: Vec<Vec<(&str, String)>> = Vec::new();
@@ -551,7 +616,7 @@ pub(crate) fn recipe_lines(yaml: &str, id: &str) -> Option<Lines> {
     let get = |key: &str| item.iter().find(|(k, _)| *k == key).map(|(_, value)| value.clone()).filter(|value| !value.is_empty() && !value.starts_with(['|', '>']));
     let create = get("create").or_else(|| get("command"))?;
     let destroy = get("destroy").or_else(|| get("cleanup")).filter(|destroy| destroy != "none")?;
-    Some(Lines { create, destroy, sleep: get("suspend").zip(get("resume")) })
+    Some(Lines { create, destroy, sleep: get("suspend").zip(get("resume")), prepare: get("prepare") })
 }
 
 fn scalar(value: &str) -> String {
@@ -581,7 +646,7 @@ fn unshown(line: &str, folder: &str, env: &[(&str, &str)], stdin: &str) -> Resul
         let _ = std::fs::remove_file(&path);
     }
     let output = output?;
-    let name = env.iter().find(|(key, _)| *key == "ORCA_VM_INSTANCE_ID").map_or("", |(_, name)| *name);
+    let name = ["ORCA_VM_INSTANCE_ID", "ORCA_RECIPE_ID"].iter().find_map(|wanted| env.iter().find(|(key, _)| key == wanted)).map_or("", |(_, name)| *name);
     trace::recipe_stderr(name, &unpaired(&said, &output.stdout));
     Ok(output)
 }
