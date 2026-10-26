@@ -68,8 +68,9 @@ async function resume() {
 // in place, as `prepare` moves the base: Agent37 keeps its home volume, so its next `resume`
 // boots the new image. Exit 3 for one not stopped, whose update would restart it, or a template
 // on another revision, which the next `prepare` reports. It is marked asleep, so one found
-// running, before the update or after it, is stopped: a stop that failed is retried with the
-// next update.
+// running before the update is stopped, the update going with the next ask, and one the update
+// left starting or running is stopped once it runs: a failure there fails the phase, and the
+// next ask stops it.
 async function update() {
   const id = payloadInstance();
   const stopped = async () => {
@@ -85,7 +86,10 @@ async function update() {
     return;
   }
   const updated = await api("POST", `/instances/${id}/update`);
-  await stopped();
+  if ((await api("GET", `/instances/${id}`)).status !== "stopped") {
+    await waitRunning(id);
+    await api("POST", `/instances/${id}/stop`);
+  }
   return { schemaVersion: 1, userData: { provider: "agent37", resourceId: id, revision: revision(updated) } };
 }
 
