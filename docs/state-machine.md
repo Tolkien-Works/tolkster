@@ -92,9 +92,9 @@ pure reconcile after every report, event and alarm sends at most one machine com
 (`fleet.<n>`), none while one is in flight or a make or wake it began runs. In order: a machine
 a grant, a waiting command or a pinned request needs is woken; a repo's first request with
 nowhere to go wakes an asleep machine of its repo, else makes one, neither while one awake and paired has been silent under 3 minutes; a machine marked awake but
-silent 3 minutes is woken, once in 30; an asleep machine off its recipe's revision is updated,
-once in 30; a host idle its minutes is slept, and a machine dormant
-its `destroyAfter` destroyed, each clock running while every complete listing names it. A
+silent 3 minutes is woken, once in 30; a host idle its minutes is slept, and a machine dormant
+its `destroyAfter` destroyed, each clock running while every complete listing names it; an
+asleep machine off its recipe's revision is updated, once in 30. A
 failed sleep goes again 10 minutes on, a destroy an hour on; a make not begun or failed, or a
 wake failed or in `listen`'s cool-down, cools its repo 10 minutes; a wake kept otherwise holds
 its machine 30; a complete listing frees the lock. Asking none, it records why per repo for the frame: `hereHasRoom`,
