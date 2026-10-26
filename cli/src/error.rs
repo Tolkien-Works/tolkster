@@ -89,7 +89,7 @@ pub enum Waits {
     Host(String),
     // No recipe machine being made, woken or put to sleep (`recipe::Making`).
     Lock,
-    // This machine's Orca to answer: not found to run, or its app not running.
+    // This machine's Orca to answer: not found to run, or its runtime unreachable.
     Orca,
 }
 
