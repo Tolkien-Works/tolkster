@@ -119,6 +119,10 @@ it and its replacement. `tolkster config schema` prints the JSON Schema that say
 `realtimeSecret`. **Check:** `tolkster listen --print` prints `connected`, and
 each delegation or reply then prints an `in` line within seconds, without acting on it.
 
+`listen` re-reads `config.json` at each listing, so an edit reaches the next launch, not
+`worker`, which it reads once. It logs each change once, a flag or number by its value and any
+other key by its path; a file that fails to read is logged once and the last config stays.
+
 ## 6. Orca repos and `tolkster listen`
 
 Add every repo the agent should work in (`orca repo add --path <path> --json`). An issue

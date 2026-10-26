@@ -135,6 +135,9 @@ fn work_says_what_came_of_a_command_and_names_its_issue() {
     assert_eq!(retrying.line().issue.as_deref(), Some("TW-7"));
     assert_eq!(both(retrying), ("readIssue: trying again in 5 s".into(), "readIssue command:c-1: trying again in 5 s".into()));
     assert_eq!(mark(Work::UpdateRefused { repo: "o/r".into(), pr: 7 }), Mark::Warning);
+    let kept = Work::ConfigKept(Error::Usage("\"slots\" in config.json must map host names".into()));
+    assert_eq!(both(kept), ("config.json wasn't applied: it didn't read or failed its checks, so the last config stays in use (bad input)".into(), "config.json wasn't applied: it didn't read or failed its checks, so the last config stays in use: \"slots\" in config.json must map host names".into()));
+    assert_eq!(shown(Work::ConfigChanged { changes: vec!["repos.r.trace = true".into(), "slots.local = 2".into()] }, false), "config.json changed: repos.r.trace = true; slots.local = 2");
 }
 
 #[test]

@@ -42,6 +42,10 @@ pub enum Work {
     ResultHeld { command: String },
     // Why a queued request waits, by the blockers' identifiers when it is on them.
     Queued { waiting: Waiting, blocked_by: Vec<String> },
+    // A re-read of config.json that differs from the one in use, by the keys it changed.
+    ConfigChanged { changes: Vec<String> },
+    // A re-read that failed, so the last config stays in use.
+    ConfigKept(Error),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -209,6 +213,8 @@ impl Work {
                 }
             }
             Work::ResultHeld { command } => Line::routine(Parts::of("a command").opaque(command).text("'s connection has gone; its result waits for the resend")),
+            Work::ConfigChanged { changes } => Line::routine(Parts::of(format!("config.json changed: {}", changes.join("; ")))).area("config"),
+            Work::ConfigKept(error) => Line::warning(Parts::of("config.json wasn't applied: it didn't read or failed its checks, so the last config stays in use").error(error)).area("config"),
             Work::Queued { waiting, blocked_by } => Line::routine(Parts::of(match waiting {
                 Waiting::Slot => "queued: waiting for a slot".to_string(),
                 Waiting::Held => "queued: waiting for a held worker".into(),
