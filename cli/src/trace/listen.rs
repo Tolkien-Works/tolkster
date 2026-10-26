@@ -140,6 +140,10 @@ pub enum Host {
     NotDestroyed { name: String },
     // A dormant machine's destroy that kept it (recipe/retire.rs).
     Kept { name: String },
+    // A repo's recipe brought what its machines are made from up to the repo, or failed to,
+    // `repo` None when the settings couldn't be read (recipe.rs, `spawn_prepare`).
+    Prepared { repo: String },
+    NotPrepared { repo: Option<String>, error: Error },
     // An ask for a machine refused, a repo's make or a machine's wake: said once until its
     // reason changes.
     NotMaking { repo: String, why: Declined },
@@ -332,6 +336,10 @@ impl Host {
             Host::NotWaking { name, why } => Line::routine(Parts::of(format!("{name} not woken: {}", declined(why)))).area("host"),
             Host::NoMachine { repo, why } => Line::routine(Parts::of(format!("no machine asked for {repo}: {why}"))).area("host"),
             Host::Kept { name } => Line::routine(Parts::of(format!("{name} dormant past its time, but kept"))).area("host"),
+            Host::Prepared { repo } => Line::routine(Parts::of(format!("{repo}'s recipe prepared its machines' image and base"))).area("host"),
+            Host::NotPrepared { repo, error } => {
+                Line::error(Parts::of(format!("{}'s recipe not prepared", repo.as_deref().unwrap_or("a repo"))).error(error)).area("host")
+            }
         }
     }
 }

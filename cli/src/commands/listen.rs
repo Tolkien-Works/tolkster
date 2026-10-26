@@ -18,6 +18,7 @@ use crate::scheduler::{self, Acted, BASE_AGAIN, Job};
 use crate::watch::{Agents, idle_worktrees, states_of, waiting_worktrees};
 use crate::orca::{Cli, Host, Orca, agent_handles, agent_worktrees, candidates, open_terminals, answers, origin_repo, paired, terminal_worktrees, wait_exit};
 use crate::plain::{IssueKey, Terminal, split_worktree};
+use crate::recipe;
 use crate::command::carry_out;
 use crate::runtime::{Shared, load, settings};
 use crate::timing::Timing;
@@ -77,6 +78,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
         if let Some(updater) = &updater {
             updater.catch_up();
         }
+        recipe::spawn_prepare();
         let update = updater.as_ref().map(|u| u.update.clone());
         shown_update.clone_from(&update);
         github::hold();
@@ -285,10 +287,16 @@ fn say(said: trace::Update) {
 }
 
 // A new build of `listen`, made on a thread of its own so commands go on being carried out.
+// The pull may have changed what a recipe's machines are made from; the restart's start
+// prepares them instead.
 #[cfg(feature = "develop")]
 fn build(agent: &Agent, build: Build) {
     let agent = agent.clone();
-    std::thread::spawn(move || build.make(&mut run_command, &mut say, &mut update::swap, &mut |run, dir, head| update::release(&agent, run, dir, head)));
+    std::thread::spawn(move || {
+        if !build.make(&mut run_command, &mut say, &mut update::swap, &mut |run, dir, head| update::release(&agent, run, dir, head)) {
+            recipe::spawn_prepare();
+        }
+    });
 }
 
 #[cfg(not(feature = "develop"))]

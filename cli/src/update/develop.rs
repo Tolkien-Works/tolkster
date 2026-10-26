@@ -243,7 +243,8 @@ impl Updater {
 }
 
 impl Build {
-    pub fn make(self, run: &mut Run, say: &mut dyn FnMut(Said), place: &mut Place, release: &mut Release) {
+    // Whether it put a restart in place.
+    pub fn make(self, run: &mut Run, say: &mut dyn FnMut(Said), place: &mut Place, release: &mut Release) -> bool {
         let update = self.update.clone();
         let mut beating = |program: &str, args: &[&str], dir: Option<&str>| {
             update.set_building(Some(Instant::now()));
@@ -267,10 +268,10 @@ impl Build {
                 say(said);
             }
         }
-        if let Ok(Some(restart)) = rebuilt {
-            say(Said::Restarting { head: short(&self.head).into() });
-            self.update.in_place(restart);
-        }
+        let Ok(Some(restart)) = rebuilt else { return false };
+        say(Said::Restarting { head: short(&self.head).into() });
+        self.update.in_place(restart);
+        true
     }
 }
 

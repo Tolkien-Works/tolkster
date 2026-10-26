@@ -9,7 +9,7 @@ use crate::runtime::Shared;
 
 fn recipe() -> Recipe {
     let sleep = Some(("./suspend.sh".into(), "./resume.sh".into()));
-    Recipe { id: "cloud".into(), repo: "tolkster".into(), github: "Tolkien-Works/tolkster".into(), folder: "/src/tolkster".into(), create: String::new(), destroy: "./destroy.sh".into(), sleep }
+    Recipe { id: "cloud".into(), repo: "tolkster".into(), github: "Tolkien-Works/tolkster".into(), folder: "/src/tolkster".into(), create: String::new(), destroy: "./destroy.sh".into(), sleep, prepare: None }
 }
 
 fn sleeping() -> Value {
