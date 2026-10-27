@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 
 use crate::error::{Error, Unsent};
 use crate::exec::{Output, Run};
-use crate::orca::{Host, Listing, Pane, Place, Proof, Repo, Status, Terminal, Typed, Worktree, host_of, waits_in};
+use crate::orca::{Host, Listing, Pane, Place, Proof, ReadsConfig, Repo, Status, Terminal, Typed, Worktree, host_of, waits_in};
 use crate::runtime::Shared;
 use crate::plain::{CommandLine, Line, Terminal as Handle, orca_worktree, split_terminal, split_worktree};
 use crate::sessions::Tolksters;
@@ -338,10 +338,10 @@ impl crate::orca::Orca for Orca<'_> {
         let world = self.world.borrow();
         world.hosts.iter().filter(|h| world.unanswered.contains(h)).map(|h| Host { id: h.clone(), name: h.clone() }).collect()
     }
-    fn ready(&mut self, host: &str, _project: Option<&str>) -> Result<bool, Error> {
+    fn ready(&mut self, host: &str, _project: Option<&str>, _reads_config: ReadsConfig) -> Result<bool, Error> {
         Ok(self.world.borrow().ready_on.iter().any(|h| h == host))
     }
-    fn ready_projects(&mut self, host: &str) -> Result<Vec<String>, Error> {
+    fn ready_projects(&mut self, host: &str, _reads_config: ReadsConfig) -> Result<Vec<String>, Error> {
         Ok(if self.world.borrow().ready_on.iter().any(|h| h == host) { vec![FAKE_PROJECT.into()] } else { Vec::new() })
     }
     fn send(&mut self, worktree_id: &str, handle: &Handle, line: &Line, proof: Proof) -> Result<Typed, Error> {

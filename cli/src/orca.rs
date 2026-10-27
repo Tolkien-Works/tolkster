@@ -28,6 +28,11 @@ pub use live::Cli;
 pub use routing::{paired, Host, Place};
 use routing::{at, by_id, hosted, terminal_at, worktree_at};
 
+// How a caller asks whether a host's own `tolkster` reads its config.json: one that can't takes
+// no work. Err where the host can't be asked. The verdict is kept per host, whichever probe
+// gave it (`Health::reads`), so every caller passes `onboard::reads_config`.
+pub type ReadsConfig = fn(&mut Run, &str) -> Result<bool, Error>;
+
 // How long a `Proof::Turn` line's receipt waits for Orca to see the agent's turn begin.
 const SUBMIT_WITHIN_S: &str = "30";
 // A refusal Orca gives while its terminal isn't yet writable (it names no reason) clears within
@@ -584,10 +589,10 @@ pub trait Orca {
         host_of(worktree_id).is_none_or(|host| self.answering().iter().any(|h| h.id == host))
     }
     // Whether `project`, or with None any project, is set up and ready on `host`, whose
-    // `tolkster` reads its config.json (`onboard::reads_config`).
-    fn ready(&mut self, host: &str, project: Option<&str>) -> Result<bool, Error>;
+    // `tolkster` reads its config.json as `reads_config` asks it.
+    fn ready(&mut self, host: &str, project: Option<&str>, reads_config: ReadsConfig) -> Result<bool, Error>;
     // The projects set up and ready on `host`, none where `ready` would say no project is.
-    fn ready_projects(&mut self, host: &str) -> Result<Vec<String>, Error>;
+    fn ready_projects(&mut self, host: &str, reads_config: ReadsConfig) -> Result<Vec<String>, Error>;
     // One line typed into a running agent, never twice. Only a `Proof::Turn` send waits for
     // the turn to begin.
     fn send(&mut self, worktree_id: &str, handle: &Handle, line: &Line, proof: Proof) -> Result<Typed, Error>;

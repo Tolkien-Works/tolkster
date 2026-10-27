@@ -16,6 +16,7 @@ use crate::error::{Error, Waits};
 use crate::config::ladder::{Ladder, Launch};
 use crate::linear::{ActivityInput, ActivityType};
 use crate::machine::{Command, Finished, Resume};
+use crate::onboard;
 use crate::orca::{Host, Listing, Orca, Place, Proof, Status, host_of, Typed, Worktree, agent_in, agent_terminal, find_repo, project_id, repo_name, waits_in};
 use crate::plain::{BranchName, Id, IssueKey, RepoName, split_worktree};
 use crate::ports::Ports;
@@ -128,7 +129,7 @@ fn granted<'a>(ports: &mut Ports, repo_id: &'a str, project: Option<&'a str>, ho
     if !ports.records.admitted(host).map_err(|error| Error::Later(format!("the hosts admitted couldn't be read: {error}")))? {
         return refused("no longer holds an admitted credential");
     }
-    if !ports.orca.ready(host, Some(project)).unwrap_or(false) {
+    if !ports.orca.ready(host, Some(project), onboard::reads_config).unwrap_or(false) {
         return refused("isn't ready for the repo");
     }
     Ok(Place::On { host, project })

@@ -10,7 +10,6 @@ use super::*;
 use crate::git;
 use crate::health::Health;
 use crate::json::decode;
-use crate::onboard;
 use crate::plain::{CommandLine, Line, Terminal as Handle};
 use crate::trace;
 
@@ -91,13 +90,12 @@ impl<'r> Cli<'r> {
 
     // Whether the `tolkster` on `host` reads its config.json: one that can't would fail a
     // worker's first call. One that can't be asked or names no exit code counts as refusing,
-    // so a slow host is not asked again by every listing. The verdict is kept per host,
-    // whichever probe gave it (`Health::reads`).
-    fn reads_config(&mut self, host: &str) -> bool {
+    // so a slow host is not asked again by every listing.
+    fn reads_config(&mut self, host: &str, ask: ReadsConfig) -> bool {
         if let Some(reads) = self.health.reads(host, Instant::now()) {
             return reads;
         }
-        let reads = onboard::reads_config(self.run, host).unwrap_or(false);
+        let reads = ask(self.run, host).unwrap_or(false);
         self.health.read(host, reads, Instant::now());
         reads
     }
@@ -274,14 +272,14 @@ impl Orca for Cli<'_> {
     fn silent(&self) -> Vec<Host> {
         self.hosts.iter().flatten().filter(|h| self.is_silent(&h.id)).cloned().collect()
     }
-    fn ready(&mut self, host: &str, project: Option<&str>) -> Result<bool, Error> {
+    fn ready(&mut self, host: &str, project: Option<&str>, reads_config: ReadsConfig) -> Result<bool, Error> {
         self.known(Some(host))?;
-        Ok(ready_on(self.run, host, project)? && self.reads_config(host))
+        Ok(ready_on(self.run, host, project)? && self.reads_config(host, reads_config))
     }
-    fn ready_projects(&mut self, host: &str) -> Result<Vec<String>, Error> {
+    fn ready_projects(&mut self, host: &str, reads_config: ReadsConfig) -> Result<Vec<String>, Error> {
         self.known(Some(host))?;
         let projects = ready_projects_on(self.run, host)?;
-        Ok(if !projects.is_empty() && self.reads_config(host) { projects } else { Vec::new() })
+        Ok(if !projects.is_empty() && self.reads_config(host, reads_config) { projects } else { Vec::new() })
     }
     // One plain line: a line starting with a dash, or with an unbalanced quote, breaks in the
     // shell the terminal runs. A line is never typed twice (docs/dispatcher.md): a failed send
