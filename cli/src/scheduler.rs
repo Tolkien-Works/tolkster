@@ -24,11 +24,11 @@ use crate::panel;
 use crate::plain::{Id, IssueKey, Sha};
 use crate::runtime::Shared;
 use crate::timing::Summary;
-use crate::machine::{BaseTip, Command, listing_line, observation_line, terminal_closed_line, turn_ended_line};
+use crate::machine::{BaseTip, Command, Snapshot, listing_line, observation_line, terminal_closed_line, turn_ended_line};
 use crate::sync::lock;
 use crate::trace::{self, Call, Ended, Kind, STUCK_AFTER, Step, Stuck, Update as Said, Work};
 use crate::update::{Restart, Update};
-use crate::watch::{Agents, Missed, Seen, Snapshot, WATCH_EVERY, Watcher};
+use crate::watch::{Agents, Missed, Seen, WATCH_EVERY, Watcher};
 
 mod lanes;
 

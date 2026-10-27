@@ -1,10 +1,9 @@
 use super::*;
-use std::collections::BTreeMap;
 use crate::command::pr::{Open, pr_read};
 use crate::github::{Head, Pr, PrState};
 use crate::review::Checked;
 use crate::state::tests::contract;
-use crate::hosts::{Fleet, Heard};
+use crate::hosts::Heard;
 use crate::time::instant;
 
 fn names<T: Serialize>(items: &[T]) -> Vec<String> {

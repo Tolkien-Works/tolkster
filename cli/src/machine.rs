@@ -7,19 +7,21 @@
 // numbers and times only, and every one that reaches a terminal, a command line or a post
 // has a plain shape, checked here (plain.rs).
 
+use std::collections::BTreeMap;
+use std::time::Instant;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use crate::config::Config;
 use crate::config::repo_map::Entry as RepoEntry;
 use crate::error::{Error, Waits};
-use crate::hosts::MAX_SLOTS;
+use crate::hosts::{Fleet, MAX_SLOTS};
 use crate::gateway::Failure;
 use crate::plain::split_repo;
 use crate::json::{non_empty, str};
 use crate::plain::{BranchName, CommandId, Id, IssueKey, Sha, Terminal, Time, plain_host};
 use crate::trace;
-use crate::watch::Snapshot;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -584,6 +586,33 @@ pub fn observation_line(observed: Observed, worktree_id: &str, sequence: u64) ->
 
 // More worktrees than the relay takes in one listing (src/worker/machine.ts, MAX_LISTED).
 pub const MAX_LISTED: usize = 1000;
+
+// One listing whole, but for `Agents::others`, for the Durable Object
+// (`listing_line`): `began` by this process's monotonic clock and `at` by the wall clock, which
+// only names it; each an agent runs in, with its state (watch.rs, `states_of`); every one
+// Orca has on the hosts that answered, sorted, None when the listing was incomplete; those
+// hosts, the paired ones and each one's entry, the settings, and the idle and dormant recipe
+// machines.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Snapshot {
+    pub began: Instant,
+    pub at: String,
+    pub agents: Vec<(String, Observed)>,
+    pub listed: Option<Vec<String>>,
+    pub hosts: Vec<String>,
+    pub paired: Vec<String>,
+    pub fleet: Fleet,
+    pub config: String,
+    pub idle_hosts: BTreeMap<String, i64>,
+    pub dormant: Option<BTreeMap<String, i64>>,
+}
+
+impl Snapshot {
+    // Whether it shows what `other` does, whenever each began.
+    pub fn same(&self, other: &Snapshot) -> bool {
+        self.agents == other.agents && self.listed == other.listed && self.hosts == other.hosts && self.paired == other.paired && self.fleet == other.fleet && self.idle_hosts == other.idle_hosts && self.dormant == other.dormant
+    }
+}
 
 // Orca's listing whole (src/worker/machine.ts, Listing): `at` when it began by the
 // workstation's clock, which only names it, and `elapsed_ms` how long before this it was, by

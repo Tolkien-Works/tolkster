@@ -513,8 +513,7 @@ fn restart(call: &mut Call, why: Resume, what: &str, wording: &str) -> Result<Fi
 // A review round (`startRound`): a fixed line typed to the running worker, or the exited one
 // brought back in a new session on its round brief, both sending it to `tolkster pr feedback`
 // and `tolkster pr checks`, or for a rebase alone, on its rebase brief. Nothing is typed into
-// an agent waiting at a prompt, which could answer it: that is `held`. `round` is the round's
-// number, which says whether it is the repo's last.
+// an agent waiting at a prompt, which could answer it: that is `held`.
 pub fn round(config: &Config, ports: &mut Ports, command: &Command, session_id: Option<&Id>, pr: &OnPr) -> Result<Finished, Error> {
     let Some(session_id) = session_id else {
         trace::event(Work::NoSession);
@@ -530,6 +529,7 @@ pub struct OnPr<'a> {
     pub repo: &'a str,
     pub number: u64,
     pub head: Option<&'a str>,
+    // The round's number, which says whether it is the repo's last.
     pub round: Option<u32>,
     pub rebase_only: bool,
 }
