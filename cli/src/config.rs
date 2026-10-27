@@ -508,21 +508,21 @@ impl WorkerUrl {
     }
 
     pub fn state(&self) -> String {
-        format!("{}://{}/state", if self.secure { "https" } else { "http" }, self.host)
+        format!("{}/state", self.base())
     }
 
     // Where Linear sends the owner back once the app is installed (docs/setup.md).
     pub fn oauth_callback(&self) -> String {
-        format!("{}://{}/oauth/callback", if self.secure { "https" } else { "http" }, self.host)
+        format!("{}/oauth/callback", self.base())
     }
 
     pub fn token(&self) -> String {
-        format!("{}://{}/token", if self.secure { "https" } else { "http" }, self.host)
+        format!("{}/token", self.base())
     }
 
     // The prebuilt `tolkster` for a target at a commit (src/worker/build.ts).
     pub fn build(&self, target: &str, commit: &str) -> String {
-        format!("{}://{}/build/{target}/{commit}", if self.secure { "https" } else { "http" }, self.host)
+        format!("{}/build/{target}/{commit}", self.base())
     }
 
     // Where the Linear app's webhook delivers (docs/setup.md).
@@ -536,7 +536,7 @@ impl WorkerUrl {
     }
 
     pub fn enrol(&self) -> String {
-        format!("{}://{}/enrol", if self.secure { "https" } else { "http" }, self.host)
+        format!("{}/enrol", self.base())
     }
 
     // The address as config.json's "worker" holds it.
