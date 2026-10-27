@@ -242,7 +242,7 @@ export function stepFleet(before: Run, e: FleetEvent, nowMs: number): FleetStepp
       clocks(r.dormant, e.dormant, nowMs);
       if (r.running !== null && nowMs - e.elapsedMs - r.running.sinceMs >= SETTLE_MS) r.running = null;
       // `listen` makes, wakes and sleeps nothing: the lock a command waits on is free.
-      if (r.command !== null && clearedBy(r.command, { lock: true })) {
+      if (r.command !== null && clearedBy(r.command, { lock: true, beganMs: nowMs - e.elapsedMs })) {
         r.command = resentCleared(r.command, nowMs);
         send.push({ ...r.command });
       }

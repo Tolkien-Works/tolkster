@@ -190,6 +190,8 @@ test("the fleet's command is resent at its timeout, lost after its sends, and se
   // A complete listing of a `listen` making nothing frees the lock too.
   assert.deepEqual(asked(stepFleet(waiting, { kind: "listed", idle: {}, dormant: {}, elapsedMs: 0 }, NOW + MIN).send), [["makeHost", "tolkster"]]);
   assert.deepEqual(stepFleet(waiting, { kind: "listed", idle: {}, dormant: null, elapsedMs: 0 }, NOW + MIN).send, []);
+  // A listing begun before the command answered did not hear the lock free.
+  assert.deepEqual(stepFleet(waiting, { kind: "listed", idle: {}, dormant: {}, elapsedMs: 2 * MIN }, NOW + MIN).send, []);
   // A result for a command it doesn't hold, an old nap's, changes nothing.
   assert.equal(step(waiting, { kind: "commandResult", command: "naps.4", result: "ok" }, NOW), waiting);
 });
