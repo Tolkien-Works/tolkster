@@ -241,6 +241,8 @@ fn a_commands_listing_waits_on_an_absent_orca_until_its_first_write() {
     assert!(waits(orca.listing_on(None)));
     assert!(orca.close_all("repo::/wt/tw-1").is_err());
     assert!(matches!(orca.listing_on(None), Err(Error::Orca(_))));
+    let mut absent = |_: &str, _: &[&str], _: Option<&str>| ask("orca", &["terminal", "list"], None);
+    assert!(waits(Cli::with_hosts(&mut absent, &["mac"]).waiting().listing_on(Some("mac"))));
 }
 
 // A `Cli` that retries a refused send at once, not seconds apart.

@@ -149,12 +149,18 @@ impl<'r> Cli<'r> {
             }
             (Err(error), absent) => (error, absent),
         };
+        // An absent Orca is this machine's, never the host's fault: one the command waits on
+        // marks no host silent.
+        let error = match self.failed(error, absent) {
+            Error::Waits(waits, why) => return Err(Error::Waits(waits, why)),
+            error => error,
+        };
         let name: Option<String> = self.hosts().ok().and_then(|hosts| hosts.iter().find(|h| h.id == host).map(|h| h.name.chars().filter(|c| !c.is_control()).collect()));
         if self.health.stopped(host, name.clone(), Instant::now()) {
             trace::event(trace::Host::NotAnswering { name, id: host.to_string(), error: error.clone() });
         }
         if self.answered.contains(host) {
-            return Err(self.failed(error, absent));
+            return Err(error);
         }
         self.unanswered.insert(host.to_string());
         Ok(None)
