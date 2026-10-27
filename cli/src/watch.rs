@@ -13,8 +13,8 @@ use std::time::{Duration, Instant};
 use crate::error::Error;
 use crate::hosts::Fleet;
 use crate::machine::{Observed, Snapshot};
-use crate::orca::{Terminal, Worktree, agent_panes, candidates, waits_in};
-use crate::plain::{split_terminal, split_worktree};
+use crate::orca::{Terminal, Worktree, agent_panes, candidates, host_of, waits_in};
+use crate::plain::split_terminal;
 use crate::sync::lock;
 use crate::time::{iso, now_ms};
 use crate::trace::{self, Watch};
@@ -109,7 +109,7 @@ impl Agents {
     // terminals aren't waited on (`agents`) until it answers again.
     pub fn keeping(mut self, before: &Agents, silent: &[String]) -> Agents {
         let on = |host: Option<&str>| host.is_some_and(|host| silent.iter().any(|s| s == host));
-        let worktree_on = |id: &&String| on(split_worktree(id).and_then(|(host, _, _)| host));
+        let worktree_on = |id: &&String| on(host_of(id));
         let terminal_on = |handle: &&String| on(split_terminal(handle).and_then(|(host, _)| host));
         for (now, then) in [(&mut self.running, &before.running), (&mut self.open, &before.open), (&mut self.idle, &before.idle), (&mut self.waiting, &before.waiting), (&mut self.others, &before.others)] {
             now.extend(then.iter().filter(worktree_on).cloned());

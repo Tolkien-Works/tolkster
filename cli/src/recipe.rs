@@ -376,10 +376,9 @@ fn named(machines: &Map<String, Value>, name: &str, taken: &[String]) -> bool {
 // machines.json as it is, empty when there is none.
 pub(crate) fn recorded_machines() -> Result<Map<String, Value>, Error> {
     let path = machines_file()?;
-    match std::fs::read_to_string(&path) {
-        Ok(text) => serde_json::from_str(&text).context(path.display()),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Map::new()),
-        Err(error) => Err(error).context(path.display()),
+    match crate::cli::read_if_there(&path)? {
+        Some(text) => serde_json::from_str(&text).context(path.display()),
+        None => Ok(Map::new()),
     }
 }
 

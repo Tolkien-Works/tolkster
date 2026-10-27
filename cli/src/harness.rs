@@ -10,7 +10,7 @@ use std::sync::Mutex;
 
 use serde_json::{Value, json};
 
-use crate::cli::write_file;
+use crate::cli::replace_file;
 use crate::error::{Context, Error};
 use crate::config::ladder::{Launch, plain_model};
 use crate::harnesses::{DEFAULT, Harness, named};
@@ -134,11 +134,7 @@ static WRITING: Mutex<()> = Mutex::new(());
 
 pub fn write_settings(hooks: &Path) -> Result<(), Error> {
     let _writing = lock(&WRITING);
-    settings(hooks).iter().filter(|(path, text)| std::fs::read_to_string(path).ok().as_deref() != Some(text)).try_for_each(|(path, text)| {
-        let part = path.with_extension(format!("json.{}", std::process::id()));
-        write_file(&part, text)?;
-        std::fs::rename(&part, path).context(path.display())
-    })
+    settings(hooks).iter().filter(|(path, text)| std::fs::read_to_string(path).ok().as_deref() != Some(text)).try_for_each(|(path, text)| replace_file(path, text))
 }
 
 fn settings(hooks: &Path) -> [(PathBuf, &'static str); 2] {
@@ -179,11 +175,7 @@ pub fn trust(file: &Path, dir: &str) -> Result<bool, Error> {
     let folder = folder.trim_end_matches('/');
     let failed = |error: &dyn std::fmt::Display| Error::Failed(format!("{}: {error}", file.display()));
     for attempt in 0..=TRUST_WRITES {
-        let text = match std::fs::read_to_string(file) {
-            Ok(text) => text,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => "{}".into(),
-            Err(error) => return Err(error).context(file.display()),
-        };
+        let text = crate::cli::read_if_there(file)?.unwrap_or_else(|| "{}".into());
         // Claude's own file, every key of which is kept: an open shape, read by index.
         let mut settings: Value = serde_json::from_str(&text).context(file.display())?;
         let trusted = settings["projects"].as_object().is_some_and(|projects| projects.iter().any(|(path, project)| project["hasTrustDialogAccepted"] == json!(true) && crate::plain::inside(folder, path)));
@@ -197,12 +189,7 @@ pub fn trust(file: &Path, dir: &str) -> Result<bool, Error> {
         let projects = settings.as_object_mut().ok_or_else(not_an_object)?.entry("projects").or_insert_with(|| json!({}));
         let project = projects.as_object_mut().ok_or_else(not_an_object)?.entry(folder).or_insert_with(|| json!({}));
         project.as_object_mut().ok_or_else(not_an_object)?.insert("hasTrustDialogAccepted".into(), json!(true));
-        let part = file.with_extension(format!("json.tolkster-{}", std::process::id()));
-        write_file(&part, &serde_json::to_string_pretty(&settings).context(file.display())?)?;
-        if let Err(error) = std::fs::rename(&part, file) {
-            let _ = std::fs::remove_file(&part);
-            return Err(error).context(file.display());
-        }
+        replace_file(file, &serde_json::to_string_pretty(&settings).context(file.display())?)?;
     }
     Err(failed(&"another program rewrote it each time"))
 }

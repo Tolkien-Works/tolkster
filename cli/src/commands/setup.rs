@@ -190,7 +190,7 @@ fn checkout(dir: &mut PathBuf) -> Result<Done, Error> {
             if moved || !wrangler::installed(dir) {
                 wrangler::install(dir)?;
             }
-            Ok((if moved { Outcome::Done } else { Outcome::Set }, Some(format!("{} at {}", dir.display(), &commit[..7]))))
+            Ok((if moved { Outcome::Done } else { Outcome::Set }, Some(format!("{} at {}", dir.display(), crate::plain::short_sha(&commit)))))
         }
         Source::Nowhere => Err(Error::Usage("this build doesn't say which Worker is its own: run setup from a checkout of Tolkster at the commit it was built from".into())),
     }

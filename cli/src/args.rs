@@ -113,6 +113,11 @@ fn positional(parsed: &mut Parsed, args: &[String], allowed: bool) -> Result<(),
     Ok(())
 }
 
+// The one of `all` whose `name` is `text`.
+pub fn named<T: Copy>(all: &[T], name: fn(T) -> &'static str, text: &str) -> Option<T> {
+    all.iter().copied().find(|one| name(*one) == text)
+}
+
 // A blank body file is refused: an empty file is more likely a mistake than a wish to
 // clear the text.
 pub fn file_body(source: &str, what: &str, read: impl FnOnce(&str) -> Result<String, Error>) -> Result<String, Error> {

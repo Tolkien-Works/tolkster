@@ -291,6 +291,12 @@ fn plain_identifier(identifier: &str) -> bool {
     key.len() <= 16 && key.starts_with(|c: char| c.is_ascii_alphabetic()) && key.chars().all(|c| c.is_ascii_alphanumeric()) && (1..=9).contains(&number.len()) && number.chars().all(|c| c.is_ascii_digit())
 }
 
+// A commit's first seven characters, as the records and the owner read a head; all of one
+// shorter, never a panic.
+pub fn short_sha(sha: &str) -> &str {
+    sha.get(..7).unwrap_or(sha)
+}
+
 // A worktree's ID as Tolkster names it, split into its host, repo ID and path: Orca's own
 // `<repoId>::<path>`, behind `<host>@` on a remote host, the Orca environment it is paired
 // as, since a remote host's ID means nothing to this machine's Orca. Without a host it is

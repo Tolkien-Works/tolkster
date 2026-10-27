@@ -6,7 +6,6 @@
 // label is created, so a missing answer or a refused edit writes nothing; what exists is left
 // alone, so a second run changes nothing.
 
-use std::fs;
 use std::io::{self, BufRead, IsTerminal, Write};
 use std::path::Path;
 
@@ -15,7 +14,7 @@ use serde_json::Value;
 use ureq::Agent;
 
 use crate::args::{Kind, parse};
-use crate::cli::{config_file, print_json};
+use crate::cli::{config_file, print_json, read_if_there};
 use crate::commands::doctor::{self, Check, Verdict, has_flag, the_team};
 use crate::exec::run_command;
 use crate::sessions::workspace::{DoctorTeam, TeamRead, read_team};
@@ -84,10 +83,9 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
 // `repos` entries merged into `file`, then its labels created.
 pub(crate) fn init(key: &str, data: &TeamRead, repos: &[Repo], group: Option<&Group>, ask: &mut dyn Ask, linear: &mut dyn Labels, file: &Path) -> Result<Done, Error> {
     let team = the_team(data).ok_or_else(|| Error::Failed(format!("the app can see no team with the key {key}")))?;
-    let config = match fs::read_to_string(file) {
-        Ok(text) => serde_json::from_str(&text).context(file.display())?,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Value::Null,
-        Err(error) => return Err(error).context(file.display()),
+    let config = match read_if_there(file)? {
+        Some(text) => serde_json::from_str(&text).context(file.display())?,
+        None => Value::Null,
     };
     let edits = mapping(config.get("repos"), repos, key, team, ask)?;
     let mut done = Done { changed: !edits.is_empty() && merge(file, |current| all_edited(current, &unset(current, &edits)))?, ..Done::default() };

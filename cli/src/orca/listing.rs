@@ -10,7 +10,7 @@ use super::routing::hosted;
 use super::{Answer, same_path};
 use crate::error::Error;
 use crate::json::decode;
-use crate::plain::{split_identifier, split_worktree, Terminal as Handle};
+use crate::plain::{split_identifier, Terminal as Handle};
 
 // What one host lists (`Orca::listing_at`): its worktrees with their agents, without their
 // origins, every one's ID when its listing is complete (`Ps::complete`), and its terminals.
@@ -50,7 +50,7 @@ pub struct Worktree {
 impl Worktree {
     // The host it runs on, from its ID: None on this machine.
     pub fn host(&self) -> Option<&str> {
-        split_worktree(&self.id).and_then(|(host, _, _)| host)
+        super::host_of(&self.id)
     }
 
     pub fn origin(&self) -> Result<&str, Error> {

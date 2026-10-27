@@ -29,7 +29,7 @@ use crate::gateway::Failure;
 use crate::machine::{Command, Finished, Notice, Order, Outcome, Queued, ReapRule, Waiting};
 use crate::time::now_ms;
 use crate::panel;
-use crate::orca::{self, open_terminals};
+use crate::orca::{self, host_of, open_terminals};
 use crate::live::{LinearApp, Recipes};
 use crate::ports::{Candidate, Ports};
 use crate::request::Thread;
@@ -39,7 +39,7 @@ use crate::scheduler::{Acted, answer, turn_ended, watch_terminal};
 use crate::sessions::HISTORIES_PER_READ;
 use crate::state::new_token;
 use crate::converse::{self, InThread};
-use crate::plain::{Id, IssueKey, Time, split_worktree};
+use crate::plain::{Id, IssueKey, Time};
 use crate::hosts::{self, Pacing};
 use crate::trace::{self, Triage, Work};
 use crate::triage::{self, Opened};
@@ -128,7 +128,7 @@ fn worker_hosts(ports: &Ports, identifier: &str, named: Option<&str>) -> Result<
         None => ports.records.workers().map_err(|error| Error::Later(format!("the worker records couldn't be read: {error}")))?,
     };
     let ids = records.iter().filter(|r| r.issue.eq_ignore_ascii_case(identifier)).map(|r| r.worktree_id.as_str()).chain(named);
-    let mut on: Vec<String> = ids.filter_map(|id| split_worktree(id).and_then(|(host, _, _)| host)).map(String::from).collect();
+    let mut on: Vec<String> = ids.filter_map(|id| host_of(id)).map(String::from).collect();
     on.sort();
     on.dedup();
     Ok(on)

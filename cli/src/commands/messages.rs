@@ -17,7 +17,7 @@ use crate::error::Error;
 use crate::machine::{Reader, worker_read};
 use crate::state::{Reading, State, thread_request};
 use crate::linear::{self, with_token};
-use crate::sessions::{self, Bodies, MESSAGES_ACTIVITIES, Read, lookup, read_thread};
+use crate::sessions::{self, Bodies, MESSAGES_ACTIVITIES, Read, lookup, thread_of};
 
 pub const OPTIONS: &[(&str, Kind)] = &[("after", Kind::String), ("thread", Kind::String)];
 
@@ -47,7 +47,7 @@ pub fn read_replies(agent: &Agent, root: &str, after: Option<&str>, through: Opt
     let after = after.as_deref();
     let files = files()?;
     let owner = owner(&files)?;
-    let thread = read_thread(agent, root, &owner, Bodies::Read)?.map_err(|why| Error::Failed(format!("comment {root}: {why}")))?;
+    let thread = thread_of(agent, root, &owner, Bodies::Read)?;
     if let Some(newest) = through.and_then(|through| thread.replies.iter().rfind(|r| r.created_at.as_str() <= through)) {
         // The thread's request is keyed by its root, which stands for the session's ID. The
         // read keys the turn's answer (state::thread_request), so replies it couldn't report

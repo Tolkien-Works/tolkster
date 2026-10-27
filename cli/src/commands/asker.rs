@@ -7,7 +7,7 @@ use crate::config::files;
 use crate::error::Error;
 use crate::exec::run_command;
 use crate::request::{Session, Thread};
-use crate::sessions::{self, Bodies, Read, load_delegations, read_thread};
+use crate::sessions::{self, Bodies, Read, load_delegations, thread_of};
 use crate::state::State;
 
 // The option every change takes: the owner's session it answers.
@@ -111,7 +111,7 @@ fn thread_issue(agent: &Agent, root: &str, owner: &str) -> Result<String, Error>
     if own.as_str() != root {
         return Err(Error::Usage(format!("a reply's turn changes issues only from its own thread: {own}")));
     }
-    let thread = read_thread(agent, root, owner, Bodies::Skip)?.map_err(|why| Error::Failed(format!("comment {root}: {why}")))?;
+    let thread = thread_of(agent, root, owner, Bodies::Skip)?;
     if !owner_asked(&thread, &request) {
         return Err(Error::Failed(format!("comment {root} has no reply of the owner's: I change issues only when the owner asks")));
     }

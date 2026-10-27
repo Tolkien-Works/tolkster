@@ -535,6 +535,10 @@ fn tests_builds_pushes_rebases_and_sub_agents_pair() {
     assert_eq!(pairing(&call("Task", json!({}))), Some("delegating"));
     assert_eq!(pairing(&call("Read", json!({ "file_path": "a.rs" }))), None);
     assert_eq!(pairing(&Call { sub_agent: true, ..call("Bash", json!({ "command": "cargo test" })) }), None);
+    // A script's write is no check: a test beside one still pairs, the write alone doesn't.
+    assert_eq!(shell::pair_of(Tool::Shell, Some("python3 -c \"open('a', 'w')\" && cargo test")), Some("testing"));
+    assert_eq!(shell::pair_of(Tool::Shell, Some("python3 -c \"open('a', 'w')\"")), None);
+    assert_eq!(shell::pair_of(Tool::Shell, None), None);
     // Each has its action in voice.json.
     for kind in ["testing", "building", "pushing", "rebasing", "delegating"] {
         assert!(crate::voice::action(kind).is_some(), "{kind}");

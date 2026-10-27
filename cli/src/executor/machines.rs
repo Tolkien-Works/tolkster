@@ -11,8 +11,8 @@ use crate::error::{Error, Waits};
 use crate::github;
 use crate::hosts;
 use crate::machine::{Command, Finished};
-use crate::orca::Worktree;
-use crate::plain::{IssueKey, split_worktree};
+use crate::orca::{Worktree, host_of};
+use crate::plain::IssueKey;
 use crate::ports::Ports;
 use crate::reap;
 use crate::time::now_ms;
@@ -25,7 +25,7 @@ use crate::trace::{self, Declined, Unslept};
 fn begun(asked: Begun) -> Result<Finished, Error> {
     match asked {
         Ok(()) => Ok(Finished::ok(json!({ "began": true }))),
-        Err(Some(Declined::Running)) => Err(Error::Waits(Waits::Lock, "a recipe machine is being made, woken or put to sleep".into())),
+        Err(Some(Declined::Running)) => Err(Error::lock_held()),
         Err(Some(Declined::CoolDown)) => Ok(Finished::ok(json!({ "began": false, "coolDown": true }))),
         Err(None) => Err(Error::Later("a make ended since the settings were read".into())),
     }
@@ -60,8 +60,9 @@ pub fn wake_host(config: &Config, ports: &mut Ports, command: &Command, name: &s
 // sleep, checked here: it answers, it is an awake machine that sleeps, holding an admitted
 // credential, read afresh, so no make, wake or `host rm` is at work on it, and with placement
 // and workers' commands stopped no agent works on it, nor is a worker set up or acted for
-// there lately (`hosts::rests`). `asleep` says whether it went to sleep; one found otherwise
-// is kept, and the nap machine's clock begins again once a listing names it idle.
+// there lately (`hosts::resting`, `hosts::launched_lately`). `asleep` says whether it went to
+// sleep; one found otherwise is kept, and the nap machine's clock begins again once a listing
+// names it idle.
 pub fn suspend_host(config: &Config, ports: &mut Ports, host: &str) -> Result<Finished, Error> {
     // The port knows which hosts answer once it has listed.
     ports.orca.worktrees()?;
@@ -88,7 +89,7 @@ pub fn suspend_host(config: &Config, ports: &mut Ports, host: &str) -> Result<Fi
     // A host gone silent during the listing holds worktrees unknown, never none.
     let mut rests = || {
         let worktrees = orca.worktrees()?;
-        Ok(orca.answering().iter().any(|answering| answering.id == host) && hosts::rests(&worktrees, &records.workers()?, host, now_ms()) && !pacing.acted_lately(host, now_ms()))
+        Ok(orca.answering().iter().any(|answering| answering.id == host) && hosts::resting(&worktrees, host) && !hosts::launched_lately(&records.workers()?, host, now_ms()) && !pacing.acted_lately(host, now_ms()))
     };
     let asleep = ports.machines.suspend(&name, host, &mut rests)?;
     if !asleep {
@@ -105,7 +106,7 @@ pub fn suspend_host(config: &Config, ports: &mut Ports, host: &str) -> Result<Fi
 // revision still trails.
 pub fn update_host(config: &Config, ports: &mut Ports, name: &str) -> Result<Finished, Error> {
     if ports.machines.making() {
-        return Err(Error::Waits(Waits::Lock, "a recipe machine is being made, woken or put to sleep".into()));
+        return Err(Error::lock_held());
     }
     let wanted = config.machines.get(name).filter(|made| made.sleeps && made.asleep).and_then(|made| config.revisions.iter().find(|(repo, _)| repo.eq_ignore_ascii_case(&made.repo)));
     let Some((_, revision)) = wanted else { return Ok(Finished::ok(json!({ "updated": false }))) };
@@ -123,7 +124,7 @@ pub fn update_host(config: &Config, ports: &mut Ports, name: &str) -> Result<Fin
 pub fn destroy_host(config: &Config, ports: &mut Ports, name: &str) -> Result<Finished, Error> {
     let worktrees = ports.orca.worktrees()?;
     if ports.machines.making() {
-        return Err(Error::Waits(Waits::Lock, "a recipe machine is being made, woken or put to sleep".into()));
+        return Err(Error::lock_held());
     }
     let answering = ports.orca.answering();
     let kept = Finished::ok(json!({ "destroyed": false }));
@@ -137,7 +138,7 @@ pub fn destroy_host(config: &Config, ports: &mut Ports, name: &str) -> Result<Fi
     }
     let (orca, records, linear, github, pacing) = (&mut *ports.orca, ports.records, ports.linear, &mut *ports.github, &ports.shared.pacing);
     let mut reaped = |host: &str, reachable: bool| -> Result<bool, Error> {
-        let on = |id: &str| split_worktree(id).and_then(|(at, _, _)| at) == Some(host);
+        let on = |id: &str| host_of(id) == Some(host);
         if !reachable {
             return Ok(!records.workers()?.iter().any(|r| on(&r.worktree_id)));
         }

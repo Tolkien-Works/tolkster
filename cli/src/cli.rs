@@ -124,6 +124,28 @@ pub fn write_file(path: &std::path::Path, text: &str) -> Result<(), Error> {
     fs::write(path, text).context(path.display())
 }
 
+// Writes `text` to `path` aside, as `<path>.<pid>`, and renames it over, so a reader never sees
+// half a file. The caller keeps this process's writes to `path` one at a time, as they share
+// the part file's name; a failed rename removes it.
+pub fn replace_file(path: &Path, text: &str) -> Result<(), Error> {
+    let mut part = path.as_os_str().to_owned();
+    part.push(format!(".{}", std::process::id()));
+    let part = PathBuf::from(part);
+    write_file(&part, text)?;
+    fs::rename(&part, path).context(path.display()).inspect_err(|_| {
+        let _ = fs::remove_file(&part);
+    })
+}
+
+// The text of `path`, or `None` when there is no such file.
+pub fn read_if_there(path: &Path) -> Result<Option<String>, Error> {
+    match fs::read_to_string(path) {
+        Ok(text) => Ok(Some(text)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error).context(path.display()),
+    }
+}
+
 // Sets the entries `entries` makes from the JSON object in `path`, as it is at the write, a
 // null removing its key, and keeps every other key, unknown ones included: the one writer of
 // the owner's settings files, so no entry is made from a stale read. Written aside and
@@ -136,10 +158,9 @@ pub fn merge_json_file(path: &Path, private: bool, entries: impl FnOnce(&serde_j
     // This process's threads' writes: other processes' are what the rename keeps whole.
     static WRITING: std::sync::Mutex<()> = std::sync::Mutex::new(());
     let _held = lock(&WRITING);
-    let mut file = match fs::read_to_string(path) {
-        Ok(text) => serde_json::from_str::<Value>(&text).context(path.display())?,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Value::Object(serde_json::Map::new()),
-        Err(error) => return Err(error).context(path.display()),
+    let mut file = match read_if_there(path)? {
+        Some(text) => serde_json::from_str::<Value>(&text).context(path.display())?,
+        None => Value::Object(serde_json::Map::new()),
     };
     let object = file.as_object_mut().ok_or_else(|| Error::Failed(format!("{}: not a JSON object", path.display())))?;
     let before = object.clone();

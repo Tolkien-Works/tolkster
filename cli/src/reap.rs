@@ -482,10 +482,8 @@ impl Reaper<'_, '_> {
         if !git::on_default(self.orca.shell(), path, &local)? {
             return kept(Keep::OffDefault { local: local.to_string() });
         }
-        match git::unpushed(self.orca.shell(), path, branch)? {
-            Some(0) => {}
-            Some(count) => return kept(Keep::Unpushed(count)),
-            None => return kept(Keep::Uncounted),
+        if let Some(because) = self.unpushed_keep(path, branch)? {
+            return kept(because);
         }
         self.remove(worktree, branch, Why::of(Reason::Landed), false)
     }
@@ -535,6 +533,11 @@ impl Reaper<'_, '_> {
         if !git::branch_exists(self.orca.shell(), path, branch)? {
             return Ok(Some(Keep::BranchGone { branch: branch.to_string() }));
         }
+        self.unpushed_keep(path, branch)
+    }
+
+    // What commits on no remote keep, none when git counts none.
+    fn unpushed_keep(&mut self, path: &str, branch: &BranchName) -> Result<Option<Keep>, Error> {
         Ok(match git::unpushed(self.orca.shell(), path, branch)? {
             Some(0) => None,
             Some(count) => Some(Keep::Unpushed(count)),
@@ -554,10 +557,8 @@ impl Reaper<'_, '_> {
             return kept(Keep::Dirty { first });
         }
         // Anything but a count of none keeps the worktree, and a missing branch fails.
-        match git::unpushed(self.orca.shell(), path, branch)? {
-            Some(0) => {}
-            Some(count) => return kept(Keep::Unpushed(count)),
-            None => return kept(Keep::Uncounted),
+        if let Some(because) = self.unpushed_keep(path, branch)? {
+            return kept(because);
         }
         if self.dry_run {
             return Ok(Some(Reaping::WouldRemove { path: worktree.path.clone(), branch: branch.to_string(), rule: Reason::Completed, closing: false }));

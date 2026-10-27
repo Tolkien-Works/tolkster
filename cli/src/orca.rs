@@ -45,7 +45,7 @@ const EXIT_WITHIN_MS: &str = "300000";
 
 // The host a worktree's ID names, None for this machine.
 pub fn host_of(worktree_id: &str) -> Option<&str> {
-    worktree_at(worktree_id).0
+    split_worktree(worktree_id).and_then(|(host, _, _)| host)
 }
 
 pub fn origin_repo(run: &mut Run, path: Option<&str>) -> Result<String, Error> {
@@ -316,8 +316,16 @@ fn opened(created: Value, host: Option<&str>) -> Result<String, Error> {
 pub fn run_on(run: &mut Run, host: &str, worktree: &str, command: &CommandLine) -> Result<Option<i32>, Error> {
     let created = orca_json(run, &at(Some(host), &["terminal", "create", "--worktree", worktree, "--command", command.as_str(), "--json"]))?;
     let handle = Handle::check(&opened(created, Some(host))?)?;
-    let code = exit_code(run, &handle);
-    let _ = close_terminal(run, &handle);
+    exited_then_closed(run, &handle)
+}
+
+// The exit code of the terminal `handle` once it exits, None where it still ran at
+// EXIT_WITHIN_MS or Orca names none. Its tab stays listed once it has exited, and a stale
+// handle is no harm, so it is closed after; one still running, or whose wait failed, is closed
+// too, so a retry's step never runs beside it.
+fn exited_then_closed(run: &mut Run, handle: &Handle) -> Result<Option<i32>, Error> {
+    let code = exit_code(run, handle);
+    let _ = close_terminal(run, handle);
     Ok(match code? {
         Waited::Exited(code) => code,
         Waited::Open | Waited::Stale => None,
@@ -576,7 +584,7 @@ pub trait Orca {
     }
     // Whether the host `worktree_id` is on answered this run: this machine always.
     fn heard(&self, worktree_id: &str) -> bool {
-        split_worktree(worktree_id).and_then(|(host, _, _)| host).is_none_or(|host| self.answering().iter().any(|h| h.id == host))
+        host_of(worktree_id).is_none_or(|host| self.answering().iter().any(|h| h.id == host))
     }
     // Whether `project`, or with None any project, is set up and ready on `host`, whose
     // `tolkster` reads its config.json as `reads_config` asks it.

@@ -8,7 +8,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::args::{Kind, Parsed};
+use crate::args::{Kind, Parsed, named};
 use crate::brief::{self, Beside, Brief, Reconcile, Startup, Taken, plan_from};
 use crate::cli::write_file;
 use crate::coauthor;
@@ -124,7 +124,7 @@ fn resume_name(why: Resume) -> &'static str {
 }
 
 fn resume_named(name: &str) -> Option<Resume> {
-    [Resume::Message, Resume::ChildrenEnd, Resume::ChildrenAdded].into_iter().find(|why| resume_name(*why) == name)
+    named(&[Resume::Message, Resume::ChildrenEnd, Resume::ChildrenAdded], resume_name, name)
 }
 
 fn round_name(round: Round) -> &'static str {
@@ -136,7 +136,7 @@ fn round_name(round: Round) -> &'static str {
 }
 
 fn round_named(name: &str) -> Option<Round> {
-    [Round::Review { last: false }, Round::Review { last: true }, Round::Rebase].into_iter().find(|round| round_name(*round) == name)
+    named(&[Round::Review { last: false }, Round::Review { last: true }, Round::Rebase], round_name, name)
 }
 
 impl Worker {

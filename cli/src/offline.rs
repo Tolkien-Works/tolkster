@@ -15,7 +15,8 @@ use ureq::Agent;
 use crate::error::Error;
 use crate::health::{Health, Mark};
 use crate::linear::{Nodes, Ref, identifier_filter, read_as, update_issue, with_token};
-use crate::plain::{Id, IssueKey, split_worktree};
+use crate::orca::host_of;
+use crate::plain::{Id, IssueKey};
 use crate::state::WorkerRecord;
 use crate::trace;
 
@@ -163,9 +164,9 @@ pub fn settle(health: &Health, now: Instant, workers: &dyn Fn() -> Result<Vec<Wo
 
 fn label(host: &str, mark: Mark, records: &[WorkerRecord], group: Option<&Group>, silent: &dyn Fn(&str) -> bool, linear: &dyn Issues) -> Result<(), Error> {
     let Some(edit) = group.and_then(|group| group.edit(mark)) else { return Ok(()) };
-    let on_host = |r: &&WorkerRecord| split_worktree(&r.worktree_id).and_then(|(at, _, _)| at) == Some(host);
+    let on_host = |r: &&WorkerRecord| host_of(&r.worktree_id) == Some(host);
     // An issue with a worker on another host that is silent keeps its label when this one is heard.
-    let also_silent = |issue: &str| records.iter().any(|r| r.issue == issue && split_worktree(&r.worktree_id).and_then(|(at, _, _)| at).is_some_and(|at| at != host && silent(at)));
+    let also_silent = |issue: &str| records.iter().any(|r| r.issue == issue && host_of(&r.worktree_id).is_some_and(|at| at != host && silent(at)));
     let identifiers: Vec<IssueKey> = records.iter().filter(on_host).filter_map(|r| IssueKey::parse(&r.issue)).filter(|issue| mark == Mark::Offline || !also_silent(issue)).collect();
     if identifiers.is_empty() {
         return Ok(());

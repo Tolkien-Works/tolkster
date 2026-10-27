@@ -190,11 +190,6 @@ pub struct Pr {
     pub comments: Vec<Comment>,
 }
 
-// A commit's first seven characters, as the records name a head.
-pub fn short_head(head: &str) -> &str {
-    head.get(..7).unwrap_or(head)
-}
-
 // The PR as `pr_query` reads it: what its `Head` is read from, then the fields `parse_pr`
 // reads and the first page of each of REVIEW_CONNECTIONS.
 #[derive(Debug, Deserialize)]

@@ -18,7 +18,7 @@ const SYNC: &str = "mutation ReleaseSync($input: ReleaseSyncInput!) { releaseSyn
 #[cfg_attr(not(feature = "develop"), allow(dead_code))]
 pub fn sync_release(agent: &Agent, access_token: &str, pipeline: &str, commit: &Sha, issues: &[IssueKey]) -> Result<(), Error> {
     let references: Vec<_> = issues.iter().map(|key| json!({ "identifier": key.as_str(), "commitSha": commit.as_str() })).collect();
-    let input = json!({ "pipelineId": pipeline, "commitSha": commit.as_str(), "version": &commit.as_str()[..7], "issueReferences": references });
+    let input = json!({ "pipelineId": pipeline, "commitSha": commit.as_str(), "version": crate::plain::short_sha(commit.as_str()), "issueReferences": references });
     mutate::<serde_json::Value>(agent, access_token, "releaseSync", SYNC, json!({ "input": input })).map(|_| ())
 }
 

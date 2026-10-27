@@ -13,8 +13,7 @@ use serde::Serialize;
 
 use crate::config::{Config, DEFAULT_DESTROY_AFTER, DEFAULT_IDLE_MINUTES, Machine};
 use crate::error::Error;
-use crate::orca::{Host, Pane, Worktree, plain_project, project_id};
-use crate::plain::split_worktree;
+use crate::orca::{Host, Pane, Worktree, host_of, plain_project, project_id};
 use crate::state::WorkerRecord;
 use crate::sync::{lock, read, write};
 use crate::time::instant;
@@ -236,7 +235,7 @@ pub struct Row {
 // host its record's worktree names, whether or not the host answers; a record on a host no
 // longer paired shows nowhere.
 pub fn report(config: &Config, answering: &[Host], silent: &[Host], records: &[WorkerRecord]) -> Vec<Row> {
-    let held = |host: Option<&str>| records.iter().filter(|r| split_worktree(&r.worktree_id).and_then(|(at, _, _)| at) == host).map(|r| r.issue.clone()).collect();
+    let held = |host: Option<&str>| records.iter().filter(|r| host_of(&r.worktree_id) == host).map(|r| r.issue.clone()).collect();
     let row = |host: &Host, answers| Row { name: Some(host.name.clone()), answers, cap: cap(config, host), workers: held(Some(&host.id)), recipe: config.machines.get(host.name.trim()).map(|made| made.recipe.clone()) };
     let here = Row { name: None, answers: true, cap: config.local_slots(), workers: held(None), recipe: None };
     std::iter::once(here).chain(answering.iter().map(|host| row(host, true))).chain(silent.iter().map(|host| row(host, false))).collect()
@@ -247,21 +246,24 @@ pub fn asleep_as<'a>(config: &'a Config, host: &str) -> Option<&'a String> {
     config.machines.iter().find(|(_, made)| made.asleep && made.environment.as_deref() == Some(host)).map(|(name, _)| name)
 }
 
-// Whether no agent works on `host`: each Orca lists in a worktree there is done or waits at a
-// prompt, and no worker's record there was launched within SETTING_UP_MS, as its setup runs
-// before its agent is listed. A worker waiting on the owner, or exited, keeps no machine
-// awake: a command for it wakes the machine (docs/hosts.md, Sleep and wake).
-pub fn rests(worktrees: &[Worktree], records: &[WorkerRecord], host: &str, now_ms: i64) -> bool {
-    let on = |id: &str| split_worktree(id).and_then(|(at, _, _)| at) == Some(host);
+// Whether each agent Orca lists in a worktree on `host` is done or waits at a prompt. With no
+// worker `launched_lately` there, as its setup runs before its agent is listed, no agent works
+// on it: a worker waiting on the owner, or exited, keeps no machine awake, as a command for it
+// wakes the machine (docs/hosts.md, Sleep and wake).
+pub fn resting(worktrees: &[Worktree], host: &str) -> bool {
     let resting = |pane: &Pane| matches!(pane.state.as_str(), "done" | "waiting" | "blocked");
-    worktrees.iter().filter(|w| on(&w.id)).all(|w| w.agents.iter().all(resting)) && !records.iter().any(|r| on(&r.worktree_id) && instant(&r.at).is_some_and(|at| now_ms - at < SETTING_UP_MS))
+    worktrees.iter().filter(|w| host_of(&w.id) == Some(host)).all(|w| w.agents.iter().all(resting))
 }
 
-// Whether `host` holds no worktree but its checkouts, and no worker's record there was launched
-// within SETTING_UP_MS: a destroy takes nothing with it (docs/hosts.md, Destroying).
+// Whether a worker's record on `host` was launched within SETTING_UP_MS.
+pub fn launched_lately(records: &[WorkerRecord], host: &str, now_ms: i64) -> bool {
+    records.iter().any(|r| host_of(&r.worktree_id) == Some(host) && instant(&r.at).is_some_and(|at| now_ms - at < SETTING_UP_MS))
+}
+
+// Whether `host` holds no worktree but its checkouts, and no worker was `launched_lately` there:
+// a destroy takes nothing with it (docs/hosts.md, Destroying).
 pub fn holds_nothing(worktrees: &[Worktree], records: &[WorkerRecord], host: &str, now_ms: i64) -> bool {
-    let on = |id: &str| split_worktree(id).and_then(|(at, _, _)| at) == Some(host);
-    worktrees.iter().all(|w| w.is_main || !on(&w.id)) && !records.iter().any(|r| on(&r.worktree_id) && instant(&r.at).is_some_and(|at| now_ms - at < SETTING_UP_MS))
+    worktrees.iter().all(|w| w.is_main || host_of(&w.id) != Some(host)) && !launched_lately(records, host, now_ms)
 }
 
 // The recipe machines `listen`'s listing says are idle, by host ID, with their repo's idle
@@ -272,7 +274,7 @@ pub fn idle(config: &Config, pacing: &Pacing, answering: &[Host], worktrees: &[W
     let idle = |host: &Host| {
         let name = host.name.trim();
         let made = config.machines.get(name).filter(|made| made.sleeps && !made.asleep)?;
-        (config.enrolled.contains(&host.id) && !pacing.napping(&host.id) && rests(worktrees, &[], &host.id, 0)).then(|| (host.id.clone(), minutes(made)))
+        (config.enrolled.contains(&host.id) && !pacing.napping(&host.id) && resting(worktrees, &host.id)).then(|| (host.id.clone(), minutes(made)))
     };
     answering.iter().filter_map(idle).collect()
 }

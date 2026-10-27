@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
-use crate::cli::{config_file, credentials_file, env, machines_file, merge_json_file, shown};
+use crate::cli::{config_file, credentials_file, env, machines_file, merge_json_file, read_if_there, shown};
 use crate::error::{Context, Error};
 use crate::estimates::Size;
 use ladder::Ladder;
@@ -221,10 +221,9 @@ pub fn config(files: &Files, owner_id: String, home: &Path) -> Result<Config, Er
     let path = machines_file()?;
     // One that doesn't read stops the load: counted as none, it would let a repo's `machines` be
     // passed.
-    let made = match fs::read_to_string(&path) {
-        Ok(text) => Value::Object(serde_json::from_str(&text).context(path.display())?),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Value::Null,
-        Err(error) => return Err(error).context(path.display()),
+    let made = match read_if_there(&path)? {
+        Some(text) => Value::Object(serde_json::from_str(&text).context(path.display())?),
+        None => Value::Null,
     };
     Ok(Config { machines: machines(&made), ..from_files(files, owner_id, home, env("TOLKSTER_CO_AUTHOR"))? })
 }
@@ -509,21 +508,21 @@ impl WorkerUrl {
     }
 
     pub fn state(&self) -> String {
-        format!("{}://{}/state", if self.secure { "https" } else { "http" }, self.host)
+        format!("{}/state", self.base())
     }
 
     // Where Linear sends the owner back once the app is installed (docs/setup.md).
     pub fn oauth_callback(&self) -> String {
-        format!("{}://{}/oauth/callback", if self.secure { "https" } else { "http" }, self.host)
+        format!("{}/oauth/callback", self.base())
     }
 
     pub fn token(&self) -> String {
-        format!("{}://{}/token", if self.secure { "https" } else { "http" }, self.host)
+        format!("{}/token", self.base())
     }
 
     // The prebuilt `tolkster` for a target at a commit (src/worker/build.ts).
     pub fn build(&self, target: &str, commit: &str) -> String {
-        format!("{}://{}/build/{target}/{commit}", if self.secure { "https" } else { "http" }, self.host)
+        format!("{}/build/{target}/{commit}", self.base())
     }
 
     // Where the Linear app's webhook delivers (docs/setup.md).
@@ -537,7 +536,7 @@ impl WorkerUrl {
     }
 
     pub fn enrol(&self) -> String {
-        format!("{}://{}/enrol", if self.secure { "https" } else { "http" }, self.host)
+        format!("{}/enrol", self.base())
     }
 
     // The address as config.json's "worker" holds it.

@@ -81,7 +81,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
         },
         |moved| if moved { "moved" } else { "unchanged" },
     );
-    let label = format!("Commit {}", &sha[..7]);
+    let label = format!("Commit {}", crate::plain::short_sha(&sha));
     let linked = with_token(agent, |token| add_link(agent, token, session_id, &label, &url)).map_err(|error| eprintln!("the commit wasn't linked on the session: {error}")).is_ok();
     // Every branch of the issue's: a worker continued on `<key>-2` was reset onto `<key>`'s.
     let (mut branches, listed) = match git::issue_branches(run, ".", &key) {

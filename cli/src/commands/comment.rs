@@ -14,7 +14,7 @@ use crate::machine::{Reader, worker_answered};
 use crate::post::{answer_key, reply_once};
 use crate::state::{State, derived_uuid, new_token, thread_request};
 use crate::request::Thread;
-use crate::sessions::{Bodies, comment_on_issue, read_closed, read_thread, tolksters_issues};
+use crate::sessions::{Bodies, comment_on_issue, read_closed, thread_of, tolksters_issues};
 use crate::sessions::lookup::issue_ref;
 use crate::time::{instant, iso, now_iso};
 
@@ -97,7 +97,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
 
 // The thread of `root`, which must be on issue `id`.
 fn thread_on(agent: &Agent, id: &str, root: &str, owner: &str) -> Result<Thread, Error> {
-    let thread = read_thread(agent, root, owner, Bodies::Skip)?.map_err(|why| Error::Failed(format!("comment {root}: {why}")))?;
+    let thread = thread_of(agent, root, owner, Bodies::Skip)?;
     if !thread.identifier.eq_ignore_ascii_case(id) && thread.issue_id != id {
         return Err(Error::Failed(format!("comment {root} is on {}, not {id}", thread.identifier)));
     }

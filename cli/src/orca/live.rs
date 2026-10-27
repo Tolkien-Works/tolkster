@@ -355,14 +355,7 @@ impl Orca for Cli<'_> {
     }
     fn run_to_exit(&mut self, worktree_id: &str, command: &CommandLine) -> Result<Option<i32>, Error> {
         let handle = Handle::check(&self.open(worktree_id, None, command)?)?;
-        let code = exit_code(self.run, &handle);
-        // Its tab stays listed once it has exited, and a stale handle is no harm. One still
-        // running, or whose wait failed, is closed too, so a retry's step never runs beside it.
-        let _ = close_terminal(self.run, &handle);
-        Ok(match code? {
-            Waited::Exited(code) => code,
-            Waited::Open | Waited::Stale => None,
-        })
+        exited_then_closed(self.run, &handle)
     }
     fn close(&mut self, handle: &Handle) -> Result<(), Error> {
         self.terminal_at(handle)?;

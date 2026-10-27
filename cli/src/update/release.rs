@@ -8,7 +8,8 @@ use std::sync::atomic::Ordering;
 
 use ureq::Agent;
 
-use super::{Pass, Update, own_branch, short};
+use super::{Pass, Update, own_branch};
+use crate::plain::short_sha;
 use crate::config::files;
 use crate::error::{Context, Error};
 use crate::exec::Run;
@@ -58,13 +59,13 @@ impl Updater {
             return Pass::Unready;
         }
         if *after == self.own {
-            say(Said::At { head: short(after).into() });
+            say(Said::At { head: short_sha(after).into() });
             return Pass::Pulled;
         }
         let tarball = match fetch(after) {
             Ok(Some(tarball)) => tarball,
             Ok(None) => {
-                say(Said::NotHeld { after: short(after).into() });
+                say(Said::NotHeld { after: short_sha(after).into() });
                 return Pass::Behind;
             }
             Err(error) => {
@@ -79,8 +80,8 @@ impl Updater {
         self.update.placing.store(false, Ordering::SeqCst);
         match swapped {
             Ok(()) => {
-                say(Said::Restarting { head: short(after).into() });
-                self.update.in_place(Restart::Built { head: short(after).into() });
+                say(Said::Restarting { head: short_sha(after).into() });
+                self.update.in_place(Restart::Built { head: short_sha(after).into() });
                 Pass::Pulled
             }
             Err(error) => {

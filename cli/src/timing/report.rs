@@ -39,7 +39,7 @@ impl Run {
         match by {
             Group::Size => self.size.map_or_else(none, |s| (s.0, s.name().to_string())),
             Group::Model => self.rung.clone().map_or_else(none, |r| (0, r)),
-            Group::Build => self.sessions.first().and_then(|s| s.build.clone()).map_or_else(none, |b| (0, b.chars().take(7).collect())),
+            Group::Build => self.sessions.first().and_then(|s| s.build.clone()).map_or_else(none, |b| (0, crate::plain::short_sha(&b).to_string())),
         }
     }
 

@@ -13,7 +13,6 @@ use serde_json::{Value, json};
 use crate::brief::review_size;
 use crate::review_pass::ReviewSize;
 use crate::error::{Error, Waits};
-use crate::github;
 use crate::config::ladder::{Ladder, Launch};
 use crate::linear::{ActivityInput, ActivityType};
 use crate::machine::{Command, Finished, Resume};
@@ -438,7 +437,7 @@ pub fn resume(config: &Config, ports: &mut Ports, command: &Command, session_id:
 }
 
 fn resume_in(call: &mut Call, why: Resume) -> Result<Finished, Error> {
-    let Call { config, command, session_id, issue, .. } = *call;
+    let Call { command, session_id, issue, .. } = *call;
     let identifier = issue.identifier.as_str();
     let (what, wording) = match why {
         Resume::Message => ("your reply", voice::say(voice::READING_REPLY)),
@@ -465,19 +464,26 @@ fn resume_in(call: &mut Call, why: Resume) -> Result<Finished, Error> {
         return Ok(Finished::failed());
     };
     pick_up(call.ports, command, session_id, Some(what), &wording)?;
-    let (launch, rerecord) = relaunch(Some(&record), &worktree.id, issue, &config.ladder);
-    // Should the new record not be written, the resume still takes the new rung, and the
+    relaunched(call, &worktree, &record, IssueKey::check(identifier)?, How::Continue(why))?;
+    Ok(Finished::ok(json!({ "launched": true })))
+}
+
+// A worker brought back in `worktree` from its record, which may re-pick its rung.
+fn relaunched(call: &mut Call, worktree: &Worktree, record: &WorkerRecord, identifier: IssueKey, how: How) -> Result<(), Error> {
+    let Call { config, session_id, issue, .. } = *call;
+    let (launch, rerecord) = relaunch(Some(record), &worktree.id, issue, &config.ladder);
+    // Should the new record not be written, the relaunch still takes the new rung, and the
     // next one picks it again.
     if let Some(Err(error)) = rerecord.map(|record| call.ports.records.start_worker(&record)) {
         trace::event(Work::NotDone { what: Undone::Rung, error });
     }
-    let repo = repo_of(call.ports.orca, &worktree);
+    let repo = repo_of(call.ports.orca, worktree);
     let trace = traces(config, repo.as_deref());
-    let worker = Worker { session_id: session_id.clone(), identifier: IssueKey::check(identifier)?, repo, launch, build: prebuilt::commit(), trace, timing: config.timing, how: How::Continue(why) }.command()?;
+    let worker = Worker { session_id: session_id.clone(), identifier, repo, launch, build: prebuilt::commit(), trace, timing: config.timing, how }.command()?;
     // As a start's relaunch: no setup is left running beside it.
     call.ports.orca.close_all(&worktree.id)?;
     call.ports.orca.start_agent(&worktree.id, &worker)?;
-    Ok(Finished::ok(json!({ "launched": true })))
+    Ok(())
 }
 
 // A round's worker's card goes back to in progress with its issue. Should it not, the worker
@@ -567,7 +573,7 @@ fn round_in(call: &mut Call, &OnPr { repo, number, head, round, rebase_only }: &
         trace::event(Work::NoWorkerRecord { issue: command.identifier.clone(), pr: Some(number) });
         return Ok(Finished::failed());
     }
-    let short = head.map(github::short_head);
+    let short = head.map(crate::plain::short_sha);
     let what = review::picked_up(number, short, round);
     pick_up(call.ports, command, session_id, Some(&what), &format!("Picking up {what}…"))?;
     // The issue moves back to started with its worker; should the move fail, the worker is
@@ -578,16 +584,8 @@ fn round_in(call: &mut Call, &OnPr { repo, number, head, round, rebase_only }: &
     in_progress(call.ports, &worktree.id);
     // An exited worker is brought back on its host, in a new session on its round brief, not
     // the one that built the PR, and may re-pick its rung.
-    let bring_back = |ports: &mut Ports, record: &WorkerRecord| -> Result<Option<Typed>, Error> {
-        let (launch, rerecord) = relaunch(Some(record), &worktree.id, issue, &config.ladder);
-        if let Some(Err(error)) = rerecord.map(|record| ports.records.start_worker(&record)) {
-            trace::event(Work::NotDone { what: Undone::Rung, error });
-        }
-        let repo = repo_of(ports.orca, &worktree);
-        let trace = traces(config, repo.as_deref());
-        let relaunched = Worker { session_id: session_id.clone(), identifier: command.identifier.clone(), repo, launch, build: prebuilt::commit(), trace, timing: config.timing, how: How::Round { number, round } }.command()?;
-        ports.orca.close_all(&worktree.id)?;
-        ports.orca.start_agent(&worktree.id, &relaunched)?;
+    let bring_back = |call: &mut Call, record: &WorkerRecord| -> Result<Option<Typed>, Error> {
+        relaunched(call, &worktree, record, command.identifier.clone(), How::Round { number, round })?;
         Ok(None)
     };
     // A line typed into a running worker counts once its turn began. One left unproven may
@@ -599,12 +597,12 @@ fn round_in(call: &mut Call, &OnPr { repo, number, head, round, rebase_only }: &
             // worker's case if none runs now and the record holds it. Any other failure
             // may have typed the line, which is never typed again.
             Err(unsent @ Error::Unsent(..)) => match exited_since(call.ports, &worktree.id, identifier) {
-                Some(record) => bring_back(call.ports, &record),
+                Some(record) => bring_back(call, &record),
                 None => Err(unsent),
             },
             sent => sent.map(Some),
         },
-        (None, Some(record)) => bring_back(call.ports, record),
+        (None, Some(record)) => bring_back(call, record),
         (None, None) => Err(Error::Failed(format!("{identifier}'s worker has neither a terminal nor a launch"))),
     };
     match done {

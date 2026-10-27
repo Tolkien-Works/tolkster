@@ -15,7 +15,8 @@ use std::time::Instant;
 
 use ureq::Agent;
 
-use super::{BRANCH, Pass, Update, own_branch, short};
+use super::{BRANCH, Pass, Update, own_branch};
+use crate::plain::short_sha;
 use crate::config;
 use crate::error::{Context, Error};
 use crate::exec::Run;
@@ -66,7 +67,7 @@ impl Checkout {
         let (from, head) = match self.pull(run, after) {
             Ok(Some(moved)) => moved,
             Ok(None) => {
-                say(Said::NotHeld { after: short(after.map_or("", Sha::as_str)).into() });
+                say(Said::NotHeld { after: short_sha(after.map_or("", Sha::as_str)).into() });
                 return Pulled::Behind;
             }
             Err(NotPulled::Unfetched(why)) if after.is_some() => {
@@ -78,7 +79,7 @@ impl Checkout {
                 return Pulled::Skipped;
             }
         };
-        say(if from == head { Said::At { head: short(&head).into() } } else { Said::Moved { from: short(&from).into(), head: short(&head).into() } });
+        say(if from == head { Said::At { head: short_sha(&head).into() } } else { Said::Moved { from: short_sha(&from).into(), head: short_sha(&head).into() } });
         Pulled::At(head)
     }
 
@@ -92,9 +93,9 @@ impl Checkout {
             }
         };
         match place(&build) {
-            Ok(true) => Ok(Some(Restart::Built { head: short(head).into() })),
+            Ok(true) => Ok(Some(Restart::Built { head: short_sha(head).into() })),
             Ok(false) => {
-                say(Said::Built { head: short(head).into() });
+                say(Said::Built { head: short_sha(head).into() });
                 Ok(None)
             }
             Err(error) => {
@@ -233,7 +234,7 @@ impl Updater {
             Pulled::Unfetched => return Pass::Unready,
         };
         if lock(&self.update.built).as_deref() == Some(head.as_str()) {
-            say(Said::BuiltAlready { head: short(&head).into() });
+            say(Said::BuiltAlready { head: short_sha(&head).into() });
             return Pass::Pulled;
         }
         self.update.set_building(Some(Instant::now()));
@@ -269,7 +270,7 @@ impl Build {
             }
         }
         let Ok(Some(restart)) = rebuilt else { return false };
-        say(Said::Restarting { head: short(&self.head).into() });
+        say(Said::Restarting { head: short_sha(&self.head).into() });
         self.update.in_place(restart);
         true
     }
@@ -307,7 +308,7 @@ pub fn release(agent: &Agent, run: &mut Run, dir: &str, head: &str) -> Option<Sa
         with_token(agent, |token| sync_release(agent, token, &pipeline, &commit, &issues))?;
         Ok(Some(issues.len()))
     };
-    let head = short(head).to_string();
+    let head = short_sha(head).to_string();
     Some(match gateway::in_lane(Lane::Normal, sync) {
         Ok(Some(issues)) => Said::Released { head, issues },
         Ok(None) => Said::ReleasedAlready { head },

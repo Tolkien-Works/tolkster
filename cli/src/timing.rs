@@ -14,7 +14,7 @@ use serde::de::IgnoredAny;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::error::{Context, Error};
+use crate::error::Error;
 use crate::estimates::Size;
 use crate::plain::{Id, Sha, Time, split_worktree};
 use crate::state::derived_uuid;
@@ -244,17 +244,11 @@ impl Timing {
             return;
         }
         let kept = (|| -> Result<(), Error> {
-            let text = match std::fs::read_to_string(file) {
-                Ok(text) => text,
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
-                Err(error) => return Err(error).context(file.display()),
-            };
+            let text = crate::cli::read_if_there(file)?.unwrap_or_default();
             let Some(text) = kept_in(&text, &line, full, now_ms()) else { return Ok(()) };
-            // Written aside, under this process's own name, and renamed, so a reader never sees
-            // half a file, nor does a `listen` draining beside its successor see half of theirs.
-            let part = file.with_extension(format!("jsonl.{}", std::process::id()));
-            crate::cli::write_file(&part, &text)?;
-            std::fs::rename(&part, file).context(file.display())
+            // Written aside, under this process's own name, so a `listen` draining beside its
+            // successor never sees half of theirs.
+            crate::cli::replace_file(file, &text)
         })();
         match kept {
             Ok(()) => {

@@ -352,6 +352,11 @@ pub fn read_thread(agent: &Agent, root: &str, owner_id: &str, bodies: Bodies) ->
     Ok(parse_thread(&data, owner_id))
 }
 
+// `read_thread`, failing with why `root` is no thread a turn answers.
+pub fn thread_of(agent: &Agent, root: &str, owner_id: &str, bodies: Bodies) -> Result<Thread, Error> {
+    read_thread(agent, root, owner_id, bodies)?.map_err(|why| Error::Failed(format!("comment {root}: {why}")))
+}
+
 // The thread in `data`, if its root begins a thread, on an issue, and no session of
 // Tolkster's began on (a session's thread is its session's), and is a comment of Tolkster's
 // (the viewer's) or the owner's own on an issue Tolkster created (ports::comment_kind's
