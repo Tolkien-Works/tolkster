@@ -169,6 +169,7 @@ fn dirty(run: &mut Run, path: &str) -> Result<Option<String>, Error> {
 // the worktrees it tried to remove (`Reaper::remove`). `failed` says one worktree's turn
 // ended in an error, so what wanted it gone should look again, and `spent` that one found
 // GitHub's budget spent, with the wait: it should look again after it.
+#[derive(Default)]
 pub struct Reaped {
     pub lines: Vec<Reap>,
     pub failed: bool,
@@ -181,18 +182,12 @@ pub struct Reaped {
     tried: usize,
 }
 
-impl Reaped {
-    fn none() -> Reaped {
-        Reaped { lines: Vec::new(), failed: false, spent: None, later: false, waits: None, removed: false, tried: 0 }
-    }
-}
-
 // Reaps from the worktrees Orca listed, each on the rule GitHub and Linear give it. Only
 // asking Linear or listing the terminals can fail the whole run.
 pub fn reap(orca: &mut dyn Orca, prs: &mut Prs, forget: &mut Forget, worktrees: &[Worktree], mut tolksters: impl FnMut(&[IssueKey]) -> Result<Tolksters, Error>, dry_run: bool) -> Result<Reaped, Error> {
     let linked = candidates(worktrees);
     if linked.is_empty() {
-        return Ok(Reaped::none());
+        return Ok(Reaped::default());
     }
     let mut identifiers: Vec<IssueKey> = linked.iter().filter_map(|w| IssueKey::parse(w.linked_issue.as_deref()?)).collect();
     identifiers.sort();
@@ -200,13 +195,13 @@ pub fn reap(orca: &mut dyn Orca, prs: &mut Prs, forget: &mut Forget, worktrees: 
     let theirs_now = tolksters(&identifiers)?;
     let theirs: Vec<&Worktree> = linked.into_iter().filter(|w| w.linked_issue.as_ref().is_some_and(|i| theirs_now.contains_key(i))).collect();
     if theirs.is_empty() {
-        return Ok(Reaped::none());
+        return Ok(Reaped::default());
     }
     let terminals = orca.terminals()?;
     let now = now_ms();
     // Cancelled at or before this, an issue's worktree may go.
     let cancelled_by = iso(now.saturating_sub(CANCELLED_FOR_MS));
-    let mut reaper = Reaper { orca, forget, tolksters: &mut tolksters, all: worktrees, dry_run, idle_by: iso(now.saturating_sub(IDLE_FOR_MS)), reaped: Reaped::none() };
+    let mut reaper = Reaper { orca, forget, tolksters: &mut tolksters, all: worktrees, dry_run, idle_by: iso(now.saturating_sub(IDLE_FOR_MS)), reaped: Reaped::default() };
 
     for worktree in theirs {
         let issue = worktree.linked_issue.as_deref().unwrap_or_default();
@@ -251,11 +246,11 @@ pub fn reap(orca: &mut dyn Orca, prs: &mut Prs, forget: &mut Forget, worktrees: 
 // completed rules' read just before removal also finds.
 pub fn reap_by(orca: &mut dyn Orca, forget: &mut Forget, worktree: &Worktree, worktrees: &[Worktree], rule: Rule, mut tolksters: impl FnMut(&[IssueKey]) -> Result<Tolksters, Error>) -> Result<Reaped, Error> {
     // A branch whose name isn't plain never reaches git, so its worktree stays.
-    let (Some(issue), Some(branch)) = (worktree.linked_issue.as_deref().and_then(IssueKey::parse), worktree.branch.as_deref().and_then(BranchName::parse)) else { return Ok(Reaped::none()) };
+    let (Some(issue), Some(branch)) = (worktree.linked_issue.as_deref().and_then(IssueKey::parse), worktree.branch.as_deref().and_then(BranchName::parse)) else { return Ok(Reaped::default()) };
     if matches!(rule, Rule::Merged { .. } | Rule::Landed) && !tolksters(std::slice::from_ref(&issue))?.contains_key(issue.as_str()) {
-        return Ok(Reaped::none());
+        return Ok(Reaped::default());
     }
-    let mut reaper = Reaper { orca, forget, tolksters: &mut tolksters, all: worktrees, dry_run: false, idle_by: String::new(), reaped: Reaped::none() };
+    let mut reaper = Reaper { orca, forget, tolksters: &mut tolksters, all: worktrees, dry_run: false, idle_by: String::new(), reaped: Reaped::default() };
     let result = reaper.apply(worktree, &branch, rule, None);
     reaper.record(&issue, result);
     Ok(reaper.reaped)

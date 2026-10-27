@@ -1,4 +1,4 @@
-use super::frame::Work;
+use super::frame::{Why, Work};
 use super::view::{Agent, Also, Budget, Link, Live, Need, Silence, SlotRow, view};
 use super::*;
 
@@ -192,6 +192,8 @@ fn the_connection_and_the_update_read_as_they_stand() {
     assert_eq!(view(&state, &live, t0).update.behind, Some(false));
 }
 
+const WHYS: [Why; 7] = [Why::HereHasRoom, Why::HostHasRoom, Why::Running, Why::HostComing, Why::AllMade, Why::CoolingDown, Why::NoRecipe];
+
 fn contract() -> serde_json::Value {
     serde_json::from_str(&std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/../test/contract.json")).unwrap()).unwrap()
 }
@@ -210,9 +212,9 @@ fn the_fixtures_frame_parses_and_a_base_tip_isnt_one() {
     wrong["slots"][0]["work"] = "dancing".into();
     assert!(parse_frame(&wrong).unwrap().is_err());
     // Why the fleet asks no machine, per repo, in the Durable Object's own list of reasons.
-    assert_eq!(frame.why.into_iter().collect::<Vec<_>>(), [("r9".to_string(), super::frame::Why::NoRecipe), ("tolkster".to_string(), super::frame::Why::AllMade)]);
-    let reasons: Vec<super::frame::Why> = serde_json::from_value(contract["machine"]["fleetReasons"].clone()).unwrap();
-    assert_eq!(reasons, super::frame::WHYS);
+    assert_eq!(frame.why.into_iter().collect::<Vec<_>>(), [("r9".to_string(), Why::NoRecipe), ("tolkster".to_string(), Why::AllMade)]);
+    let reasons: Vec<Why> = serde_json::from_value(contract["machine"]["fleetReasons"].clone()).unwrap();
+    assert_eq!(reasons, WHYS);
 }
 
 // A frame says each repo's reason the fleet asks no machine for it when it is new or changed,
@@ -221,7 +223,7 @@ fn the_fixtures_frame_parses_and_a_base_tip_isnt_one() {
 fn a_frame_names_each_repos_no_machine_reason_only_when_it_changed() {
     let mut state = State::default();
     let frame = parse_frame(&contract()["frame"]).unwrap().unwrap();
-    let all = vec![("r9".to_string(), super::frame::Why::NoRecipe.said()), ("tolkster".to_string(), super::frame::Why::AllMade.said())];
+    let all = vec![("r9".to_string(), Why::NoRecipe.said()), ("tolkster".to_string(), Why::AllMade.said())];
     assert_eq!(state.reframe(Some(frame.clone())), all);
     assert!(state.reframe(Some(frame.clone())).is_empty());
     let mut changed = frame.clone();

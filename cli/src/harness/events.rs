@@ -13,7 +13,7 @@ use serde::Deserialize;
 use serde::de::IgnoredAny;
 use serde_json::Value;
 
-use crate::json::{nodes, non_empty, optional_text, str};
+use crate::json::{nodes, non_empty, str};
 use crate::machine::Observed;
 use crate::time::instant;
 
@@ -122,7 +122,7 @@ pub fn parse_call(text: &str) -> Option<Call> {
 
 // The file a call's input names.
 fn file(input: &Value) -> Option<String> {
-    ["/file_path", "/notebook_path"].iter().find_map(|f| optional_text(input, f))
+    ["/file_path", "/notebook_path"].iter().find_map(|f| str(input, f).map(String::from))
 }
 
 // A shell call's command; none for another tool's, whatever its input holds, so only a shell

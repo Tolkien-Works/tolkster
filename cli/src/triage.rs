@@ -62,7 +62,7 @@ pub fn may_triage(candidate: &Candidate, owner_id: &str, app_user_id: &str) -> R
     Ok(())
 }
 
-// Whether `history` (sessions::state_history) shows the issue filed in Triage: no entry
+// Whether `history` (sessions::state_histories) shows the issue filed in Triage: no entry
 // moved it into a triage state from another state, as the owner parks an issue by moving
 // it there, which leaves it alone. History past one page counts as moved.
 pub fn filed_in_triage(history: &StateHistory) -> bool {

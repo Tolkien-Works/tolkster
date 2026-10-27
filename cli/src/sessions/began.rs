@@ -147,7 +147,7 @@ pub(super) fn on_own_note(node: &Began) -> bool {
 
 // The request of a session Tolkster opened on its own comment: the replies in the thread
 // written before the session began, oldest first, by people, not an integration. Only a read
-// with bodies has them; `Session::owner_messages` keeps the owner's.
+// with bodies has them; `Session::messages_after` keeps the owner's.
 pub(super) fn replies_before(node: &Began) -> Vec<Reply> {
     let began = node.created_at.as_str();
     let mut replies: Vec<Reply> = node

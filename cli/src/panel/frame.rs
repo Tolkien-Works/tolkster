@@ -167,9 +167,6 @@ pub enum Why {
     NoRecipe,
 }
 
-#[cfg(test)]
-pub const WHYS: [Why; 7] = [Why::HereHasRoom, Why::HostHasRoom, Why::Running, Why::HostComing, Why::AllMade, Why::CoolingDown, Why::NoRecipe];
-
 impl Why {
     pub fn said(self) -> &'static str {
         match self {

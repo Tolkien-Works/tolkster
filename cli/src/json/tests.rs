@@ -6,8 +6,6 @@ fn the_accessors_read_what_is_there_and_nothing_else() {
     let data = json!({ "a": { "id": "x", "empty": "", "null": null, "nodes": [1, 2] } });
     assert_eq!(non_empty(&data, "/a/id").as_deref(), Some("x"));
     assert_eq!(non_empty(&data, "/a/empty"), None);
-    assert_eq!(optional_text(&data, "/a/empty").as_deref(), Some(""));
-    assert_eq!(optional_text(&data, "/a/null"), None);
     assert_eq!(nodes(&data, "/a/nodes"), [json!(1), json!(2)]);
     assert!(nodes(&data, "/a/id").is_empty() && nodes(&data, "/missing").is_empty());
 }

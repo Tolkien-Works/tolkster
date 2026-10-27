@@ -307,23 +307,6 @@ impl Config {
         }
     }
 
-    // The review settings for a worker in a worktree of the repo `repo_name` names. It is
-    // asked only when some repo has its own, and a read that fails is an error rather than
-    // the global settings, which could bless a reviewer the repo left out.
-    pub fn review_in(&self, repo_name: &mut dyn FnMut() -> Result<Option<String>, Error>) -> Result<ReviewSettings, Error> {
-        if !self.per_repo_review() {
-            return Ok(self.review_for(None));
-        }
-        Ok(self.review_for(repo_name()?.as_deref()))
-    }
-
-    // Whether some repo's review settings differ from the global ones, so a worker's repo
-    // has to be known to pick them.
-    pub fn per_repo_review(&self) -> bool {
-        let global = self.review_for(None);
-        self.repos.0.iter().any(|e| self.review_for(Some(&e.repo)) != global)
-    }
-
     // Whether some repo's reviewers differ from the global ones, so a worker's repo has to
     // be known to pick them. Read through review_for, not from the entries' own fields.
     pub fn repo_reviewers_differ(&self) -> bool {

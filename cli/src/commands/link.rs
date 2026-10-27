@@ -12,11 +12,6 @@ use crate::error::Error;
 use crate::issue_state::{Review, in_review};
 use crate::linear::{add_session_link, with_token};
 
-// An external link on a session, e.g. the PR: what `tolkster pr create --session` adds.
-pub fn add_link(agent: &Agent, token: &str, session_id: &str, label: &str, url: &str) -> Result<(), Error> {
-    add_session_link(agent, token, session_id, label, url)
-}
-
 // `tolkster in-review <sessionId>`: prints {"review": "moved" | "unchanged" | "no review state"}.
 pub fn run_in_review(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     let parsed = parse(argv, &[], true)?;
@@ -36,7 +31,7 @@ pub fn run_in_review(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
 // PR was linked on the session, and what became of the issue's state. Neither undoes the
 // PR, so a failure is reported, on stderr and as `false` or "failed", not raised.
 pub fn pr_opened(agent: &Agent, session_id: &str, issue_id: &str, number: u64, url: &str) -> (bool, &'static str) {
-    let linked = with_token(agent, |token| add_link(agent, token, session_id, &format!("PR #{number}"), url));
+    let linked = with_token(agent, |token| add_session_link(agent, token, session_id, &format!("PR #{number}"), url));
     let linked = linked.map_err(|error| eprintln!("the PR wasn't linked on the session: {error}")).is_ok();
     let review = with_token(agent, |token| in_review(agent, token, issue_id)).map_or_else(
         |error| {

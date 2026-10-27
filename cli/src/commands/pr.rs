@@ -189,7 +189,7 @@ pub fn feedback(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
 }
 
 // Whose feedback counts on `repo`'s PRs: the reviewers of the Orca repo of the worktree
-// this runs in (Config::review_in), which must be a checkout of `repo`. Orca is asked
+// this runs in (Config::review_for), which must be a checkout of `repo`. Orca is asked
 // only when some repo has its own, and then a checkout it can't place is an error, never
 // the global reviewers, which could bless one the repo left out.
 fn blessed(repo: &str) -> Result<Vec<String>, Error> {
@@ -202,7 +202,7 @@ fn blessed(repo: &str) -> Result<Vec<String>, Error> {
     let worktrees = orca::list_worktrees(&mut run_command)?;
     let top = git::toplevel(&mut run_command)?;
     match orca::checkout_of(&worktrees, &top, repo) {
-        Some(here) => Ok(config.review_in(&mut || Ok(orca::repo_name(&orca::repos(&mut run_command, None)?, &here.repo_id)))?.reviewers),
+        Some(here) => Ok(config.review_for(orca::repo_name(&orca::repos(&mut run_command, None)?, &here.repo_id).as_deref()).reviewers),
         None => Err(Error::Failed(format!("this checkout isn't an Orca worktree of {repo}, so whose reviewers count can't be told"))),
     }
 }

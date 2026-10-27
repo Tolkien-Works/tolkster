@@ -147,8 +147,8 @@ pub(super) struct Acting {
 // Ambient: a job's calls reach its lanes (the outbox, the watchdog) from deep in whatever the
 // job runs, which no signature carries.
 thread_local! {
-    // A lane's thread's lanes, its watchdog entry, and whether it is the shared lane's.
-    pub(super) static LANE: RefCell<Option<(Arc<Lanes>, Acting, bool)>> = const { RefCell::new(None) };
+    // A lane's thread's lanes.
+    pub(super) static LANE: RefCell<Option<Arc<Lanes>>> = const { RefCell::new(None) };
 }
 
 // What `listen` saw in Orca, until `step` sends it, numbered on its connection.
@@ -171,7 +171,7 @@ pub(super) struct Outbox {
 // Runs `with` on the lanes of the run this thread is a lane of; None off a lane's thread,
 // where there is no connection to send anything on, and it is dropped.
 pub(super) fn with_lanes<R>(with: impl FnOnce(&Lanes) -> R) -> Option<R> {
-    LANE.with(|l| l.borrow().as_ref().map(|(lanes, _, _)| with(lanes)))
+    LANE.with(|l| l.borrow().as_ref().map(|lanes| with(lanes)))
 }
 
 // Called on a lane's thread, like every function below that puts or reads a lane's state.

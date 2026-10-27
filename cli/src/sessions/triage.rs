@@ -161,19 +161,9 @@ struct HistoryOf {
     history: StateHistory,
 }
 
-// The issue's history as triage reads it: the state types each entry moved it between,
-// nothing more. `identifier` is plain (triage::parse_candidate).
-pub fn state_history(agent: &Agent, identifier: &str) -> Result<StateHistory, Error> {
-    #[derive(Deserialize)]
-    struct Answer {
-        issue: Option<HistoryOf>,
-    }
-    let query = format!("query StateHistory($id: String!) {{ issue(id: $id) {{ {} }} }}", history_selection());
-    let answer: Answer = read_as(agent, &query, json!({ "id": identifier }))?;
-    answer.issue.map(|i| i.history).ok_or_else(|| Error::Failed(format!("Linear had no history for {identifier}")))
-}
-
-// `state_history` of up to `HISTORIES_PER_READ` issues in one query, in the order asked.
+// The history of up to `HISTORIES_PER_READ` issues as triage reads it, in one query, in the order
+// asked: the state types each entry moved the issue between, nothing more. Each identifier is
+// plain (triage::parse_candidate).
 pub fn state_histories(agent: &Agent, identifiers: &[IssueKey]) -> Result<Vec<StateHistory>, Error> {
     let aliases: Vec<String> = (0..identifiers.len()).map(|i| format!("h{i}")).collect();
     let declared: Vec<String> = aliases.iter().map(|a| format!("${a}: String!")).collect();

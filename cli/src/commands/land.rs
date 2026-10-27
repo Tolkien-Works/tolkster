@@ -5,9 +5,8 @@ use serde_json::json;
 use ureq::Agent;
 
 use crate::args::{self, Kind, parse};
-use crate::cli::{print_json, read_body};
+use crate::cli::{NOTHING_TO_DO, print_json, read_body};
 use crate::commands::asker::trusted_session;
-use crate::commands::link::add_link;
 use crate::config::{Config, files, owner};
 use crate::runtime::settings;
 use crate::error::Error;
@@ -20,7 +19,7 @@ use crate::plain::{BranchName, IssueKey, Sha};
 use crate::config::repo_map::Land;
 use crate::sessions::manual_merge;
 use crate::state::State;
-use crate::linear::with_token;
+use crate::linear::{add_session_link, with_token};
 
 const S: Kind = Kind::String;
 pub const OPTIONS: &[(&str, Kind)] = &[("session", S), ("title", S), ("body-file", S)];
@@ -30,7 +29,6 @@ pub const OPTIONS: &[(&str, Kind)] = &[("session", S), ("title", S), ("body-file
 const PUSH_TRIES: u32 = 4;
 // Exit 7, as `pr checks` exits on a PR that conflicts with its base.
 const CONFLICTS: u8 = 7;
-const NOTHING: u8 = 3;
 
 // Every check is made before the branch changes, and the push is the one write that can't be taken
 // back: what follows it is said in the JSON when it fails, and a run again pushes
@@ -65,7 +63,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     let (sha, pushed) = match land_branch(run, ".", &branch, &key, &format!("{title} ({})", key.upper()), &body, stop.as_deref())? {
         Landing::Nothing => {
             eprintln!("nothing to land: HEAD changes nothing origin's default branch lacks");
-            return Ok(NOTHING);
+            return Ok(NOTHING_TO_DO);
         }
         Landing::Conflicts(paths) => {
             print_json(&json!({ "conflicts": paths }))?;
@@ -82,7 +80,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
         |moved| if moved { "moved" } else { "unchanged" },
     );
     let label = format!("Commit {}", crate::plain::short_sha(&sha));
-    let linked = with_token(agent, |token| add_link(agent, token, session_id, &label, &url)).map_err(|error| eprintln!("the commit wasn't linked on the session: {error}")).is_ok();
+    let linked = with_token(agent, |token| add_session_link(agent, token, session_id, &label, &url)).map_err(|error| eprintln!("the commit wasn't linked on the session: {error}")).is_ok();
     // Every branch of the issue's: a worker continued on `<key>-2` was reset onto `<key>`'s.
     let (mut branches, listed) = match git::issue_branches(run, ".", &key) {
         Ok(branches) => (branches, true),

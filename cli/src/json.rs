@@ -44,14 +44,9 @@ pub fn str<'a>(value: &'a Value, pointer: &str) -> Option<&'a str> {
     value.pointer(pointer).and_then(Value::as_str)
 }
 
-// A string field that may be null, e.g. `/project/name` of an issue with no project.
-pub fn optional_text(value: &Value, pointer: &str) -> Option<String> {
-    str(value, pointer).map(String::from)
-}
-
 // A string field that may be missing or empty; empty counts as missing.
 pub fn non_empty(value: &Value, pointer: &str) -> Option<String> {
-    optional_text(value, pointer).filter(|v| !v.is_empty())
+    str(value, pointer).filter(|v| !v.is_empty()).map(String::from)
 }
 
 // The array at `pointer`, e.g. a connection's `/nodes`; empty when there is none.
