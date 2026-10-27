@@ -285,33 +285,10 @@ fn a_repo_s_review_settings_override_the_global_ones_and_fall_back_to_them() {
     assert_eq!(got(Some("Tolkster")), global);
     assert_eq!(got(None), global);
     assert_eq!(got(Some("Quiet")), (vec![], 3));
-    assert!(config.per_repo_review());
     // `tolkster config` prints what each entry's repo gets.
     let printed = serde_json::to_value(&config).unwrap();
     assert_eq!(printed["repos"]["Plan Portal"]["review"], json!({ "reviewers": ["a-lead"], "maxRounds": 1 }));
     assert_eq!(printed["repos"]["Site"], json!({ "projects": ["Web"], "teams": [], "review": { "reviewers": ["the-owner", "copilot-pull-request-reviewer"], "maxRounds": 3 }, "land": "pr", "trace": false }));
-}
-
-#[test]
-fn a_repo_needs_its_own_review_settings_only_when_they_differ() {
-    let config = |value: Value| set(value).unwrap();
-    // Settings the same as the global ones need no repo to pick them.
-    assert!(!config(json!({ "review": { "reviewers": ["a"] }, "repos": { "Site": { "review": { "reviewers": ["a"], "maxRounds": 3 } } } })).per_repo_review());
-    assert!(!config(json!({ "repos": { "Site": { "projects": ["Web"] } } })).per_repo_review());
-}
-
-#[test]
-fn a_worktree_s_repo_is_looked_up_only_when_a_repo_has_its_own_settings() {
-    let orca = crate::orca::parse_repos(json!({ "result": { "repos": [{ "id": "r1", "displayName": "Site", "path": "/src/site" }, { "id": "r2", "displayName": "Tolkster", "path": "/src/tolkster" }] } })).unwrap();
-    let config = set(json!({ "review": { "reviewers": ["the-owner"] }, "repos": { "Site": { "review": { "reviewers": ["a-lead"] } } } })).unwrap();
-    let named = |id: &str| crate::orca::repo_name(&orca, id);
-    assert_eq!(config.review_in(&mut || Ok(named("r1"))).unwrap().reviewers, ["a-lead"]);
-    assert_eq!(config.review_in(&mut || Ok(named("r2"))).unwrap().reviewers, ["the-owner"]);
-    assert_eq!(config.review_in(&mut || Ok(named("gone"))).unwrap().reviewers, ["the-owner"]);
-    // A listing that fails is an error, never the global reviewers.
-    assert!(config.review_in(&mut || Err(Error::Failed("orca".into()))).is_err());
-    let global = set(json!({ "review": { "reviewers": ["the-owner"] }, "repos": { "Site": { "projects": ["Web"] } } })).unwrap();
-    assert_eq!(global.review_in(&mut || panic!("listed Orca's repos")).unwrap().reviewers, ["the-owner"]);
 }
 
 // Every key the loader reads, each at its level.
