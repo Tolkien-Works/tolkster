@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use crate::cli::BRANCH;
 use crate::error::{Context, Error};
-use crate::plain::Sha;
+use crate::plain::{Sha, short_sha};
 use crate::sync::lock;
 use crate::trace::{self, Update as Said};
 
@@ -145,15 +145,11 @@ impl Tips {
         }
         self.held += 1;
         if self.held >= BASE_TRIES {
-            say(Said::StillNotHeld { after: short(after.as_str()).into() });
+            say(Said::StillNotHeld { after: short_sha(after.as_str()).into() });
             return false;
         }
         true
     }
-}
-
-fn short(sha: &str) -> &str {
-    sha.get(..7).unwrap_or(sha)
 }
 
 // One an exiting run still holds waits for the next start.

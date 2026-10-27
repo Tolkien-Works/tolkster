@@ -24,7 +24,7 @@ use ureq::Agent;
 pub use app::{App, AppReader, app, app_record, hold, push_token, revoke_held};
 pub use checks::{CheckState, Pushed, checks, head_checks};
 pub use feedback::feedback;
-pub use pr::{BranchPr, Branches, Head, Merged, Pr, PrState, Updated, first_page_pr, merge_pr, read_open_pr, read_pr, short_head, update_branch};
+pub use pr::{BranchPr, Branches, Head, Merged, Pr, PrState, Updated, first_page_pr, merge_pr, read_open_pr, read_pr, update_branch};
 #[cfg(test)]
 pub use pr::{Comment, Review, Thread, branch_prs};
 use cost::site;

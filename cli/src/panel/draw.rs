@@ -14,6 +14,7 @@ use super::frame::{Checks, MergeState, Pr, TriageState};
 use crate::machine::Outcome;
 use super::view::{Agent, Also, Budget, Link, Need, SlotRow, View};
 use crate::gateway::is_low;
+use crate::plain::short_sha;
 use crate::trace::{Mark, STUCK_AFTER};
 
 const AMBER: Color = Color::Yellow;
@@ -336,9 +337,9 @@ fn budgets(view: &View, width: usize) -> Vec<Line<'static>> {
 
 fn build(view: &View) -> Line<'static> {
     let u = &view.update;
-    let mut build = u.commit.as_deref().map_or("unstamped", short).to_string();
+    let mut build = u.commit.as_deref().map_or("unstamped", short_sha).to_string();
     match (u.behind, &u.base) {
-        (Some(true), Some(base)) => build.push_str(&format!(", main at {}", short(base))),
+        (Some(true), Some(base)) => build.push_str(&format!(", main at {}", short_sha(base))),
         (Some(false), _) => build.push_str(", current"),
         _ => {}
     }
@@ -460,10 +461,6 @@ fn rule(title: &str, right: Option<&str>, width: usize) -> Line<'static> {
 fn bar(filled: usize, of: usize, width: usize) -> String {
     let on = if of == 0 { 0 } else { (filled.min(of) * width).div_ceil(of) };
     format!("{}{}", "█".repeat(on), "░".repeat(width - on.min(width)))
-}
-
-fn short(sha: &str) -> &str {
-    sha.get(..7).unwrap_or(sha)
 }
 
 fn count(n: u64) -> String {

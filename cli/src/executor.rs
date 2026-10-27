@@ -13,7 +13,6 @@ use serde_json::{Value, json};
 use crate::brief::review_size;
 use crate::review_pass::ReviewSize;
 use crate::error::{Error, Waits};
-use crate::github;
 use crate::config::ladder::{Ladder, Launch};
 use crate::linear::{ActivityInput, ActivityType};
 use crate::machine::{Command, Finished, Resume};
@@ -574,7 +573,7 @@ fn round_in(call: &mut Call, &OnPr { repo, number, head, round, rebase_only }: &
         trace::event(Work::NoWorkerRecord { issue: command.identifier.clone(), pr: Some(number) });
         return Ok(Finished::failed());
     }
-    let short = head.map(github::short_head);
+    let short = head.map(crate::plain::short_sha);
     let what = review::picked_up(number, short, round);
     pick_up(call.ports, command, session_id, Some(&what), &format!("Picking up {what}…"))?;
     // The issue moves back to started with its worker; should the move fail, the worker is

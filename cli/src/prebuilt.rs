@@ -18,7 +18,7 @@ use ureq::Agent;
 use crate::config::{Files, host_credential};
 use crate::error::{Context, Error};
 use crate::exec::{Run, run_command};
-use crate::plain::Sha;
+use crate::plain::{Sha, short_sha};
 use crate::trade;
 
 // The swap's tries: a worker's `tolkster` run may hold the exe for a moment.
@@ -63,7 +63,7 @@ pub fn level(agent: &Agent, files: &Files, wanted: &Sha, argv: &[String]) -> Opt
     if commit().as_ref() == Some(wanted) || host_credential(files).is_none() {
         return None;
     }
-    let short = &wanted[..7];
+    let short = short_sha(wanted);
     if std::env::var_os(SWAPPED).is_some() {
         return Some(format!("the build fetched for {short} says it is another commit: running it"));
     }
@@ -97,7 +97,7 @@ pub fn own_exe() -> std::io::Result<PathBuf> {
 // way. Two workers starting together each swap in the same build.
 pub(crate) fn swap_in(exe: &Path, tarball: &[u8], wanted: &Sha, run: &mut Run) -> Result<(), Error> {
     let dir = exe.parent().ok_or_else(|| Error::Failed("the binary has no folder".into()))?;
-    let stage = dir.join(format!(".tolkster-{}-{}", &wanted[..7], std::process::id()));
+    let stage = dir.join(format!(".tolkster-{}-{}", short_sha(wanted), std::process::id()));
     let _ = fs::remove_dir_all(&stage);
     fs::create_dir_all(&stage).context(stage.display())?;
     let swapped = unpack_and_rename(&stage, exe, tarball, wanted, run);
