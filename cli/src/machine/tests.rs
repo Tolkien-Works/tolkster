@@ -1,9 +1,10 @@
 use super::*;
+use std::collections::BTreeMap;
 use crate::command::pr::{Open, pr_read};
 use crate::github::{Head, Pr, PrState};
 use crate::review::Checked;
 use crate::state::tests::contract;
-use crate::hosts::Heard;
+use crate::hosts::{Fleet, Heard};
 use crate::time::instant;
 
 fn names<T: Serialize>(items: &[T]) -> Vec<String> {
@@ -159,10 +160,12 @@ fn the_contract_fixture_has_each_report_as_this_writes_it() {
     let heard = |id: &str, cap, admitted, answering, ready: &[&str], held| Heard { id: id.into(), name: id.into(), cap, admitted, answering, ready: ready.iter().map(|p| p.to_string()).collect(), held };
     let projects = BTreeMap::from([("r1".to_string(), "github:acme/app".to_string())]);
     let fleet = Fleet { held: 1, hosts: vec![heard("mac", 2, true, true, &["github:acme/app"], 1), heard("pi", 0, false, false, &[], 0)], projects, recipes: BTreeMap::from([("r1".to_string(), "tolkster".to_string())]) };
-    assert_eq!(line(listing_line("2026-09-26T01:06:00.000Z", 3000, &agents, Some(&ids), &["mac".into()], &["mac".into(), "pi".into()], &BTreeMap::from([("mac".into(), 30)]), Some(&BTreeMap::from([("tolkster-1".into(), 1440)])), &fleet)), reports[16]);
-    assert_eq!(line(listing_line("2026-09-26T01:07:00.000Z", 0, &[], None, &[], &[], &BTreeMap::new(), None, &Fleet::default())), reports[17]);
+    let empty = Snapshot { began: std::time::Instant::now(), at: "2026-09-26T01:07:00.000Z".into(), agents: vec![], listed: None, hosts: vec![], paired: vec![], fleet: Fleet::default(), config: String::new(), idle_hosts: BTreeMap::new(), dormant: None };
+    let full = Snapshot { at: "2026-09-26T01:06:00.000Z".into(), agents: agents.to_vec(), listed: Some(ids), hosts: vec!["mac".into()], paired: vec!["mac".into(), "pi".into()], fleet, idle_hosts: BTreeMap::from([("mac".into(), 30)]), dormant: Some(BTreeMap::from([("tolkster-1".into(), 1440)])), ..empty.clone() };
+    assert_eq!(line(listing_line(&full, 3000)), reports[16]);
+    assert_eq!(line(listing_line(&empty, 0)), reports[17]);
     let too_many: Vec<String> = (0..=MAX_LISTED as u32).map(wt).collect();
-    assert_eq!(line(listing_line("2026-09-26T01:07:00.000Z", 0, &[], Some(&too_many), &[], &[], &BTreeMap::new(), None, &Fleet::default())), reports[17]);
+    assert_eq!(line(listing_line(&Snapshot { listed: Some(too_many), ..empty }, 0)), reports[17]);
     assert_eq!(c["machine"]["maxListed"].as_u64(), Some(MAX_LISTED as u64));
     assert_eq!(c["machine"]["maxSlots"].as_i64(), Some(MAX_SLOTS));
     // `evaluatePr`'s result, the machine's `PrRead`, from GitHub's times to the second.

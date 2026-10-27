@@ -608,7 +608,7 @@ impl Scheduler {
         if self.listing_sent.as_ref().is_some_and(|sent| sent.same(newest) && newest.began.saturating_duration_since(sent.began) < WATCH_EVERY) {
             return None;
         }
-        if let Err(error) = send(listing_line(&newest.at, u64::try_from(newest.began.elapsed().as_millis()).unwrap_or(u64::MAX), &newest.agents, newest.listed.as_deref(), &newest.hosts, &newest.paired, &newest.idle_hosts, newest.dormant.as_ref(), &newest.fleet)) {
+        if let Err(error) = send(listing_line(newest, u64::try_from(newest.began.elapsed().as_millis()).unwrap_or(u64::MAX))) {
             return Some(End::Retry(Ended::failed(Step::Listing, error)));
         }
         self.listing_sent = Some(newest.clone());

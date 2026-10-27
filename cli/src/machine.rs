@@ -7,20 +7,19 @@
 // numbers and times only, and every one that reaches a terminal, a command line or a post
 // has a plain shape, checked here (plain.rs).
 
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use crate::config::Config;
 use crate::config::repo_map::Entry as RepoEntry;
 use crate::error::{Error, Waits};
-use crate::hosts::{Fleet, MAX_SLOTS};
+use crate::hosts::MAX_SLOTS;
 use crate::gateway::Failure;
 use crate::plain::split_repo;
 use crate::json::{non_empty, str};
 use crate::plain::{BranchName, CommandId, Id, IssueKey, Sha, Terminal, Time, plain_host};
 use crate::trace;
+use crate::watch::Snapshot;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -598,9 +597,10 @@ pub const MAX_LISTED: usize = 1000;
 // `dormant` those whose destroy clock runs, by name, None while one is made, woken, slept or
 // destroyed (hosts.rs, `dormant`). `fleet`: this machine's workers and each paired host's
 // entry (hosts.rs, `Fleet`).
-#[allow(clippy::too_many_arguments)]
-pub fn listing_line(at: &str, elapsed_ms: u64, agents: &[(String, Observed)], listed: Option<&[String]>, hosts: &[String], paired: &[String], idle: &BTreeMap<String, i64>, dormant: Option<&BTreeMap<String, i64>>, fleet: &Fleet) -> String {
-    let agents: serde_json::Map<String, Value> = agents
+pub fn listing_line(snapshot: &Snapshot, elapsed_ms: u64) -> String {
+    let Snapshot { at, listed, hosts, paired, idle_hosts: idle, dormant, fleet, .. } = snapshot;
+    let agents: serde_json::Map<String, Value> = snapshot
+        .agents
         .iter()
         .filter(|(id, _)| worktree_shape(id))
         .filter_map(|(id, observed)| {
@@ -613,7 +613,7 @@ pub fn listing_line(at: &str, elapsed_ms: u64, agents: &[(String, Observed)], li
             Some((id.clone(), json!(state)))
         })
         .collect();
-    let listed: Option<Vec<&String>> = listed.filter(|ids| ids.len() <= MAX_LISTED).map(|ids| ids.iter().filter(|id| worktree_shape(id)).collect());
+    let listed: Option<Vec<&String>> = listed.as_deref().filter(|ids| ids.len() <= MAX_LISTED).map(|ids| ids.iter().filter(|id| worktree_shape(id)).collect());
     json!({ "report": "listing", "at": at, "elapsedMs": elapsed_ms, "agents": agents, "listed": listed, "hosts": hosts, "paired": paired, "idle": idle, "dormant": dormant, "fleet": fleet }).to_string()
 }
 
