@@ -5,10 +5,11 @@ use serde_json::json;
 use ureq::Agent;
 
 use crate::args::{self, Kind, parse};
-use crate::cli::{home_dir, print_json, read_body};
+use crate::cli::{print_json, read_body};
 use crate::commands::asker::trusted_session;
 use crate::commands::link::add_link;
-use crate::config::{self, Config, files, owner};
+use crate::config::{Config, files, owner};
+use crate::runtime::settings;
 use crate::error::Error;
 use crate::exec::{Run, run_command};
 use crate::git::{self, Push, Rebased};
@@ -49,7 +50,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     let repo = origin_repo(run, None)?;
     let files = files()?;
     let owner = owner(&files)?;
-    let config = config::config(&files, owner.clone(), &home_dir()?)?;
+    let config = settings(&files)?;
     let session = with_token(agent, |token| trusted_session(agent, token, session_id, &owner))?;
     let Some(issue) = session.issue else { return Err(Error::Failed(format!("session {session_id} has no issue"))) };
     let key = IssueKey::parse(&issue.identifier).ok_or_else(|| Error::Failed(format!("the session's issue has no plain identifier: {}", issue.identifier)))?;

@@ -12,8 +12,9 @@ use serde_json::{Map, Value, json};
 use ureq::Agent;
 
 use crate::args::{Kind, parse};
-use crate::cli::{config_file, credentials_file, home_dir, merge_json_file, print_json};
-use crate::config::{self, WorkerUrl, files, owner, unchecked_files};
+use crate::cli::{config_file, credentials_file, merge_json_file, print_json};
+use crate::config::{WorkerUrl, files, unchecked_files};
+use crate::runtime::settings;
 use crate::credential::git_env;
 use crate::exec::run_command;
 use crate::git;
@@ -150,7 +151,7 @@ pub fn identify(rest: &[String]) -> Result<u8, Error> {
         }
         (None, None, Some(co_author)) if parsed.positionals.is_empty() && parsed.flag("check") => {
             let files = files()?;
-            let settled = config::config(&files, owner(&files)?, &home_dir()?)?;
+            let settled = settings(&files)?;
             Ok(u8::from(settled.owner.co_author.as_deref() != Some(&co_author)))
         }
         _ => Err(shape()),
