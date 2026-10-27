@@ -31,7 +31,7 @@ fn reap_all(run: &mut Run, gh: &mut dyn Reader, forget: &mut Forget, tolksters: 
         asked += usize::from(p == "orca" && a.starts_with(&["worktree", "rm"]));
         run(p, a, d)
     };
-    let mut branches = Branches::new();
+    let mut branches = Branches::default();
     let reaped = reap(&mut Cli::alone(&mut watched), &mut read_prs(gh, &mut branches), forget, &worktrees, tolksters, dry_run)?;
     // It says it tried to remove a worktree exactly when it asked Orca to, whether or
     // not Orca managed it, and counts each one it tried.
@@ -603,7 +603,7 @@ fn a_worktree_whose_prs_found_the_budget_spent_fails_its_turn_with_the_wait() {
     let mut run = |p: &str, a: &[&str], d: Option<&str>| fake.answer(p, a, d);
     let worktrees = list_worktrees(&mut run).unwrap();
     let mut spent = FakeReader::new(|_, _| Err(Error::RateLimited { message: "GitHub's rate limit is spent: it resets in 300 s".into(), wait: Duration::from_secs(300) }));
-    let mut branches = Branches::new();
+    let mut branches = Branches::default();
     let reaped = reap(&mut Cli::alone(&mut run), &mut read_prs(&mut spent, &mut branches), &mut |_| Ok(()), &worktrees, |_| Ok(theirs(&["TW-1", "TW-2"])), false).unwrap();
     assert!(reaped.failed && !reaped.removed);
     assert_eq!(reaped.spent, Some(Duration::from_secs(300)));

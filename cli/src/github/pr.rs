@@ -376,10 +376,6 @@ pub struct Branches {
 }
 
 impl Branches {
-    pub fn new() -> Branches {
-        Branches::default()
-    }
-
     pub fn prs(&mut self, gh: &mut dyn Reader, repo: &str, branch: &str) -> Result<&[BranchPr], Error> {
         let key = (repo.to_ascii_lowercase(), branch.to_string());
         if !self.read.contains_key(&key) {

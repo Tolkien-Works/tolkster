@@ -76,7 +76,7 @@ fn a_branch_is_read_in_one_light_query_that_reap_and_review_both_filter() {
         reads += 1;
         if reads == 1 { Err(Error::Failed("down".into())) } else { Ok(data.clone()) }
     });
-    let mut branches = Branches::new();
+    let mut branches = Branches::default();
     assert!(branches.prs(&mut gh, "o/n", "tw-1").is_err());
     assert_eq!(branches.prs(&mut gh, "o/n", "tw-1").unwrap().len(), 3);
     assert_eq!(branches.prs(&mut gh, "O/N", "tw-1").unwrap().len(), 3);

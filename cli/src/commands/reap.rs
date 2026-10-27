@@ -28,7 +28,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     let health = Health::default();
     let mut orca = Cli::paired(&mut run, &health).at_once(run_command);
     let worktrees = orca.worktrees()?;
-    let (mut gh, mut branches) = (AppReader::new(agent, &|| {}), Branches::new());
+    let (mut gh, mut branches) = (AppReader::new(agent, &|| {}), Branches::default());
     let tolksters = |identifiers: &[IssueKey]| tolksters_issues(agent, identifiers, &owner_id);
     // Each worktree removed has its worker record forgotten.
     let reaped = reap(&mut orca, &mut read_prs(&mut gh, &mut branches), &mut |id| state.forget_worker(id), &worktrees, tolksters, parsed.flag("dry-run"))?;
@@ -43,7 +43,7 @@ pub fn run_here(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     let step = Step::parse(&parse(argv, &STEP_OPTIONS, false)?)?;
     let owner_id = owner(&files()?)?;
     let mut run = run_command;
-    let (mut gh, mut branches) = (AppReader::new(agent, &|| {}), Branches::new());
+    let (mut gh, mut branches) = (AppReader::new(agent, &|| {}), Branches::default());
     let health = Health::default();
     let tolksters = |identifiers: &[IssueKey]| tolksters_issues(agent, identifiers, &owner_id);
     let (lines, removed) = reap_here(&mut Cli::new(&mut run, &health).at_once(run_command), &step, &mut read_prs(&mut gh, &mut branches), tolksters)?;
