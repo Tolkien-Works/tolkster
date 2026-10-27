@@ -6,6 +6,17 @@ reviews:
   review_status: false
   collapse_walkthrough: true
   request_changes_workflow: false
+  pre_merge_checks:
+    docstrings:
+      mode: "off"
+  finishing_touches:
+    docstrings:
+      enabled: false
+  path_instructions:
+    - path: "**"
+      instructions: >-
+        Never ask for docstrings or doc comments, or point out missing ones. A comment
+        here states only what the code can't.
 knowledge_base:
   code_guidelines:
     filePatterns:
