@@ -316,8 +316,16 @@ fn opened(created: Value, host: Option<&str>) -> Result<String, Error> {
 pub fn run_on(run: &mut Run, host: &str, worktree: &str, command: &CommandLine) -> Result<Option<i32>, Error> {
     let created = orca_json(run, &at(Some(host), &["terminal", "create", "--worktree", worktree, "--command", command.as_str(), "--json"]))?;
     let handle = Handle::check(&opened(created, Some(host))?)?;
-    let code = exit_code(run, &handle);
-    let _ = close_terminal(run, &handle);
+    exited_then_closed(run, &handle)
+}
+
+// The exit code of the terminal `handle` once it exits, None where it still ran at
+// EXIT_WITHIN_MS or Orca names none. Its tab stays listed once it has exited, and a stale
+// handle is no harm, so it is closed after; one still running, or whose wait failed, is closed
+// too, so a retry's step never runs beside it.
+fn exited_then_closed(run: &mut Run, handle: &Handle) -> Result<Option<i32>, Error> {
+    let code = exit_code(run, handle);
+    let _ = close_terminal(run, handle);
     Ok(match code? {
         Waited::Exited(code) => code,
         Waited::Open | Waited::Stale => None,
