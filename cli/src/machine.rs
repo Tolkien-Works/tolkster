@@ -316,7 +316,6 @@ pub fn parse_base(value: &Value) -> Option<Result<BaseTip, String>> {
     })
 }
 
-
 fn envelope(value: &Value) -> Result<Command, String> {
     let id = str(value, "/id").and_then(CommandId::parse).ok_or("a command without a plain id")?;
     let kind = value.get("kind").and_then(|k| serde_json::from_value::<Kind>(k.clone()).ok()).ok_or_else(|| format!("{id}: a command of an unknown kind"))?;

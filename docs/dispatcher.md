@@ -418,7 +418,7 @@ session, thought, action or plan. A thread a session began on is that session's.
   (`setup::set_up`), and gives its agent that worktree and issue. A stop, and a relaunch
   before it launches, close every terminal there, so a setup Orca doesn't list as an agent
   yet never starts `claude` after the one or beside the other.
-- A terminal's line or command, an Orca call's worktree, git's commits and branches
+- A terminal's line or command, an Orca call's worktree ID, git's commits and branches
   (`git.rs`) and the IDs a claim's name is built from take a `plain.rs` type, never a
   `&str`: only `plain.rs` builds one, from a value of its shape, so an unchecked one doesn't
   compile.
