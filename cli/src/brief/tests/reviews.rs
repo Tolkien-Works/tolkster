@@ -32,7 +32,7 @@ fn an_estimate_set_after_the_claim_leaves_the_review_as_it_was() {
 #[test]
 fn a_rounds_push_follows_whether_copilot_reviews_each_push() {
     let flat = |text: &str| text.split_whitespace().collect::<Vec<_>>().join(" ");
-    let round = |copilot| flat(&Brief { copilot, ..brief(false, &[]) }.render_round());
+    let round = |copilot| flat(&Brief { copilot, ..brief(false, &[]) }.render_beside(Beside::Round));
     let each = round(CopilotReview::OnEachPush);
     assert!(each.contains(&flat(ROUND_PUSH_WITH_COPILOT)) && !each.contains(&flat(ROUND_PUSH_LIGHT)));
     for (copilot, lead) in [(CopilotReview::Off, NO_COPILOT_LEAD), (CopilotReview::OnOpening, OPENING_COPILOT_LEAD)] {

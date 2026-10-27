@@ -243,24 +243,14 @@ impl Brief<'_> {
         self.fill(work.replace(STARTUP, startup.strip_suffix('\n').unwrap_or(&startup)))
     }
 
-    pub fn render_round(&self) -> String {
-        self.fill(ROUND.to_string())
-    }
-
-    pub fn render_rebase(&self) -> String {
-        self.fill(REBASE.to_string())
-    }
-
-    pub fn render_deep(&self) -> String {
-        self.fill(DEEP.to_string())
-    }
-
-    pub fn render_reviewer(&self) -> String {
-        self.fill(REVIEWER.to_string())
-    }
-
-    pub fn render_last_round(&self) -> String {
-        self.fill(LAST_ROUND.to_string())
+    pub fn render_beside(&self, which: Beside) -> String {
+        self.fill(match which {
+            Beside::Round => ROUND,
+            Beside::Rebase => REBASE,
+            Beside::Deep => DEEP,
+            Beside::Reviewer => REVIEWER,
+            Beside::LastRound => LAST_ROUND,
+        }.to_string())
     }
 
     fn fill(&self, text: String) -> String {
@@ -350,25 +340,32 @@ pub fn path(briefs_dir: &str, repo: &str, name: &str) -> PathBuf {
     Path::new(&briefs_dir.replace("<repo>", repo)).join(format!("{name}.md"))
 }
 
-// The names, for `path`, of the briefs beside the work brief.
-pub fn round_name(identifier: &str) -> String {
-    format!("{identifier}-round")
+// The briefs beside the work brief, named for `path`.
+#[derive(Clone, Copy)]
+pub enum Beside {
+    Round,
+    Rebase,
+    Deep,
+    Reviewer,
+    LastRound,
 }
 
-pub fn rebase_name(identifier: &str) -> String {
-    format!("{identifier}-rebase")
-}
+impl Beside {
+    pub const ALL: [Beside; 5] = [Beside::Round, Beside::Rebase, Beside::Deep, Beside::Reviewer, Beside::LastRound];
 
-pub fn deep_name(identifier: &str) -> String {
-    format!("{identifier}-deep")
-}
+    fn suffix(self) -> &'static str {
+        match self {
+            Beside::Round => "round",
+            Beside::Rebase => "rebase",
+            Beside::Deep => "deep",
+            Beside::Reviewer => "reviewer",
+            Beside::LastRound => "last-round",
+        }
+    }
 
-pub fn reviewer_name(identifier: &str) -> String {
-    format!("{identifier}-reviewer")
-}
-
-pub fn last_round_name(identifier: &str) -> String {
-    format!("{identifier}-last-round")
+    pub fn name(self, identifier: &str) -> String {
+        format!("{identifier}-{}", self.suffix())
+    }
 }
 
 // Plain, with no quote in it, so it is typed into a terminal as it is. It has the worker read
