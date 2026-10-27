@@ -17,7 +17,7 @@ export const PRUNE_EVERY_MS = 60 * 60 * 1000;
 // The version of every shape stored here. Stored state is reset, never migrated: a change to
 // any stored shape bumps it, and the Durable Object's first start on the new code resets
 // storage (relay.ts), so no load path reads an older shape.
-export const STORAGE_VERSION = 8;
+export const STORAGE_VERSION = 9;
 const VERSION = "storage-version";
 
 // What a reset keeps of a stored entry, by its key: the value to write back in its place, or
