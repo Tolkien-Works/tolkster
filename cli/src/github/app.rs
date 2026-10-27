@@ -228,17 +228,17 @@ impl<'a> AppReader<'a> {
         AppReader { agent, app: None, own: Tokens::default(), beat }
     }
 
-    fn token(&mut self, repo: &str) -> Result<(String, String, String), Error> {
-        self.token_as(repo, Purpose::Read)
+    fn loaded(&mut self) -> Result<Arc<App>, Error> {
+        if self.app.is_none() {
+            self.app = Some(app()?);
+        }
+        Ok(self.app.clone().expect("loaded above"))
     }
 
     fn token_as(&mut self, repo: &str, purpose: Purpose) -> Result<(String, String, String), Error> {
         let (owner, name) = split_repo(repo).ok_or_else(|| Error::Usage(format!("not a GitHub repo, owner/name: {repo}")))?;
         let (owner, name) = (owner.to_string(), name.to_string());
-        if self.app.is_none() {
-            self.app = Some(app()?);
-        }
-        let app = self.app.clone().expect("loaded above");
+        let app = self.loaded()?;
         let token = token_for(self.agent, &app, (&owner, &name), purpose, now_secs(), self.beat, &mut self.own)?;
         Ok((token, owner, name))
     }
@@ -259,7 +259,7 @@ impl<'a> AppReader<'a> {
 
 impl Reader for AppReader<'_> {
     fn graphql(&mut self, repo: &str, query: &str, variables: Value) -> Result<Value, Error> {
-        let (token, _, _) = self.token(repo)?;
+        let (token, _, _) = self.token_as(repo, Purpose::Read)?;
         (self.beat)();
         graphql_with(self.agent, &token, query, variables, &READ_HEADERS)
     }
@@ -273,16 +273,13 @@ impl Reader for AppReader<'_> {
     }
 
     fn app(&mut self) -> Result<AppRecord, Error> {
-        if self.app.is_none() {
-            self.app = Some(app()?);
-        }
-        let app = self.app.clone().expect("loaded above");
+        let app = self.loaded()?;
         (self.beat)();
         app_record(self.agent, &app.files)
     }
 
     fn get(&mut self, repo: &str, path: &str) -> Result<Value, Error> {
-        let (token, owner, name) = self.token(repo)?;
+        let (token, owner, name) = self.token_as(repo, Purpose::Read)?;
         (self.beat)();
         let (status, response) = get(self.agent, &format!("{API}/repos/{owner}/{name}/{path}"), &token)?;
         if status != 200 {
@@ -300,10 +297,8 @@ impl Drop for AppReader<'_> {
 
 // The Worker's record of the app (`AppRecord`), read with credentials.json's `files`.
 pub fn app_record(agent: &Agent, files: &Files) -> Result<AppRecord, Error> {
-    decode(trade::github_app(agent, files)?, APP_RECORD)
+    decode(trade::github_app(agent, files)?, "the Worker's answer to githubApp")
 }
-
-pub(super) const APP_RECORD: &str = "the Worker's answer to githubApp";
 
 // One GraphQL call: its `data`. GitHub answers most refusals with 200 and `errors`,
 // whose messages hold no credential.
