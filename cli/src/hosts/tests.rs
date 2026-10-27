@@ -239,9 +239,9 @@ fn an_idle_machine_has_no_agent_working_and_a_napping_one_takes_no_worker() {
         assert_eq!(idle(&config, &pacing, &answering, &[checkout.clone(), resting]).len(), 1, "{state}");
     }
     let exited = Worktree { agents: Vec::new(), ..worktree.clone() };
-    assert!(rests(&[checkout.clone(), exited.clone()], std::slice::from_ref(&record), "id-nap-1", NOW));
+    assert!(resting(&[checkout.clone(), exited.clone()], "id-nap-1") && !launched_lately(std::slice::from_ref(&record), "id-nap-1", NOW));
     let (_, setting_up) = worker(Some("id-nap-1"), 1, false, 60 * 1000);
-    assert!(!rests(&[checkout, exited], &[setting_up], "id-nap-1", NOW));
+    assert!(resting(&[checkout, exited], "id-nap-1") && launched_lately(&[setting_up], "id-nap-1", NOW));
     config.machines.insert("nap-1".into(), machine(true, true));
     assert!(idle(&config, &pacing, &answering, &[]).is_empty());
     config.machines.insert("nap-1".into(), machine(true, false));

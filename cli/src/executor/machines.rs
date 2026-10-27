@@ -60,8 +60,9 @@ pub fn wake_host(config: &Config, ports: &mut Ports, command: &Command, name: &s
 // sleep, checked here: it answers, it is an awake machine that sleeps, holding an admitted
 // credential, read afresh, so no make, wake or `host rm` is at work on it, and with placement
 // and workers' commands stopped no agent works on it, nor is a worker set up or acted for
-// there lately (`hosts::rests`). `asleep` says whether it went to sleep; one found otherwise
-// is kept, and the nap machine's clock begins again once a listing names it idle.
+// there lately (`hosts::resting`, `hosts::launched_lately`). `asleep` says whether it went to
+// sleep; one found otherwise is kept, and the nap machine's clock begins again once a listing
+// names it idle.
 pub fn suspend_host(config: &Config, ports: &mut Ports, host: &str) -> Result<Finished, Error> {
     // The port knows which hosts answer once it has listed.
     ports.orca.worktrees()?;
@@ -88,7 +89,7 @@ pub fn suspend_host(config: &Config, ports: &mut Ports, host: &str) -> Result<Fi
     // A host gone silent during the listing holds worktrees unknown, never none.
     let mut rests = || {
         let worktrees = orca.worktrees()?;
-        Ok(orca.answering().iter().any(|answering| answering.id == host) && hosts::rests(&worktrees, &records.workers()?, host, now_ms()) && !pacing.acted_lately(host, now_ms()))
+        Ok(orca.answering().iter().any(|answering| answering.id == host) && hosts::resting(&worktrees, host) && !hosts::launched_lately(&records.workers()?, host, now_ms()) && !pacing.acted_lately(host, now_ms()))
     };
     let asleep = ports.machines.suspend(&name, host, &mut rests)?;
     if !asleep {
