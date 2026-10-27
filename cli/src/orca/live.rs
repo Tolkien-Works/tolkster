@@ -221,7 +221,7 @@ impl<'r> Cli<'r> {
         Ok(Listing { worktrees: ps.worktrees(host), listed: ps.complete(host), terminals: parse_terminals(terminals, host)? })
     }
 
-    fn worktree_at<'w>(&mut self, worktree_id: &'w str) -> Result<(Option<&'w str>, String), Error> {
+    fn worktree_at<'w>(&mut self, worktree_id: &'w WorktreeId) -> Result<(Option<&'w str>, String), Error> {
         let (host, worktree) = worktree_at(worktree_id);
         Ok((self.known(host)?, worktree))
     }
@@ -233,7 +233,7 @@ impl<'r> Cli<'r> {
 
     // Whether the agents in a worktree wait at a prompt now, its host read afresh for a send's
     // retry: a caller decides on its own read of the host (`waits_in`).
-    fn waits_now(&mut self, worktree_id: &str) -> Result<bool, Error> {
+    fn waits_now(&mut self, worktree_id: &WorktreeId) -> Result<bool, Error> {
         let listing = self.listing_at(worktree_id)?;
         Ok(listing.worktree(worktree_id).is_some_and(|w| waits_in(w, &listing.terminals)))
     }
@@ -252,7 +252,7 @@ struct MadeWorktree {
 }
 
 impl Orca for Cli<'_> {
-    fn agents_listed(&mut self) -> Result<(Vec<Worktree>, Option<Vec<String>>), Error> {
+    fn agents_listed(&mut self) -> Result<(Vec<Worktree>, Option<Vec<WorktreeId>>), Error> {
         let (mut worktrees, mut listed) = (Vec::new(), Some(Vec::new()));
         let hosts = self.every_host()?;
         for (host, answers) in self.ask_every(hosts, &[&PS])? {
@@ -266,7 +266,7 @@ impl Orca for Cli<'_> {
         }
         Ok((worktrees, listed))
     }
-    fn listed(&mut self) -> Result<Option<Vec<String>>, Error> {
+    fn listed(&mut self) -> Result<Option<Vec<WorktreeId>>, Error> {
         let (_, listed) = self.agents_listed()?;
         Ok(listed.filter(|_| self.unanswered.is_empty()))
     }
@@ -319,7 +319,7 @@ impl Orca for Cli<'_> {
     // printed nothing about, is never sent again. A `Proof::Turn` send waits on its receipt for
     // the turn it starts, and a re-issue with Orca's request ID replays that receipt, never the
     // line.
-    fn send(&mut self, worktree_id: &str, handle: &Handle, line: &Line, proof: Proof) -> Result<Typed, Error> {
+    fn send(&mut self, worktree_id: &WorktreeId, handle: &Handle, line: &Line, proof: Proof) -> Result<Typed, Error> {
         let (host, handle) = self.terminal_at(handle)?;
         let args = match proof {
             Proof::Turn => at(host, &["terminal", "send", "--terminal", handle, "--enter", "--text", line.as_str(), "--wait-submit", SUBMIT_WITHIN_S, "--json"]),
@@ -367,10 +367,10 @@ impl Orca for Cli<'_> {
     // The agent's first prompt goes on its command line (harness::command), never typed: a line typed
     // before the agent can take it is lost, and no wait on the terminal proves it can. That
     // its first turn began is for the machine to see.
-    fn start_agent(&mut self, worktree_id: &str, command: &CommandLine) -> Result<String, Error> {
+    fn start_agent(&mut self, worktree_id: &WorktreeId, command: &CommandLine) -> Result<String, Error> {
         self.open(worktree_id, None, command)
     }
-    fn open(&mut self, worktree_id: &str, title: Option<&str>, command: &CommandLine) -> Result<String, Error> {
+    fn open(&mut self, worktree_id: &WorktreeId, title: Option<&str>, command: &CommandLine) -> Result<String, Error> {
         let (host, selector) = self.worktree_at(worktree_id)?;
         let mut args = vec!["terminal", "create", "--worktree", &selector];
         if let Some(title) = title {
@@ -382,7 +382,7 @@ impl Orca for Cli<'_> {
         let created: Value = serde_json::from_str(&call(self.run, &at(host, &args))?).map_err(|error| Error::Orca(format!("orca terminal create printed no JSON: {error}")))?;
         opened(created, host).map_err(|error| Error::Orca(error.to_string()))
     }
-    fn run_to_exit(&mut self, worktree_id: &str, command: &CommandLine) -> Result<Option<i32>, Error> {
+    fn run_to_exit(&mut self, worktree_id: &WorktreeId, command: &CommandLine) -> Result<Option<i32>, Error> {
         let handle = Handle::check(&self.open(worktree_id, None, command)?)?;
         exited_then_closed(self.run, &handle)
     }
@@ -390,13 +390,13 @@ impl Orca for Cli<'_> {
         self.terminal_at(handle)?;
         close_terminal(self.run, handle)
     }
-    fn close_all(&mut self, worktree_id: &str) -> Result<(), Error> {
+    fn close_all(&mut self, worktree_id: &WorktreeId) -> Result<(), Error> {
         let (host, worktree) = self.worktree_at(worktree_id)?;
         call(self.run, &at(host, &["terminal", "close", "--worktree", &worktree, "--all", "--json"])).map(|_| ())
     }
     // On a host, by `--host runtime:<id>` rather than `--environment`: Orca makes it on that
     // host's setup of the project.
-    fn create_worktree(&mut self, place: Place, name: &str, options: &[&str]) -> Result<(String, String), Error> {
+    fn create_worktree(&mut self, place: Place, name: &str, options: &[&str]) -> Result<(WorktreeId, String), Error> {
         let (host, made_by) = match place {
             Place::Here { repo_id } => (None, ["--repo".to_string(), by_id(repo_id)]),
             Place::On { host, project } => (self.known(Some(host))?, ["--project".to_string(), project.to_string()]),
@@ -414,18 +414,19 @@ impl Orca for Cli<'_> {
             decode(orca_json(self.run, &args)?, "Orca's answer to worktree create")?
         };
         let made = created.result.worktree;
-        Ok((hosted(host, &made.id), made.path))
+        let id = WorktreeId::hosted(host, &made.id).ok_or_else(|| Error::Failed("Orca's answer to worktree create named a worktree ID that isn't plain".into()))?;
+        Ok((id, made.path))
     }
-    fn remove_worktree(&mut self, worktree_id: &str) -> Result<(), Error> {
+    fn remove_worktree(&mut self, worktree_id: &WorktreeId) -> Result<(), Error> {
         let (host, worktree) = self.worktree_at(worktree_id)?;
         let _writing = git::writing();
         call(self.run, &at(host, &["worktree", "rm", "--worktree", &worktree, "--force", "--json"])).map(|_| ())
     }
-    fn name_worktree(&mut self, worktree_id: &str, display_name: &str) -> Result<(), Error> {
+    fn name_worktree(&mut self, worktree_id: &WorktreeId, display_name: &str) -> Result<(), Error> {
         let (host, worktree) = self.worktree_at(worktree_id)?;
         call(self.run, &at(host, &["worktree", "set", "--worktree", &worktree, "--display-name", display_name, "--json"])).map(|_| ())
     }
-    fn set_status(&mut self, worktree_id: &str, status: Status) -> Result<(), Error> {
+    fn set_status(&mut self, worktree_id: &WorktreeId, status: Status) -> Result<(), Error> {
         let (host, worktree) = self.worktree_at(worktree_id)?;
         call(self.run, &at(host, &["worktree", "set", "--worktree", &worktree, "--workspace-status", status.id(), "--json"])).map(|_| ())
     }

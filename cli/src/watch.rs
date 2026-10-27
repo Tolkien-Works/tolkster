@@ -13,8 +13,8 @@ use std::time::{Duration, Instant};
 use crate::error::Error;
 use crate::hosts::Fleet;
 use crate::machine::{Observed, Snapshot};
-use crate::orca::{Terminal, Worktree, agent_panes, candidates, host_of, waits_in};
-use crate::plain::split_terminal;
+use crate::orca::{Terminal, Worktree, agent_panes, candidates, waits_in};
+use crate::plain::{WorktreeId, split_terminal};
 use crate::sync::lock;
 use crate::time::{iso, now_ms};
 use crate::trace::{self, Watch};
@@ -42,12 +42,12 @@ pub fn idle_in(worktree: &Worktree, terminals: &[Terminal]) -> Option<String> {
 }
 
 // Each candidate worktree with an agent waiting at a prompt (`waits_in`).
-pub fn waiting_worktrees(worktrees: &[Worktree], terminals: &[Terminal]) -> HashSet<String> {
+pub fn waiting_worktrees(worktrees: &[Worktree], terminals: &[Terminal]) -> HashSet<WorktreeId> {
     candidates(worktrees).into_iter().filter(|w| waits_in(w, terminals)).map(|w| w.id.clone()).collect()
 }
 
 // Each candidate worktree whose open agents all sit idle (`idle_in`).
-pub fn idle_worktrees(worktrees: &[Worktree], terminals: &[Terminal]) -> HashSet<String> {
+pub fn idle_worktrees(worktrees: &[Worktree], terminals: &[Terminal]) -> HashSet<WorktreeId> {
     candidates(worktrees).into_iter().filter(|w| idle_in(w, terminals).is_some()).map(|w| w.id.clone()).collect()
 }
 
@@ -74,19 +74,19 @@ impl Since {
 // was incomplete (orca::complete_listing).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Agents {
-    pub running: HashSet<String>,
-    pub open: HashSet<String>,
+    pub running: HashSet<WorktreeId>,
+    pub open: HashSet<WorktreeId>,
     pub terminals: HashSet<String>,
     // The agents' terminals, each waited on for its exit.
     pub agents: HashSet<String>,
-    pub idle: HashSet<String>,
-    pub waiting: HashSet<String>,
-    pub listed: Option<HashSet<String>>,
+    pub idle: HashSet<WorktreeId>,
+    pub waiting: HashSet<WorktreeId>,
+    pub listed: Option<HashSet<WorktreeId>>,
     // The worktrees Orca listed that aren't workers', not linked to an issue
     // (orca::candidates): a snapshot names none, as the owner's other checkouts are none of
     // the Durable Object's. Only a worktree known to be another's is left out, so a listing
     // that failed or was cut off never hides a worker's agent.
-    pub others: HashSet<String>,
+    pub others: HashSet<WorktreeId>,
     // The paired hosts that answered.
     pub hosts: Vec<String>,
     // Every host paired, answering or not, but for one unpaired whose issues still show
@@ -109,7 +109,7 @@ impl Agents {
     // terminals aren't waited on (`agents`) until it answers again.
     pub fn keeping(mut self, before: &Agents, silent: &[String]) -> Agents {
         let on = |host: Option<&str>| host.is_some_and(|host| silent.iter().any(|s| s == host));
-        let worktree_on = |id: &&String| on(host_of(id));
+        let worktree_on = |id: &&WorktreeId| on(id.host());
         let terminal_on = |handle: &&String| on(split_terminal(handle).and_then(|(host, _)| host));
         for (now, then) in [(&mut self.running, &before.running), (&mut self.open, &before.open), (&mut self.idle, &before.idle), (&mut self.waiting, &before.waiting), (&mut self.others, &before.others)] {
             now.extend(then.iter().filter(worktree_on).cloned());
@@ -123,12 +123,12 @@ impl Agents {
 // conversations checkout with no terminal open. An agent's exit is the first snapshot's.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Missed {
-    pub closed: Vec<String>,
+    pub closed: Vec<WorktreeId>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Seen {
-    Closed(String),
+    Closed(WorktreeId),
     Ended(String),
 }
 
@@ -218,7 +218,7 @@ impl Watcher {
                         if closed.chain(ended).any(|seen| found.send(seen).is_err()) {
                             return;
                         }
-                        let mut listed: Option<Vec<String>> = now.listed.as_ref().map(|ids| ids.difference(&now.others).cloned().collect());
+                        let mut listed: Option<Vec<WorktreeId>> = now.listed.as_ref().map(|ids| ids.difference(&now.others).cloned().collect());
                         if let Some(ids) = listed.as_mut() {
                             ids.sort();
                         }
@@ -419,13 +419,13 @@ fn wait_for(handle: String, wait: Wait, waits: Weak<Waits>, nudge: Sender<Nudge>
 }
 
 // Each worktree an agent runs in, as working, idle or waiting, sorted.
-pub fn states_of(now: &Agents) -> Vec<(String, Observed)> {
-    let state = |id: &String| match () {
+pub fn states_of(now: &Agents) -> Vec<(WorktreeId, Observed)> {
+    let state = |id: &WorktreeId| match () {
         () if now.waiting.contains(id) => Observed::AgentWaiting,
         () if now.idle.contains(id) => Observed::AgentIdle,
         () => Observed::AgentWorking,
     };
-    let mut states: Vec<(String, Observed)> = now.running.iter().map(|id| (id.clone(), state(id))).collect();
+    let mut states: Vec<(WorktreeId, Observed)> = now.running.iter().map(|id| (id.clone(), state(id))).collect();
     states.sort_by(|a, b| a.0.cmp(&b.0));
     states
 }

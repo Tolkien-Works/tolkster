@@ -2,7 +2,7 @@ use std::fmt;
 
 use super::event::{Line, Parts, listed, pr};
 use crate::error::Error;
-use crate::plain::IssueKey;
+use crate::plain::{IssueKey, WorktreeId};
 
 // A triage start (command.rs, triage.rs).
 #[derive(Debug, PartialEq)]
@@ -71,7 +71,7 @@ pub enum Reaping {
     NoWorktreeHere { branch: String },
     RuleNotBorne { branch: String },
     AgentRunning,
-    GoneRecordStays { worktree_id: String, error: Error },
+    GoneRecordStays { worktree_id: WorktreeId, error: Error },
     Failed(Error),
 }
 

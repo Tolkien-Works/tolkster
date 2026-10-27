@@ -122,8 +122,16 @@ fn a_terminal_handle_splits_into_its_host_and_orca_s_own_handle_as_the_worker_ta
 
 #[test]
 fn a_host_s_own_orca_knows_its_worktree_without_the_host() {
-    assert_eq!(orca_worktree("mac@r1::/Users/sam/a::b@c").as_deref(), Some("r1::/Users/sam/a::b@c"));
-    assert_eq!(orca_worktree("r1::D:/wt/tw-1").as_deref(), Some("r1::D:/wt/tw-1"));
+    let remote = WorktreeId::from("mac@r1::/Users/sam/a::b@c");
+    assert_eq!((remote.host(), remote.own().as_str(), remote.path()), (Some("mac"), "r1::/Users/sam/a::b@c", "/Users/sam/a::b@c"));
+    assert_eq!(WorktreeId::hosted(Some("mac"), &remote.own()), Some(remote));
+    let here = WorktreeId::from("r1::D:/wt/tw-1");
+    assert_eq!((here.host(), here.own()), (None, here.clone()));
+    assert_eq!(WorktreeId::hosted(Some("bad host"), &here), None);
+    // Decoded where it arrives, a value of another shape is refused without being echoed.
+    assert_eq!(serde_json::from_str::<WorktreeId>("\"mac@r1::/wt\"").ok(), Some("mac@r1::/wt".into()));
+    let refused = serde_json::from_str::<WorktreeId>("\"/Users/sam/wt\"").unwrap_err().to_string();
+    assert!(refused.contains("isn't plain") && !refused.contains("sam"), "{refused}");
 }
 
 // What a host's shell line can't carry goes as hex, which decodes only to what it came from.

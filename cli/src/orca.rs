@@ -13,7 +13,7 @@ use crate::git;
 use crate::health::Health;
 use crate::github::remote_repo;
 use crate::json::decode;
-use crate::plain::{split_worktree, CommandLine, Line, Terminal as Handle};
+use crate::plain::{CommandLine, Line, Terminal as Handle, WorktreeId};
 use crate::trace;
 
 mod call;
@@ -42,11 +42,6 @@ const REFUSED_PAUSE: Duration = Duration::from_secs(5);
 // A wait for a terminal's exit is asked again after this: a wait left behind by a `listen`
 // that has ended, which Windows doesn't end with it, lasts no longer.
 const EXIT_WITHIN_MS: &str = "300000";
-
-// The host a worktree's ID names, None for this machine.
-pub fn host_of(worktree_id: &str) -> Option<&str> {
-    split_worktree(worktree_id).and_then(|(host, _, _)| host)
-}
 
 pub fn origin_repo(run: &mut Run, path: Option<&str>) -> Result<String, Error> {
     let url = git::origin_url(run, path)?;
@@ -362,7 +357,7 @@ pub fn ready_on(run: &mut Run, host: &str, project: Option<&str>) -> Result<bool
 
 // The comment on a worktree's card in Orca, which the owner reads there. One with a
 // leading dash is refused, so Orca never reads it as an option.
-pub fn set_comment(run: &mut Run, worktree_id: &str, comment: &str) -> Result<(), Error> {
+pub fn set_comment(run: &mut Run, worktree_id: &WorktreeId, comment: &str) -> Result<(), Error> {
     if comment.starts_with('-') {
         return Err(Error::Usage("a worktree's comment can't start with a dash".into()));
     }
@@ -387,7 +382,7 @@ impl Status {
     }
 }
 
-pub fn set_status(run: &mut Run, worktree_id: &str, status: Status) -> Result<(), Error> {
+pub fn set_status(run: &mut Run, worktree_id: &WorktreeId, status: Status) -> Result<(), Error> {
     let (host, worktree) = worktree_at(worktree_id);
     call(run, &at(host, &["worktree", "set", "--worktree", &worktree, "--workspace-status", status.id(), "--json"])).map(|_| ())
 }
@@ -403,7 +398,7 @@ struct ShownWorktree {
 }
 
 // The worktree card's comment as Orca has it now; None when it has none.
-pub fn comment(run: &mut Run, worktree_id: &str) -> Result<Option<String>, Error> {
+pub fn comment(run: &mut Run, worktree_id: &WorktreeId) -> Result<Option<String>, Error> {
     let (host, worktree) = worktree_at(worktree_id);
     let shown: Answer<Shown> = orca_read(run, &at(host, &["worktree", "show", "--worktree", &worktree, "--json"]))?;
     Ok(Some(shown.result.worktree.comment).filter(|comment| !comment.is_empty()))
@@ -551,9 +546,9 @@ pub trait Orca {
     }
     // The worktrees with their agents, and every worktree's ID when each host's listing is
     // complete (`complete_listing`), from one listing per host.
-    fn agents_listed(&mut self) -> Result<(Vec<Worktree>, Option<Vec<String>>), Error>;
+    fn agents_listed(&mut self) -> Result<(Vec<Worktree>, Option<Vec<WorktreeId>>), Error>;
     // Every worktree's ID, None when the listing is incomplete.
-    fn listed(&mut self) -> Result<Option<Vec<String>>, Error>;
+    fn listed(&mut self) -> Result<Option<Vec<WorktreeId>>, Error>;
     // Forgets which hosts answered this run's listings, so the next asks each again: one woken
     // since was silent.
     fn ask_again(&mut self) {}
@@ -566,8 +561,8 @@ pub trait Orca {
     // One unpaired or silent fails at once, as a call aimed at it does.
     fn listing_on(&mut self, host: Option<&str>) -> Result<Listing, Error>;
     // The host a worktree's ID or a terminal's handle names, listed there alone.
-    fn listing_at(&mut self, worktree_id: &str) -> Result<Listing, Error> {
-        self.listing_on(host_of(worktree_id))
+    fn listing_at(&mut self, worktree_id: &WorktreeId) -> Result<Listing, Error> {
+        self.listing_on(worktree_id.host())
     }
     fn listing_of(&mut self, handle: &Handle) -> Result<Listing, Error> {
         self.listing_on(terminal_at(handle).0)
@@ -585,8 +580,8 @@ pub trait Orca {
         self.silent().into_iter().map(|h| h.id).collect()
     }
     // Whether the host `worktree_id` is on answered this run: this machine always.
-    fn heard(&self, worktree_id: &str) -> bool {
-        host_of(worktree_id).is_none_or(|host| self.answering().iter().any(|h| h.id == host))
+    fn heard(&self, worktree_id: &WorktreeId) -> bool {
+        worktree_id.host().is_none_or(|host| self.answering().iter().any(|h| h.id == host))
     }
     // Whether `project`, or with None any project, is set up and ready on `host`, whose
     // `tolkster` reads its config.json as `reads_config` asks it.
@@ -595,27 +590,27 @@ pub trait Orca {
     fn ready_projects(&mut self, host: &str, reads_config: ReadsConfig) -> Result<Vec<String>, Error>;
     // One line typed into a running agent, never twice. Only a `Proof::Turn` send waits for
     // the turn to begin.
-    fn send(&mut self, worktree_id: &str, handle: &Handle, line: &Line, proof: Proof) -> Result<Typed, Error>;
+    fn send(&mut self, worktree_id: &WorktreeId, handle: &Handle, line: &Line, proof: Proof) -> Result<Typed, Error>;
     // One line typed into a terminal no agent runs in, a warm turn's (`converse`), whose
     // program reads it: Orca's acceptance is all there is to wait on.
     fn type_line(&mut self, handle: &Handle, line: &Line) -> Result<(), Error>;
     // An agent launched in a new terminal on `command`, which starts it (setup.rs): its handle.
-    fn start_agent(&mut self, worktree_id: &str, command: &CommandLine) -> Result<String, Error>;
+    fn start_agent(&mut self, worktree_id: &WorktreeId, command: &CommandLine) -> Result<String, Error>;
     // A terminal opened in a worktree on `command`: its handle.
-    fn open(&mut self, worktree_id: &str, title: Option<&str>, command: &CommandLine) -> Result<String, Error>;
+    fn open(&mut self, worktree_id: &WorktreeId, title: Option<&str>, command: &CommandLine) -> Result<String, Error>;
     // A terminal opened in a worktree on `command`, a `tolkster` step that ends its shell, and
     // waited on until it exits, then closed: its exit code, None where it still ran at
     // EXIT_WITHIN_MS or Orca names none.
-    fn run_to_exit(&mut self, worktree_id: &str, command: &CommandLine) -> Result<Option<i32>, Error>;
+    fn run_to_exit(&mut self, worktree_id: &WorktreeId, command: &CommandLine) -> Result<Option<i32>, Error>;
     fn close(&mut self, handle: &Handle) -> Result<(), Error>;
     // Every terminal in a worktree closed.
-    fn close_all(&mut self, worktree_id: &str) -> Result<(), Error>;
+    fn close_all(&mut self, worktree_id: &WorktreeId) -> Result<(), Error>;
     // A new worktree's ID and path, at `place`.
-    fn create_worktree(&mut self, place: Place, name: &str, options: &[&str]) -> Result<(String, String), Error>;
-    fn remove_worktree(&mut self, worktree_id: &str) -> Result<(), Error>;
-    fn name_worktree(&mut self, worktree_id: &str, display_name: &str) -> Result<(), Error>;
+    fn create_worktree(&mut self, place: Place, name: &str, options: &[&str]) -> Result<(WorktreeId, String), Error>;
+    fn remove_worktree(&mut self, worktree_id: &WorktreeId) -> Result<(), Error>;
+    fn name_worktree(&mut self, worktree_id: &WorktreeId, display_name: &str) -> Result<(), Error>;
     // The worktree's card moved to `status`'s column on the board.
-    fn set_status(&mut self, worktree_id: &str, status: Status) -> Result<(), Error>;
+    fn set_status(&mut self, worktree_id: &WorktreeId, status: Status) -> Result<(), Error>;
     // The shell beside Orca, for git alone: every call to `orca` is one of the above.
     fn shell(&mut self) -> &mut Run<'_>;
 }

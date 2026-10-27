@@ -95,7 +95,7 @@ fn a_start_that_never_began_on_a_host_is_launched_again_there() {
     let config = full_here(&world, &records);
     world.borrow_mut().ready_on = vec!["mac".into()];
     carried(&config, &linear, &records, &mut fake::Orca::on(&world), &start_on("mac")).unwrap();
-    fake::Orca::on(&world).close_all(ON_MAC).unwrap();
+    fake::Orca::on(&world).close_all(&WorktreeId::from(ON_MAC)).unwrap();
     let named = order("c-start-2", Order::StartWorker { session_id: "s1".into(), orchestrate: false, worktree_id: Some(ON_MAC.into()), host: None });
     // Its origin not read is no answer either way: it is tried again.
     let origin = world.borrow_mut().worktrees.iter_mut().find(|w| w.id == ON_MAC).unwrap().origin.take();

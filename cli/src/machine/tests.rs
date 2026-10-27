@@ -64,7 +64,7 @@ fn the_contract_fixture_has_every_kind_of_command_and_each_reads() {
         assert!(command.order.is_ok(), "{}: {:?}", command.id, command.order);
     }
     let by_id = |id: &str| commands.iter().find(|c| c.id == id).unwrap();
-    let worktree = "r1::D:/wt/tw-1".to_string();
+    let worktree = WorktreeId::from("r1::D:/wt/tw-1");
     // The wait a queued request's command carries, which the Worker's `queued` sends.
     let queued = by_id("c-13").queued.as_ref().unwrap();
     assert_eq!((queued.waiting, queued.blockers.len()), (Waiting::Blockers, 2));
@@ -120,7 +120,7 @@ fn the_contract_fixture_has_each_report_as_this_writes_it() {
     let first = parse_command(&c["commands"][0]).unwrap().unwrap();
     assert_eq!(line(result_line(&first, &Finished::ok(json!({ "stateType": "started" })))), reports[0]);
     for (i, observed) in OBSERVED.into_iter().enumerate() {
-        assert_eq!(line(observation_line(observed, "r1::D:/wt/tw-1", i as u64 + 1)), reports[i + 1]);
+        assert_eq!(line(observation_line(observed, &WorktreeId::from("r1::D:/wt/tw-1"), i as u64 + 1)), reports[i + 1]);
     }
     assert_eq!(line(turn_ended_line("s-2", 6)), reports[6]);
     let without_op = |mut v: Value| {
@@ -146,16 +146,15 @@ fn the_contract_fixture_has_each_report_as_this_writes_it() {
     assert_eq!(merge_asked("0a1b-2c", "s-1", 0), None);
     let start = parse_command(c["commands"].as_array().unwrap().iter().find(|c| c["kind"] == "startTriage").unwrap()).unwrap().unwrap();
     assert_eq!(line(result_line(&start, &Finished::ok(json!({ "session": { "id": "s-3", "terminal": "term_2", "issues": ["TW-1", "TW-2"] }, "waiting": ["0a1b2c3d-0000-4000-8000-000000000002"] })))), reports[14]);
-    assert_eq!(without_op(agent_state(Observed::AgentIdle, "r1::D:/wt/tw-1", "2026-09-26T01:05:00.000Z", 2000).unwrap()), reports[12]);
-    assert_eq!(without_op(agent_state(Observed::AgentBackground, "r1::D:/wt/tw-1", "2026-09-26T01:05:00.000Z", 2000).unwrap()), reports[20]);
-    // Only Orca's listing says a worktree is gone, and a value of the wrong shape is never sent.
-    assert_eq!(agent_state(Observed::WorktreeGone, "r1::D:/wt/tw-1", "2026-09-26T01:05:00.000Z", 0), None);
-    assert_eq!(agent_state(Observed::AgentIdle, "no-separator", "2026-09-26T01:05:00.000Z", 0), None);
-    assert_eq!(agent_state(Observed::AgentIdle, "r1::D:/wt/tw-1", "soon", 0), None);
+    assert_eq!(without_op(agent_state(Observed::AgentIdle, &"r1::D:/wt/tw-1".into(), "2026-09-26T01:05:00.000Z", 2000).unwrap()), reports[12]);
+    assert_eq!(without_op(agent_state(Observed::AgentBackground, &"r1::D:/wt/tw-1".into(), "2026-09-26T01:05:00.000Z", 2000).unwrap()), reports[20]);
+    // Only Orca's listing says a worktree is gone, and a time of the wrong shape is never sent.
+    assert_eq!(agent_state(Observed::WorktreeGone, &"r1::D:/wt/tw-1".into(), "2026-09-26T01:05:00.000Z", 0), None);
+    assert_eq!(agent_state(Observed::AgentIdle, &"r1::D:/wt/tw-1".into(), "soon", 0), None);
     // Orca's listing whole; one cut off, or too long, names no worktree as listed.
-    let wt = |n: u32| format!("r1::D:/wt/tw-{n}");
-    let agents = [(wt(1), Observed::AgentWorking), (wt(2), Observed::AgentIdle), (wt(3), Observed::AgentWaiting), ("no-separator".into(), Observed::AgentWorking)];
-    let ids: Vec<String> = (1..=4).map(wt).chain(["no-separator".to_string()]).collect();
+    let wt = |n: u32| WorktreeId::from(format!("r1::D:/wt/tw-{n}").as_str());
+    let agents = [(wt(1), Observed::AgentWorking), (wt(2), Observed::AgentIdle), (wt(3), Observed::AgentWaiting)];
+    let ids: Vec<WorktreeId> = (1..=4).map(wt).collect();
     let heard = |id: &str, cap, admitted, answering, ready: &[&str], held| Heard { id: id.into(), name: id.into(), cap, admitted, answering, ready: ready.iter().map(|p| p.to_string()).collect(), held };
     let projects = BTreeMap::from([("r1".to_string(), "github:acme/app".to_string())]);
     let fleet = Fleet { held: 1, hosts: vec![heard("mac", 2, true, true, &["github:acme/app"], 1), heard("pi", 0, false, false, &[], 0)], projects, recipes: BTreeMap::from([("r1".to_string(), "tolkster".to_string())]) };
@@ -163,7 +162,7 @@ fn the_contract_fixture_has_each_report_as_this_writes_it() {
     let full = Snapshot { at: "2026-09-26T01:06:00.000Z".into(), agents: agents.to_vec(), listed: Some(ids), hosts: vec!["mac".into()], paired: vec!["mac".into(), "pi".into()], fleet, idle_hosts: BTreeMap::from([("mac".into(), 30)]), dormant: Some(BTreeMap::from([("tolkster-1".into(), 1440)])), ..empty.clone() };
     assert_eq!(line(listing_line(&full, 3000)), reports[16]);
     assert_eq!(line(listing_line(&empty, 0)), reports[17]);
-    let too_many: Vec<String> = (0..=MAX_LISTED as u32).map(wt).collect();
+    let too_many: Vec<WorktreeId> = (0..=MAX_LISTED as u32).map(wt).collect();
     assert_eq!(line(listing_line(&Snapshot { listed: Some(too_many), ..empty }, 0)), reports[17]);
     assert_eq!(c["machine"]["maxListed"].as_u64(), Some(MAX_LISTED as u64));
     assert_eq!(c["machine"]["maxSlots"].as_i64(), Some(MAX_SLOTS));

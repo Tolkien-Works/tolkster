@@ -9,6 +9,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 
 use crate::machine::{Command, Finished, Observed, Outcome, result_line};
 use crate::panel;
+use crate::plain::WorktreeId;
 use crate::sync::{lock, wait};
 use crate::watch::{Nudge, Since};
 
@@ -153,7 +154,7 @@ thread_local! {
 
 // What `listen` saw in Orca, until `step` sends it, numbered on its connection.
 pub(super) enum Outgoing {
-    Worktree(Observed, String),
+    Worktree(Observed, WorktreeId),
     TurnEnded(String),
     // A terminal Orca stopped listing, by its handle: the Durable Object finds what it ran.
     TerminalClosed(String),
@@ -197,8 +198,8 @@ pub fn terminal_closed(terminal: &str) {
     outbox(|o| o.observations.push(Outgoing::TerminalClosed(terminal.into())));
 }
 
-pub fn observed(seen: Observed, worktree_id: &str) {
-    outbox(|o| o.observations.push(Outgoing::Worktree(seen, worktree_id.into())));
+pub fn observed(seen: Observed, worktree_id: &WorktreeId) {
+    outbox(|o| o.observations.push(Outgoing::Worktree(seen, worktree_id.clone())));
 }
 
 pub fn turn_ended(session_id: &str) {

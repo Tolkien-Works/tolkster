@@ -27,10 +27,10 @@ fn a_command_acts_only_on_its_own_issues_things() {
         let rows: Vec<Value> = row.clone().into_iter().collect();
         Ok(crate::exec::Output::ok(json!({ "result": { "worktrees": rows, "terminals": [] } }).to_string()))
     };
-    assert!(worktree_on_issue(&mut crate::orca::Cli::alone(&mut listing(Some(worktree(Some("tw-1"))))), &command, "repo::/wt/a").unwrap().is_some());
-    assert!(worktree_on_issue(&mut crate::orca::Cli::alone(&mut listing(Some(worktree(Some("TW-2"))))), &command, "repo::/wt/a").is_err());
-    assert!(worktree_on_issue(&mut crate::orca::Cli::alone(&mut listing(Some(worktree(None)))), &command, "repo::/wt/a").is_err());
-    assert!(worktree_on_issue(&mut crate::orca::Cli::alone(&mut listing(None)), &command, "repo::/wt/a").unwrap().is_none());
+    assert!(worktree_on_issue(&mut crate::orca::Cli::alone(&mut listing(Some(worktree(Some("tw-1"))))), &command, &WorktreeId::from("repo::/wt/a")).unwrap().is_some());
+    assert!(worktree_on_issue(&mut crate::orca::Cli::alone(&mut listing(Some(worktree(Some("TW-2"))))), &command, &WorktreeId::from("repo::/wt/a")).is_err());
+    assert!(worktree_on_issue(&mut crate::orca::Cli::alone(&mut listing(Some(worktree(None)))), &command, &WorktreeId::from("repo::/wt/a")).is_err());
+    assert!(worktree_on_issue(&mut crate::orca::Cli::alone(&mut listing(None)), &command, &WorktreeId::from("repo::/wt/a")).unwrap().is_none());
 }
 
 // The stop overtakes the start's result: a stop runs in the issue's urgent lane, beside the
@@ -49,7 +49,7 @@ fn a_stop_mid_start_closes_the_agent_the_start_launched() {
     assert_eq!(stopped.into_inner().unwrap().unwrap().outcome, Outcome::Ok);
     assert_eq!((started.outcome, &started.detail["madeWorktree"], &started.detail["launched"], &started.detail["worktree"]["id"]), (Outcome::Ok, &json!(true), &json!(true), &json!(WORKTREE)));
     assert_eq!((world.borrow().launched.len(), world.borrow().closed.clone()), (1, vec!["term_1".to_string()]));
-    assert!(world.borrow().agents_in(WORKTREE).is_empty());
+    assert!(world.borrow().agents_in(&WorktreeId::from(WORKTREE)).is_empty());
     assert_eq!(records.workers.borrow()[WORKTREE].session_id, "s1");
     assert_eq!(*linear.started.borrow(), ["i1"]);
     assert_eq!(carried(&config, &linear, &records, &mut fake::Orca::on(&world), &stop("c-stop", None)).unwrap().outcome, Outcome::Ok);
@@ -68,9 +68,9 @@ fn a_stop_before_the_launch_is_sent_again_and_closes_the_agent() {
     lane.after_create = Some(Box::new(|| assert_eq!(carried(&config, &linear, &records, &mut fake::Orca::on(&world), &stop("c-stop", None)).unwrap().outcome, Outcome::Ok)));
     let started = carried(&config, &linear, &records, &mut lane, &start()).unwrap();
     drop(lane);
-    assert_eq!((&started.detail["launched"], world.borrow().closed.len(), world.borrow().agents_in(WORKTREE).len()), (&json!(true), 0, 1));
+    assert_eq!((&started.detail["launched"], world.borrow().closed.len(), world.borrow().agents_in(&WorktreeId::from(WORKTREE)).len()), (&json!(true), 0, 1));
     assert_eq!(carried(&config, &linear, &records, &mut fake::Orca::on(&world), &stop("c-stop-2", Some(WORKTREE))).unwrap().outcome, Outcome::Ok);
-    assert!(world.borrow().agents_in(WORKTREE).is_empty());
+    assert!(world.borrow().agents_in(&WorktreeId::from(WORKTREE)).is_empty());
     assert_eq!(linear.posted("response").len(), 2);
 }
 
@@ -135,17 +135,17 @@ fn a_start_that_never_began_is_launched_again_on_its_brief() {
     let config = fake::config(&briefs("start-never-began"));
     let (linear, records, world) = fakes();
     carried(&config, &linear, &records, &mut fake::Orca::on(&world), &start()).unwrap();
-    fake::Orca::on(&world).close_all(WORKTREE).unwrap();
+    fake::Orca::on(&world).close_all(&WorktreeId::from(WORKTREE)).unwrap();
     let next = order("c-start-2", Order::StartWorker { session_id: "s1".into(), orchestrate: false, worktree_id: Some(WORKTREE.into()), host: None });
     let again = carried(&config, &linear, &records, &mut fake::Orca::on(&world), &next).unwrap();
     assert_eq!((again.outcome, &again.detail["madeWorktree"], &again.detail["launched"], &again.detail["worktree"]["id"]), (Outcome::Ok, &json!(false), &json!(true), &json!(WORKTREE)));
     {
         let w = world.borrow();
-        assert_eq!((w.created.len(), w.removed.len(), w.launched.len(), w.agents_in(WORKTREE).len()), (1, 0, 2, 1));
+        assert_eq!((w.created.len(), w.removed.len(), w.launched.len(), w.agents_in(&WorktreeId::from(WORKTREE)).len()), (1, 0, 2, 1));
         assert_eq!((w.launched[1].0.as_str(), &w.launched[1].1), (WORKTREE, &w.launched[0].1));
     }
     assert_eq!(records.workers.borrow()[WORKTREE].session_id.as_str(), "s1");
-    fake::Orca::on(&world).close_all(WORKTREE).unwrap();
+    fake::Orca::on(&world).close_all(&WorktreeId::from(WORKTREE)).unwrap();
     let unnamed = carried(&config, &linear, &records, &mut fake::Orca::on(&world), &order("c-start-unnamed", Order::StartWorker { session_id: "s1".into(), orchestrate: false, worktree_id: None, host: None })).unwrap();
     assert_eq!((&unnamed.detail["launched"], world.borrow().launched.len()), (&json!(false), 2));
     records.workers.borrow_mut().clear();
@@ -183,7 +183,7 @@ fn a_worktree_with_no_workers_record_is_never_relaunched() {
     let config = fake::config(&briefs("no-record"));
     let (linear, records, world) = fakes();
     carried(&config, &linear, &records, &mut fake::Orca::on(&world), &start()).unwrap();
-    fake::Orca::on(&world).close_all(WORKTREE).unwrap();
+    fake::Orca::on(&world).close_all(&WorktreeId::from(WORKTREE)).unwrap();
     world.borrow_mut().worktrees.iter_mut().for_each(|w| w.agents.clear());
     records.workers.borrow_mut().clear();
     let resume = order("c-resume", Order::ResumeWorker { session_id: "s1".into(), why: Resume::Message });
@@ -203,10 +203,10 @@ fn a_message_is_typed_only_to_a_working_agent() {
     carried(&config, &linear, &records, &mut fake::Orca::on(&world), &start()).unwrap();
     let deliver = order("c-deliver", Order::DeliverMessage { worktree_id: WORKTREE.into(), session_id: Some("s1".into()), comment: false });
     let deliver_now = || carried(&config, &linear, &records, &mut fake::Orca::on(&world), &deliver);
-    world.borrow_mut().set_agents(WORKTREE, "waiting");
+    world.borrow_mut().set_agents(&WorktreeId::from(WORKTREE), "waiting");
     assert_eq!(deliver_now().unwrap().outcome, Outcome::Held);
     assert!(world.borrow().typed.is_empty());
-    world.borrow_mut().set_agents(WORKTREE, "working");
+    world.borrow_mut().set_agents(&WorktreeId::from(WORKTREE), "working");
     world.borrow_mut().send = fake::Send::Unproven;
     let taken = deliver_now().unwrap();
     assert_eq!((taken.outcome, taken.detail.get("typed")), (Outcome::Ok, None));
@@ -283,11 +283,11 @@ fn a_command_reads_each_orca_listing_once() {
     assert_eq!(started, [PS, REPOS, AT]);
     let deliver = order("c-deliver", Order::DeliverMessage { worktree_id: WORKTREE.into(), session_id: Some("s1".into()), comment: false });
     assert_eq!(spawned(&world, || assert_eq!(now(&deliver).unwrap().outcome, Outcome::Ok)), [AT]);
-    world.borrow_mut().set_agents(WORKTREE, "waiting");
+    world.borrow_mut().set_agents(&WorktreeId::from(WORKTREE), "waiting");
     assert_eq!(spawned(&world, || assert_eq!(now(&deliver).unwrap().outcome, Outcome::Held)), [AT]);
     let round = order("c-round", Order::StartRound { repo: "acme/tolkster".into(), number: 7, head: None, round: Some(1), session_id: Some("s1".into()), rebase_only: false });
     assert_eq!(spawned(&world, || assert_eq!(now(&round).unwrap().outcome, Outcome::Held)), [PS, AT]);
-    world.borrow_mut().set_agents(WORKTREE, "working");
+    world.borrow_mut().set_agents(&WorktreeId::from(WORKTREE), "working");
     assert_eq!(spawned(&world, || assert_eq!(now(&round).unwrap().outcome, Outcome::Ok)), [PS, AT]);
     // A line Orca typed nothing of, as the agent exited, is followed by its host read again
     // before the worker is brought back, which lists the repos once.
@@ -295,10 +295,10 @@ fn a_command_reads_each_orca_listing_once() {
     assert_eq!(spawned(&world, || assert_eq!(now(&round).unwrap().detail["launched"], json!(true))), [PS, AT, AT, REPOS]);
     // One working is left; one held at a prompt is closed, as an idle one is.
     let close = order("c-close", Order::CloseAgent { worktree_id: WORKTREE.into() });
-    world.borrow_mut().set_agents(WORKTREE, "working");
+    world.borrow_mut().set_agents(&WorktreeId::from(WORKTREE), "working");
     assert_eq!(spawned(&world, || assert_eq!(now(&close).unwrap().outcome, Outcome::Ok)), [AT]);
     assert_eq!(world.borrow().closed.len(), 0);
-    world.borrow_mut().set_agents(WORKTREE, "waiting");
+    world.borrow_mut().set_agents(&WorktreeId::from(WORKTREE), "waiting");
     assert_eq!(spawned(&world, || assert_eq!(now(&close).unwrap().outcome, Outcome::Ok)), [AT]);
     assert_eq!(world.borrow().closed.len(), 1);
     assert!(world.borrow().listed_at.iter().all(Option::is_none));
@@ -428,7 +428,7 @@ fn an_agent_with_an_empty_handle_runs_and_is_never_typed_to_or_closed() {
     let round = order("c-round", Order::StartRound { repo: "acme/tolkster".into(), number: 7, head: None, round: Some(1), session_id: Some("s1".into()), rebase_only: false });
     let refused = now(&round).unwrap();
     assert_eq!((refused.outcome, &refused.detail["unnamed"]), (Outcome::Failed, &json!(true)));
-    world.borrow_mut().set_agents(WORKTREE, "waiting");
+    world.borrow_mut().set_agents(&WorktreeId::from(WORKTREE), "waiting");
     assert_eq!(now(&round).unwrap().outcome, Outcome::Held);
     let world = world.borrow();
     assert!(world.typed.is_empty());

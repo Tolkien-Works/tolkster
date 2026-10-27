@@ -11,7 +11,7 @@ use crate::request::Issue;
 use crate::github::CopilotReview;
 use crate::harness;
 use crate::orca::{Orca, Repo, Worktree, find_repo, primary_checkout};
-use crate::plain::{BranchName, CommandLine, Id, IssueKey, Line, RepoName, Sha, Time};
+use crate::plain::{BranchName, CommandLine, Id, IssueKey, Line, RepoName, Sha, Time, WorktreeId};
 use crate::config::repo_map::{Land, Missing, Place, RepoMap};
 use crate::review_pass::{ReviewSize, copilot_name, size_against, size_name};
 
@@ -423,7 +423,7 @@ pub struct Checkouts {
 pub struct Found {
     pub repo_id: String,
     pub repo: String,
-    pub primary: String,
+    pub primary: WorktreeId,
     // The primary checkout's path, where git runs.
     pub path: String,
 }
@@ -442,7 +442,7 @@ impl Checkouts {
 
 // Builds its line before it writes, and writes before it opens, so a failure leaves at most
 // a brief that nothing reads. `prompt` is `reading_prompt`.
-pub fn open_session(orca: &mut dyn Orca, write: &mut dyn FnMut(&Path, &str) -> Result<(), Error>, primary: &str, title: &str, path: &Path, prompt: &Line, text: &str) -> Result<String, Error> {
+pub fn open_session(orca: &mut dyn Orca, write: &mut dyn FnMut(&Path, &str) -> Result<(), Error>, primary: &WorktreeId, title: &str, path: &Path, prompt: &Line, text: &str) -> Result<String, Error> {
     let command = with_prompt(harness::command(None)?, prompt)?;
     write(path, text)?;
     orca.open(primary, Some(title), &command)

@@ -8,8 +8,8 @@ use crate::error::{Error, Unsent};
 use crate::executor;
 use crate::linear::ActivityType;
 use crate::machine::{Command, Finished, Observed};
-use crate::orca::{self, Listing, Orca, Proof, Typed, Worktree, agent_terminal, agent_worktrees, host_of, open_terminals, waits_in};
-use crate::plain::{Id, Terminal};
+use crate::orca::{self, Listing, Orca, Proof, Typed, Worktree, agent_terminal, agent_worktrees, open_terminals, waits_in};
+use crate::plain::{Id, Terminal, WorktreeId};
 use crate::ports::Ports;
 use crate::scheduler::{observed, turn_ended};
 use crate::trace::{self, Purpose, Work};
@@ -19,7 +19,7 @@ use crate::watch::idle_in;
 use super::notice::post;
 use super::{on_issue, session_on_issue, thread_on_issue};
 
-pub(super) fn deliver_message(ports: &mut Ports, command: &Command, worktree_id: &str, session_id: Option<&Id>, comment: bool) -> Result<Finished, Error> {
+pub(super) fn deliver_message(ports: &mut Ports, command: &Command, worktree_id: &WorktreeId, session_id: Option<&Id>, comment: bool) -> Result<Finished, Error> {
     if let Some(session_id) = session_id {
         session_on_issue(ports, command, session_id)?;
     }
@@ -55,7 +55,7 @@ pub(super) fn deliver_message(ports: &mut Ports, command: &Command, worktree_id:
     })
 }
 
-pub(super) fn stop_worker(ports: &mut Ports, command: &Command, worktree_id: Option<&str>, session_id: Option<&Id>) -> Result<Finished, Error> {
+pub(super) fn stop_worker(ports: &mut Ports, command: &Command, worktree_id: Option<&WorktreeId>, session_id: Option<&Id>) -> Result<Finished, Error> {
     if let Some(session_id) = session_id {
         session_on_issue(ports, command, session_id)?;
     }
@@ -96,7 +96,7 @@ pub(super) fn stop_turn(ports: &mut Ports, command: &Command, session_id: &Id, t
     Ok(Finished::ok(json!({})))
 }
 
-pub(super) fn observe(ports: &mut Ports, command: &Command, worktree_ids: &[String], session_id: Option<&Id>, thread: bool) -> Result<Finished, Error> {
+pub(super) fn observe(ports: &mut Ports, command: &Command, worktree_ids: &[WorktreeId], session_id: Option<&Id>, thread: bool) -> Result<Finished, Error> {
     // The turn's session is read, and checked to be the issue's, before anything is reported.
     let turn_open = match session_id {
         Some(session_id) => Some(turn_terminal(ports, command, session_id, thread)?.is_some()),
@@ -109,7 +109,7 @@ pub(super) fn observe(ports: &mut Ports, command: &Command, worktree_ids: &[Stri
     Ok(Finished::ok(json!({})))
 }
 
-pub(super) fn close_idle_agent(ports: &mut Ports, command: &Command, worktree_id: &str) -> Result<Finished, Error> {
+pub(super) fn close_idle_agent(ports: &mut Ports, command: &Command, worktree_id: &WorktreeId) -> Result<Finished, Error> {
     // Only an agent Orca shows idle (`done`) or held at a prompt is closed: one whose first turn
     // began after the machine gave up on it is its worker after all, and the reap keeps its worktree.
     if let Some((_, listing)) = worktree_on_issue(ports.orca, command, worktree_id)?.filter(|(w, _)| w.agents.iter().all(|p| matches!(p.state.as_str(), "done" | "waiting" | "blocked")))
@@ -126,7 +126,7 @@ pub(super) fn links(worktree: &Worktree, identifier: &str) -> bool {
 
 // The worktree `worktree_id` as its host lists it now, with that listing: None when it is gone,
 // and Err when it isn't the command's issue's, which is never acted on, or its host wasn't heard.
-pub(super) fn worktree_on_issue(orca: &mut dyn Orca, command: &Command, worktree_id: &str) -> Result<Option<(Worktree, Listing)>, Error> {
+pub(super) fn worktree_on_issue(orca: &mut dyn Orca, command: &Command, worktree_id: &WorktreeId) -> Result<Option<(Worktree, Listing)>, Error> {
     let listing = orca.listing_at(worktree_id)?;
     match listing.worktree(worktree_id).cloned() {
         None => Ok(None),
@@ -159,7 +159,7 @@ pub(super) fn turn_terminal(ports: &mut Ports, command: &Command, session_id: &I
 // (`tolkster worker`), which Orca lists as no agent until the worker's agent starts. An agent Orca lists
 // with no handle can't be named without naming the active terminal instead, so while one runs
 // this is false, never taken as closed. `terminals` are its host's, read just before.
-pub(super) fn close_agent(orca: &mut dyn Orca, worktree_id: &str, terminals: &[orca::Terminal]) -> Result<bool, Error> {
+pub(super) fn close_agent(orca: &mut dyn Orca, worktree_id: &WorktreeId, terminals: &[orca::Terminal]) -> Result<bool, Error> {
     let mut named = true;
     for listed in terminals.iter().filter(|t| t.worktree_id.as_deref() == Some(worktree_id)) {
         match (listed.handle.as_deref().and_then(Terminal::parse), listed.agent) {
@@ -171,7 +171,7 @@ pub(super) fn close_agent(orca: &mut dyn Orca, worktree_id: &str, terminals: &[o
     Ok(named)
 }
 
-fn unnamed_agent(command: &Command, worktree_id: &str) -> Error {
+fn unnamed_agent(command: &Command, worktree_id: &WorktreeId) -> Error {
     Error::Failed(format!("{}: an agent in {worktree_id} has no handle to close it by", command.identifier))
 }
 
@@ -189,8 +189,8 @@ pub(super) fn close(orca: &mut dyn Orca, handle: &Terminal) -> Result<(), Error>
 // One linked to another issue is left unsaid too, as it isn't this issue's worker.
 // Each is read on its own host alone, and one on another host that can't be read is left
 // unsaid too.
-fn observe_worktrees(orca: &mut dyn Orca, command: &Command, worktree_ids: &[String]) -> Result<(), Error> {
-    let mut hosts: Vec<Option<&str>> = worktree_ids.iter().map(|id| host_of(id)).collect();
+fn observe_worktrees(orca: &mut dyn Orca, command: &Command, worktree_ids: &[WorktreeId]) -> Result<(), Error> {
+    let mut hosts: Vec<Option<&str>> = worktree_ids.iter().map(|id| id.host()).collect();
     hosts.sort_unstable();
     hosts.dedup();
     for host in hosts {
@@ -199,7 +199,7 @@ fn observe_worktrees(orca: &mut dyn Orca, command: &Command, worktree_ids: &[Str
             listing => listing?,
         };
         let running = agent_worktrees(&listing.terminals);
-        for worktree in worktree_ids.iter().filter(|id| host_of(id) == host).filter_map(|id| listing.worktree(id)) {
+        for worktree in worktree_ids.iter().filter(|id| id.host() == host).filter_map(|id| listing.worktree(id)) {
             if !links(worktree, &command.identifier) {
                 trace::event(Work::NotItsWorktree { path: worktree.path.clone(), issue: command.identifier.clone() });
                 continue;

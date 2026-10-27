@@ -9,9 +9,9 @@ use serde_json::{Value, json};
 
 use crate::error::{Error, Unsent};
 use crate::exec::{Output, Run};
-use crate::orca::{Host, Listing, Pane, Place, Proof, ReadsConfig, Repo, Status, Terminal, Typed, Worktree, host_of, waits_in};
+use crate::orca::{Host, Listing, Pane, Place, Proof, ReadsConfig, Repo, Status, Terminal, Typed, Worktree, waits_in};
 use crate::runtime::Shared;
-use crate::plain::{CommandLine, Line, Terminal as Handle, orca_worktree, split_terminal, split_worktree};
+use crate::plain::{CommandLine, Line, Terminal as Handle, WorktreeId, split_terminal};
 use crate::sessions::Tolksters;
 
 // The project every repo is on a host in `ready_on`.
@@ -162,7 +162,7 @@ impl World {
     // first's listed as the main worktree only when `primary`, and a worker's worktree of the
     // first: what a session in a repo's primary checkout looks for (brief::Checkouts).
     pub fn two_repos(primary: bool) -> Rc<RefCell<World>> {
-        let tree = |repo_id: &str, path: &str, main: bool| Worktree { id: format!("{repo_id}::{path}"), repo_id: repo_id.into(), path: path.into(), branch: Some("main".into()), linked_issue: None, is_main: main, is_local: true, agents: Vec::new(), origin: None };
+        let tree = |repo_id: &str, path: &str, main: bool| Worktree { id: WorktreeId::from(format!("{repo_id}::{path}").as_str()), repo_id: repo_id.into(), path: path.into(), branch: Some("main".into()), linked_issue: None, is_main: main, is_local: true, agents: Vec::new(), origin: None };
         let repos = vec![Repo { id: "r1".into(), name: "tolkster".into() }, Repo { id: "r2".into(), name: "other".into() }];
         let worktrees = vec![tree("r1", "/wt/tw-3", false), tree("r1", "/src/tolkster", primary), tree("r2", "/src/other", true)];
         Rc::new(RefCell::new(World { repos, worktrees, ..World::default() }))
@@ -174,13 +174,13 @@ impl World {
     }
 
     // The agents' terminals in a worktree.
-    pub fn agents_in(&self, worktree_id: &str) -> Vec<String> {
-        self.terminals.iter().filter(|t| t.agent && t.worktree_id.as_deref() == Some(worktree_id)).filter_map(|t| t.handle.clone()).collect()
+    pub fn agents_in(&self, worktree_id: &WorktreeId) -> Vec<String> {
+        self.terminals.iter().filter(|t| t.agent && t.worktree_id.as_ref() == Some(worktree_id)).filter_map(|t| t.handle.clone()).collect()
     }
 
     // The agent in a worktree turns `working`, `waiting` at a prompt or `done`.
-    pub fn set_agents(&mut self, worktree_id: &str, state: &str) {
-        for worktree in self.worktrees.iter_mut().filter(|w| w.id == worktree_id) {
+    pub fn set_agents(&mut self, worktree_id: &WorktreeId, state: &str) {
+        for worktree in self.worktrees.iter_mut().filter(|w| &w.id == worktree_id) {
             worktree.agents.iter_mut().for_each(|pane| pane.state = state.into());
         }
     }
@@ -229,22 +229,21 @@ impl<'h> Orca<'h> {
     // A worktree as this Orca lists it: None for another host's.
     fn view(&self, worktree: &Worktree) -> Option<Worktree> {
         let Some(host) = self.host.as_deref() else { return Some(worktree.clone()) };
-        (worktree.host() == Some(host)).then(|| Worktree { id: orca_worktree(&worktree.id).unwrap_or_default(), is_local: true, ..worktree.clone() })
+        (worktree.host() == Some(host)).then(|| Worktree { id: worktree.id.own(), is_local: true, ..worktree.clone() })
     }
 
     fn view_terminal(&self, terminal: &Terminal) -> Option<Terminal> {
         let Some(host) = self.host.as_deref() else { return Some(terminal.clone()) };
-        let on = |id: &str| split_worktree(id).is_some_and(|(at, _, _)| at == Some(host));
-        terminal.worktree_id.as_deref().is_some_and(on).then(|| Terminal {
+        terminal.worktree_id.as_ref().is_some_and(|id| id.host() == Some(host)).then(|| Terminal {
             handle: terminal.handle.as_deref().and_then(split_terminal).map(|(_, own)| own.to_string()),
-            worktree_id: terminal.worktree_id.as_deref().and_then(orca_worktree),
+            worktree_id: terminal.worktree_id.as_ref().map(WorktreeId::own),
             ..terminal.clone()
         })
     }
 
     // The world's ID of a worktree this Orca names `id`.
-    fn world_id(&self, id: &str) -> String {
-        self.host.as_ref().map_or_else(|| id.to_string(), |host| format!("{host}@{id}"))
+    fn world_id(&self, id: &WorktreeId) -> WorktreeId {
+        WorktreeId::hosted(self.host.as_deref(), id).expect("a plain host")
     }
 
     fn listing(&self) -> Vec<Worktree> {
@@ -259,7 +258,7 @@ impl<'h> Orca<'h> {
         orca
     }
 
-    fn worktree(&self, worktree_id: &str) -> Result<(), Error> {
+    fn worktree(&self, worktree_id: &WorktreeId) -> Result<(), Error> {
         let worktree_id = self.world_id(worktree_id);
         match self.world.borrow().worktrees.iter().any(|w| w.id == worktree_id) {
             true => Ok(()),
@@ -269,13 +268,13 @@ impl<'h> Orca<'h> {
 }
 
 impl crate::orca::Orca for Orca<'_> {
-    fn agents_listed(&mut self) -> Result<(Vec<Worktree>, Option<Vec<String>>), Error> {
+    fn agents_listed(&mut self) -> Result<(Vec<Worktree>, Option<Vec<WorktreeId>>), Error> {
         let listing = self.listing();
         let mut world = self.world.borrow_mut();
         world.spawns.push(PS);
         Ok((listing.iter().map(|w| Worktree { origin: None, ..w.clone() }).collect(), (!world.incomplete).then(|| listing.iter().map(|w| w.id.clone()).collect())))
     }
-    fn listed(&mut self) -> Result<Option<Vec<String>>, Error> {
+    fn listed(&mut self) -> Result<Option<Vec<WorktreeId>>, Error> {
         let (_, listed) = self.agents_listed()?;
         Ok(listed.filter(|_| self.world.borrow().unanswered.is_empty()))
     }
@@ -308,9 +307,9 @@ impl crate::orca::Orca for Orca<'_> {
                 return Err(Error::silent(host));
             }
         }
-        let on = |id: &str| host_of(id) == host.as_deref();
+        let on = |id: &WorktreeId| id.host() == host.as_deref();
         let worktrees: Vec<Worktree> = world.worktrees.iter().filter(|w| on(&w.id)).filter_map(|w| self.view(w)).map(|w| Worktree { origin: None, ..w }).collect();
-        let terminals = world.terminals.iter().filter(|t| t.worktree_id.as_deref().is_some_and(on)).filter_map(|t| self.view_terminal(t)).collect();
+        let terminals = world.terminals.iter().filter(|t| t.worktree_id.as_ref().is_some_and(on)).filter_map(|t| self.view_terminal(t)).collect();
         let listed = (!world.incomplete).then(|| worktrees.iter().map(|w| w.id.clone()).collect());
         drop(world);
         let mut world = self.world.borrow_mut();
@@ -344,9 +343,9 @@ impl crate::orca::Orca for Orca<'_> {
     fn ready_projects(&mut self, host: &str, _reads_config: ReadsConfig) -> Result<Vec<String>, Error> {
         Ok(if self.world.borrow().ready_on.iter().any(|h| h == host) { vec![FAKE_PROJECT.into()] } else { Vec::new() })
     }
-    fn send(&mut self, worktree_id: &str, handle: &Handle, line: &Line, proof: Proof) -> Result<Typed, Error> {
+    fn send(&mut self, worktree_id: &WorktreeId, handle: &Handle, line: &Line, proof: Proof) -> Result<Typed, Error> {
         let mut world = self.world.borrow_mut();
-        let waiting = world.worktrees.iter().find(|w| w.id == worktree_id).is_some_and(|w| waits_in(w, &world.terminals));
+        let waiting = world.worktrees.iter().find(|w| &w.id == worktree_id).is_some_and(|w| waits_in(w, &world.terminals));
         if !world.terminals.iter().any(|t| t.handle.as_deref() == Some(handle)) {
             return Err(Error::Orca(format!("orca terminal send failed: no terminal {handle}")));
         }
@@ -355,8 +354,8 @@ impl crate::orca::Orca for Orca<'_> {
         }
         if matches!(world.send, Send::Exits | Send::Refuses) {
             if world.send == Send::Exits {
-                world.terminals.retain(|t| t.worktree_id.as_deref() != Some(worktree_id));
-                world.worktrees.iter_mut().filter(|w| w.id == worktree_id).for_each(|w| w.agents.clear());
+                world.terminals.retain(|t| t.worktree_id.as_ref() != Some(worktree_id));
+                world.worktrees.iter_mut().filter(|w| &w.id == worktree_id).for_each(|w| w.agents.clear());
             }
             return Err(Error::Unsent(Unsent::NoAgent, "orca terminal send failed: input refused: no-agent".into()));
         }
@@ -376,7 +375,7 @@ impl crate::orca::Orca for Orca<'_> {
         world.typed.push((handle.as_str().into(), line.as_str().into()));
         Ok(())
     }
-    fn start_agent(&mut self, worktree_id: &str, command: &CommandLine) -> Result<String, Error> {
+    fn start_agent(&mut self, worktree_id: &WorktreeId, command: &CommandLine) -> Result<String, Error> {
         self.worktree(worktree_id)?;
         if self.world.borrow().launch_fails {
             return Err(Error::Orca("orca terminal create failed".into()));
@@ -385,11 +384,11 @@ impl crate::orca::Orca for Orca<'_> {
             let mut world = self.world.borrow_mut();
             world.made += 1;
             let (handle, pane) = (format!("term_{}", world.made), format!("tab{}:leaf{}", world.made, world.made));
-            world.terminals.push(Terminal { handle: Some(handle.clone()), worktree_id: Some(worktree_id.into()), agent: true, pane: Some(pane.clone()) });
-            for worktree in world.worktrees.iter_mut().filter(|w| w.id == worktree_id) {
+            world.terminals.push(Terminal { handle: Some(handle.clone()), worktree_id: Some(worktree_id.clone()), agent: true, pane: Some(pane.clone()) });
+            for worktree in world.worktrees.iter_mut().filter(|w| &w.id == worktree_id) {
                 worktree.agents.push(Pane { key: pane.clone(), state: "working".into(), since_ms: Some(0) });
             }
-            world.launched.push((worktree_id.into(), command.as_str().into()));
+            world.launched.push((worktree_id.to_string(), command.as_str().into()));
             handle
         };
         if let Some(meanwhile) = self.after_launch.take() {
@@ -397,7 +396,7 @@ impl crate::orca::Orca for Orca<'_> {
         }
         Ok(handle)
     }
-    fn open(&mut self, worktree_id: &str, title: Option<&str>, command: &CommandLine) -> Result<String, Error> {
+    fn open(&mut self, worktree_id: &WorktreeId, title: Option<&str>, command: &CommandLine) -> Result<String, Error> {
         self.worktree(worktree_id)?;
         let mut world = self.world.borrow_mut();
         if world.launch_fails {
@@ -405,18 +404,18 @@ impl crate::orca::Orca for Orca<'_> {
         }
         world.made += 1;
         let handle = format!("term_{}", world.made);
-        world.terminals.push(Terminal { handle: Some(handle.clone()), worktree_id: Some(worktree_id.into()), agent: false, pane: None });
-        world.opened.push((worktree_id.into(), title.map(String::from), command.as_str().into()));
+        world.terminals.push(Terminal { handle: Some(handle.clone()), worktree_id: Some(worktree_id.clone()), agent: false, pane: None });
+        world.opened.push((worktree_id.to_string(), title.map(String::from), command.as_str().into()));
         Ok(handle)
     }
     // A step run on its worktree's host, its line read as that host's shell and `main` would,
     // on that host's Orca over this world: an Orca error for a host this machine doesn't reach.
-    fn run_to_exit(&mut self, worktree_id: &str, command: &CommandLine) -> Result<Option<i32>, Error> {
+    fn run_to_exit(&mut self, worktree_id: &WorktreeId, command: &CommandLine) -> Result<Option<i32>, Error> {
         use crate::reap::{KEPT, STEP_OPTIONS, Step, reap_here};
-        let host = host_of(worktree_id).map(String::from);
+        let host = worktree_id.host().map(String::from);
         let (hosts, tolksters, prs) = (self.world.borrow().hosts.clone(), self.world.borrow().tolksters_there.clone(), self.world.borrow().prs_there.clone());
         let Some(host) = host.filter(|host| hosts.contains(host)) else { return Err(Error::Orca(format!("orca: {worktree_id} is on no host this machine reaches"))) };
-        self.world.borrow_mut().opened.push((worktree_id.into(), None, command.as_str().into()));
+        self.world.borrow_mut().opened.push((worktree_id.to_string(), None, command.as_str().into()));
         let line = command.as_str().strip_suffix("; exit $LASTEXITCODE").expect("a step ends its shell");
         let words: Vec<String> = line.strip_prefix("tolkster reap-here ").expect("a reap step").split(' ').map(String::from).collect();
         let step = Step::parse(&crate::args::parse(&words, &STEP_OPTIONS, false)?)?;
@@ -439,28 +438,29 @@ impl crate::orca::Orca for Orca<'_> {
             return Err(Error::Orca(format!("orca terminal close failed: terminal_handle_stale {handle}")));
         };
         let closed = world.terminals.remove(at);
-        for worktree in world.worktrees.iter_mut().filter(|w| w.id.as_str() == closed.worktree_id.as_deref().unwrap_or_default()) {
+        for worktree in world.worktrees.iter_mut().filter(|w| closed.worktree_id.as_ref() == Some(&w.id)) {
             worktree.agents.retain(|pane| Some(&pane.key) != closed.pane.as_ref());
         }
         world.closed.push(handle.as_str().into());
         Ok(())
     }
-    fn close_all(&mut self, worktree_id: &str) -> Result<(), Error> {
+    fn close_all(&mut self, worktree_id: &WorktreeId) -> Result<(), Error> {
         self.worktree(worktree_id)?;
-        let handles: Vec<Handle> = self.world.borrow().terminals.iter().filter(|t| t.worktree_id.as_deref() == Some(worktree_id)).filter_map(|t| t.handle.as_deref().and_then(Handle::parse)).collect();
+        let handles: Vec<Handle> = self.world.borrow().terminals.iter().filter(|t| t.worktree_id.as_ref() == Some(worktree_id)).filter_map(|t| t.handle.as_deref().and_then(Handle::parse)).collect();
         handles.iter().try_for_each(|handle| self.close(handle))?;
         // Orca closes them by their worktree, so one listed with no plain handle goes too.
-        self.world.borrow_mut().terminals.retain(|t| t.worktree_id.as_deref() != Some(worktree_id));
+        self.world.borrow_mut().terminals.retain(|t| t.worktree_id.as_ref() != Some(worktree_id));
         Ok(())
     }
     // On another host, in its repo `hosted`, made by the project's ID, which `created` holds.
-    fn create_worktree(&mut self, place: Place, name: &str, options: &[&str]) -> Result<(String, String), Error> {
+    fn create_worktree(&mut self, place: Place, name: &str, options: &[&str]) -> Result<(WorktreeId, String), Error> {
         let linked = options.iter().position(|o| *o == "--linear-issue").and_then(|at| options.get(at + 1)).map(|i| i.to_ascii_uppercase());
         let path = format!("/wt/{name}");
         let (id, repo_id, made_by) = match place {
             Place::Here { repo_id } => (format!("{repo_id}::{path}"), repo_id, repo_id),
             Place::On { host, project } => (format!("{host}@hosted::{path}"), "hosted", project),
         };
+        let id = WorktreeId::from(id.as_str());
         {
             let mut world = self.world.borrow_mut();
             let origin = match place {
@@ -475,26 +475,26 @@ impl crate::orca::Orca for Orca<'_> {
         }
         Ok((id, path))
     }
-    fn remove_worktree(&mut self, worktree_id: &str) -> Result<(), Error> {
+    fn remove_worktree(&mut self, worktree_id: &WorktreeId) -> Result<(), Error> {
         self.worktree(worktree_id)?;
         let worktree_id = self.world_id(worktree_id);
         let mut world = self.world.borrow_mut();
         world.worktrees.retain(|w| w.id != worktree_id);
         world.terminals.retain(|t| t.worktree_id.as_ref() != Some(&worktree_id));
-        world.removed.push(worktree_id);
+        world.removed.push(worktree_id.to_string());
         Ok(())
     }
-    fn name_worktree(&mut self, worktree_id: &str, _display_name: &str) -> Result<(), Error> {
+    fn name_worktree(&mut self, worktree_id: &WorktreeId, _display_name: &str) -> Result<(), Error> {
         self.worktree(worktree_id)
     }
-    fn set_status(&mut self, worktree_id: &str, status: Status) -> Result<(), Error> {
+    fn set_status(&mut self, worktree_id: &WorktreeId, status: Status) -> Result<(), Error> {
         self.worktree(worktree_id)?;
         let worktree_id = self.world_id(worktree_id);
         let mut world = self.world.borrow_mut();
         if world.status_fails {
             return Err(Error::Orca("orca: the board is unavailable".into()));
         }
-        world.statuses.push((worktree_id, status));
+        world.statuses.push((worktree_id.to_string(), status));
         Ok(())
     }
     fn shell(&mut self) -> &mut Run<'_> {

@@ -16,7 +16,7 @@ use crate::error::Error;
 use crate::git;
 use crate::orca::{Orca, Place, Terminal, Worktree, find_repo, open_terminals, terminal_worktrees};
 use crate::args::{Kind, Parsed};
-use crate::plain::{CommandLine, Id, IssueKey, Line, RepoName, Sha, Time};
+use crate::plain::{CommandLine, Id, IssueKey, Line, RepoName, Sha, Time, WorktreeId};
 use crate::ports::Ports;
 use crate::runtime::Checkouts;
 use crate::post::answer_key;
@@ -30,7 +30,7 @@ pub const CHECKOUT_NAME: &str = "tolkster-conversations";
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Checkout {
-    pub worktree_id: String,
+    pub worktree_id: WorktreeId,
     pub path: String,
 }
 

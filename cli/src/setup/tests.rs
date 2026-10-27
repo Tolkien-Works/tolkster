@@ -2,6 +2,7 @@ use std::path::PathBuf;
 
 use super::*;
 use crate::exec::run_command;
+use crate::plain::WorktreeId;
 use crate::ports::fake::{self, FakeReader};
 use crate::request::{Issue, Session};
 use crate::request::tests::{at, issue, session};
@@ -92,7 +93,7 @@ fn repo(test: &str) -> (PathBuf, PathBuf) {
 fn linear(created_at: &str, recorded: &Path) -> fake::Linear {
     let on = Issue { branch_name: "tw-1-start".into(), created_at: created_at.into(), ..issue() };
     let linear = fake::Linear::with(vec![Session { issue: Some(on), ..session(Vec::new()) }]);
-    let id = format!("r1::{}", recorded.display().to_string().replace('\\', "/"));
+    let id = WorktreeId::from(format!("r1::{}", recorded.display().to_string().replace('\\', "/")).as_str());
     let record = WorkerRecord { issue: "TW-1".into(), worktree_id: id.clone(), session_id: "s1".into(), at: created_at.into(), launch: launch(), rung_from: RungFrom::Claim };
     linear.records.workers.borrow_mut().insert(id, record);
     linear
@@ -246,7 +247,7 @@ fn a_worker_on_another_harness_is_launched_on_it() {
     assert_eq!(ready.args.len(), 8, "{:?}", ready.args);
     // Its agent learns its worker from the launch, as the record holds it: its hooks read no records.
     let id = linear.records.workers.borrow().keys().next().cloned().unwrap();
-    assert_eq!(ready.env[..2], [(crate::cli::WORKTREE_ENV.to_string(), id.clone()), (crate::cli::ISSUE_ENV.to_string(), "TW-1".to_string())]);
+    assert_eq!(ready.env[..2], [(crate::cli::WORKTREE_ENV.to_string(), id.to_string()), (crate::cli::ISSUE_ENV.to_string(), "TW-1".to_string())]);
     // And how it was launched, for its session's timing.
     assert_eq!((ready.env.len(), ready.env[2].0.as_str()), (3, crate::timing::LAUNCH_ENV));
     assert!(crate::timing::launch_of(&ready.env[2].1).is_some_and(|(kind, _, _)| kind == crate::timing::Kind::Resume));

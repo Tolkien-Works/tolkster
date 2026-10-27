@@ -6,7 +6,7 @@ use serde_json::Value;
 use super::{orca_json, Answer, Run};
 use crate::error::Error;
 use crate::json::decode;
-use crate::plain::{plain_host, split_terminal, split_worktree, Terminal as Handle};
+use crate::plain::{plain_host, split_terminal, Terminal as Handle, WorktreeId};
 
 // A paired Orca server: its environment's ID, which every call routed to it names, and its
 // name, which `slots` keys.
@@ -82,18 +82,14 @@ pub(super) fn at<'a>(host: Option<&'a str>, args: &[&'a str]) -> Vec<&'a str> {
 }
 
 // What `host`'s Orca named `id` (a worktree's ID or a terminal's handle) as Tolkster names
-// it: behind `<host>@` on a remote host (plain::split_worktree, plain::split_terminal).
+// it: behind `<host>@` on a remote host (plain::WorktreeId::hosted, plain::split_terminal).
 pub(super) fn hosted(host: Option<&str>, id: &str) -> String {
     host.map_or_else(|| id.to_string(), |host| format!("{host}@{id}"))
 }
 
-// A worktree's host, and the selector its own host's Orca knows it by. An ID of no shape
-// goes to this machine's Orca as it is.
-pub(super) fn worktree_at(worktree_id: &str) -> (Option<&str>, String) {
-    match split_worktree(worktree_id) {
-        Some((host, repo, path)) => (host, by_id(&format!("{repo}::{path}"))),
-        None => (None, by_id(worktree_id)),
-    }
+// A worktree's host, and the selector its own host's Orca knows it by.
+pub(super) fn worktree_at(worktree_id: &WorktreeId) -> (Option<&str>, String) {
+    (worktree_id.host(), by_id(&worktree_id.own()))
 }
 
 // A handle goes back only to the host whose Orca made it.

@@ -74,7 +74,7 @@ use crate::git;
 use crate::machine::ReapRule;
 use crate::github::{BranchPr, Branches, PrState, Reader};
 use crate::orca::{Orca, Worktree, agent_in, agent_terminal, candidates, primary_checkout};
-use crate::plain::{BranchName, IssueKey, Terminal};
+use crate::plain::{BranchName, IssueKey, Terminal, WorktreeId};
 use crate::ports::Ports;
 use crate::trace::{self, Keep, Reap, Reaping, Rule as Reason, Why};
 use crate::sessions::{IssueNow, Tolksters};
@@ -82,7 +82,7 @@ use crate::time::{iso, now_ms};
 
 // Forgets the worker record of a worktree, by its ID, once the worktree is removed (see
 // state.rs, `WorkerRecord`).
-pub type Forget<'a> = dyn FnMut(&str) -> Result<(), Error> + 'a;
+pub type Forget<'a> = dyn FnMut(&WorktreeId) -> Result<(), Error> + 'a;
 
 // The PRs for a worktree's branch, as `verdict` reads them: every one, open or not.
 pub type Prs<'a> = dyn FnMut(&Worktree, &str) -> Result<Vec<BranchPr>, Error> + 'a;
@@ -262,25 +262,25 @@ pub fn reap_by(orca: &mut dyn Orca, forget: &mut Forget, worktree: &Worktree, wo
 // for one no listing vouches for either way. The machine sends
 // one command at a time per issue, so no resume starts an agent there between the check and
 // the removal. The machine decided `rule`; this runs only its guards (`reap_by`).
-pub fn reap_for(ports: &mut Ports, worktree_id: &str, issue: &str, rule: &ReapRule) -> Result<bool, Error> {
+pub fn reap_for(ports: &mut Ports, worktree_id: &WorktreeId, issue: &str, rule: &ReapRule) -> Result<bool, Error> {
     let (lines, reaped) = reap_once(ports, worktree_id, issue, &rule.into())?;
     lines.into_iter().for_each(trace::event);
     Ok(reaped)
 }
 
-fn reap_once(ports: &mut Ports, worktree_id: &str, issue: &str, rule: &Rule) -> Result<(Vec<Reap>, bool), Error> {
+fn reap_once(ports: &mut Ports, worktree_id: &WorktreeId, issue: &str, rule: &Rule) -> Result<(Vec<Reap>, bool), Error> {
     let reap = |what| Reap { issue: issue.into(), what };
     // Its host alone holds it, and its repo's primary checkout.
     let listing = ports.orca.listing_at(worktree_id)?;
     // Gone only by its host's complete listing (orca::complete_listing): one cut off, or a
     // silent host's, decides nothing, and the reap is sent again, not reported done.
-    let Some(at) = listing.worktrees.iter().position(|w| w.id == worktree_id) else {
+    let Some(at) = listing.worktrees.iter().position(|w| &w.id == worktree_id) else {
         if !listing.lacks(worktree_id) {
-            return Err(Error::unheard(crate::orca::host_of(worktree_id)));
+            return Err(Error::unheard(worktree_id.host()));
         }
         // Another host's step may have removed it after an earlier reap stopped waiting on it.
         if let Err(error) = ports.records.forget_worker(worktree_id) {
-            return Ok((vec![reap(Reaping::GoneRecordStays { worktree_id: worktree_id.into(), error })], true));
+            return Ok((vec![reap(Reaping::GoneRecordStays { worktree_id: worktree_id.clone(), error })], true));
         }
         return Ok((Vec::new(), true));
     };

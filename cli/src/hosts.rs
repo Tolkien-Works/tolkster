@@ -13,7 +13,7 @@ use serde::Serialize;
 
 use crate::config::{Config, DEFAULT_DESTROY_AFTER, DEFAULT_IDLE_MINUTES, Machine};
 use crate::error::Error;
-use crate::orca::{Host, Pane, Worktree, host_of, plain_project, project_id};
+use crate::orca::{Host, Pane, Worktree, plain_project, project_id};
 use crate::state::WorkerRecord;
 use crate::sync::{lock, read, write};
 use crate::time::instant;
@@ -235,7 +235,7 @@ pub struct Row {
 // host its record's worktree names, whether or not the host answers; a record on a host no
 // longer paired shows nowhere.
 pub fn report(config: &Config, answering: &[Host], silent: &[Host], records: &[WorkerRecord]) -> Vec<Row> {
-    let held = |host: Option<&str>| records.iter().filter(|r| host_of(&r.worktree_id) == host).map(|r| r.issue.clone()).collect();
+    let held = |host: Option<&str>| records.iter().filter(|r| r.worktree_id.host() == host).map(|r| r.issue.clone()).collect();
     let row = |host: &Host, answers| Row { name: Some(host.name.clone()), answers, cap: cap(config, host), workers: held(Some(&host.id)), recipe: config.machines.get(host.name.trim()).map(|made| made.recipe.clone()) };
     let here = Row { name: None, answers: true, cap: config.local_slots(), workers: held(None), recipe: None };
     std::iter::once(here).chain(answering.iter().map(|host| row(host, true))).chain(silent.iter().map(|host| row(host, false))).collect()
@@ -252,18 +252,18 @@ pub fn asleep_as<'a>(config: &'a Config, host: &str) -> Option<&'a String> {
 // wakes the machine (docs/hosts.md, Sleep and wake).
 pub fn resting(worktrees: &[Worktree], host: &str) -> bool {
     let resting = |pane: &Pane| matches!(pane.state.as_str(), "done" | "waiting" | "blocked");
-    worktrees.iter().filter(|w| host_of(&w.id) == Some(host)).all(|w| w.agents.iter().all(resting))
+    worktrees.iter().filter(|w| w.id.host() == Some(host)).all(|w| w.agents.iter().all(resting))
 }
 
 // Whether a worker's record on `host` was launched within SETTING_UP_MS.
 pub fn launched_lately(records: &[WorkerRecord], host: &str, now_ms: i64) -> bool {
-    records.iter().any(|r| host_of(&r.worktree_id) == Some(host) && instant(&r.at).is_some_and(|at| now_ms - at < SETTING_UP_MS))
+    records.iter().any(|r| r.worktree_id.host() == Some(host) && instant(&r.at).is_some_and(|at| now_ms - at < SETTING_UP_MS))
 }
 
 // Whether `host` holds no worktree but its checkouts, and no worker was `launched_lately` there:
 // a destroy takes nothing with it (docs/hosts.md, Destroying).
 pub fn holds_nothing(worktrees: &[Worktree], records: &[WorkerRecord], host: &str, now_ms: i64) -> bool {
-    worktrees.iter().all(|w| w.is_main || host_of(&w.id) != Some(host)) && !launched_lately(records, host, now_ms)
+    worktrees.iter().all(|w| w.is_main || w.id.host() != Some(host)) && !launched_lately(records, host, now_ms)
 }
 
 // The recipe machines `listen`'s listing says are idle, by host ID, with their repo's idle

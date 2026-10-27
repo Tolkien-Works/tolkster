@@ -11,8 +11,8 @@ use crate::error::{Error, Waits};
 use crate::github;
 use crate::hosts;
 use crate::machine::{Command, Finished};
-use crate::orca::{Worktree, host_of};
-use crate::plain::IssueKey;
+use crate::orca::Worktree;
+use crate::plain::{IssueKey, WorktreeId};
 use crate::ports::Ports;
 use crate::reap;
 use crate::time::now_ms;
@@ -138,7 +138,7 @@ pub fn destroy_host(config: &Config, ports: &mut Ports, name: &str) -> Result<Fi
     }
     let (orca, records, linear, github, pacing) = (&mut *ports.orca, ports.records, ports.linear, &mut *ports.github, &ports.shared.pacing);
     let mut reaped = |host: &str, reachable: bool| -> Result<bool, Error> {
-        let on = |id: &str| host_of(id) == Some(host);
+        let on = |id: &WorktreeId| id.host() == Some(host);
         if !reachable {
             return Ok(!records.workers()?.iter().any(|r| on(&r.worktree_id)));
         }

@@ -10,7 +10,7 @@ use crate::converse;
 use crate::error::Error;
 use crate::exec::{beating, run_command};
 use crate::orca::{Cli, Orca};
-use crate::plain::Sha;
+use crate::plain::{Sha, WorktreeId};
 use crate::runtime::{Shared, load, log};
 use crate::state::{CheckoutRecord, Records};
 use crate::trace::Refresh;
@@ -27,7 +27,7 @@ pub fn missed(agent: &Agent, shared: &Arc<Shared>, now: &Agents) -> Result<Misse
 }
 
 // Of `checkouts`, those with no terminal open in `now`.
-fn missed_closed(checkouts: &[CheckoutRecord], now: &Agents) -> Vec<String> {
+fn missed_closed(checkouts: &[CheckoutRecord], now: &Agents) -> Vec<WorktreeId> {
     checkouts.iter().filter(|c| !now.open.contains(&c.worktree_id)).map(|c| c.worktree_id.clone()).collect()
 }
 
@@ -35,13 +35,13 @@ fn missed_closed(checkouts: &[CheckoutRecord], now: &Agents) -> Vec<String> {
 // checkout, a turn's terminal closes once the turn has ended: the checkout is refreshed
 // if nothing has opened there since, under the checkouts' lock (converse::refresh_idle).
 // Not on the agent's exit, as the turn's terminal outlives its Claude.
-pub fn closed(agent: &Agent, shared: &Arc<Shared>, worktree_id: &str, beat: &dyn Fn()) {
+pub fn closed(agent: &Agent, shared: &Arc<Shared>, worktree_id: &WorktreeId, beat: &dyn Fn()) {
     log(closed_once(agent, shared, worktree_id, beat));
 }
 
-fn closed_once(agent: &Agent, shared: &Arc<Shared>, worktree_id: &str, beat: &dyn Fn()) -> Result<Vec<Refresh>, Error> {
+fn closed_once(agent: &Agent, shared: &Arc<Shared>, worktree_id: &WorktreeId, beat: &dyn Fn()) -> Result<Vec<Refresh>, Error> {
     let rt = load(agent, shared)?;
-    let records: Vec<_> = rt.state.checkouts()?.into_iter().filter(|r| r.worktree_id == worktree_id).collect();
+    let records: Vec<_> = rt.state.checkouts()?.into_iter().filter(|r| &r.worktree_id == worktree_id).collect();
     if records.is_empty() {
         return Ok(Vec::new());
     }

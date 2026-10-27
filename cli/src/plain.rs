@@ -6,7 +6,7 @@
 use std::fmt;
 use std::ops::Deref;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::error::Error;
 
@@ -80,6 +80,14 @@ macro_rules! plain {
             }
         }
 
+        // A value decoded where it arrives, refused with fixed text, never echoing it.
+        impl<'de> Deserialize<'de> for $name {
+            fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+                let value = String::deserialize(deserializer)?;
+                Self::parse(&value).ok_or_else(|| serde::de::Error::custom($refused))
+            }
+        }
+
         impl std::borrow::Borrow<str> for $name {
             fn borrow(&self) -> &str {
                 &self.0
@@ -149,6 +157,11 @@ plain!(
     "the command's ID isn't plain"
 );
 plain!(
+    // A worktree's ID as Tolkster names it (`split_worktree`).
+    WorktreeId, plain_worktree,
+    "the worktree's ID isn't plain"
+);
+plain!(
     // An Orca terminal's handle.
     Terminal, plain_terminal,
     "the terminal's handle isn't plain"
@@ -177,6 +190,29 @@ impl IssueKey {
     // log lines, never an issue.
     pub fn machine(name: &'static str) -> IssueKey {
         IssueKey(name.to_string())
+    }
+}
+
+impl WorktreeId {
+    // `own`, as `host`'s Orca named it (None for this machine's), as Tolkster names it:
+    // behind `<host>@` on a remote host.
+    pub fn hosted(host: Option<&str>, own: &str) -> Option<WorktreeId> {
+        WorktreeId::parse(&host.map_or_else(|| own.to_string(), |host| format!("{host}@{own}")))
+    }
+
+    // The host it is on, None for this machine.
+    pub fn host(&self) -> Option<&str> {
+        split_worktree(&self.0).and_then(|(host, _, _)| host)
+    }
+
+    // The ID its own host's Orca knows it by: without its host.
+    pub fn own(&self) -> WorktreeId {
+        WorktreeId(self.host().map_or(&*self.0, |host| &self.0[host.len() + 1..]).to_string())
+    }
+
+    // Its folder on its host.
+    pub fn path(&self) -> &str {
+        split_worktree(&self.0).map_or("", |(_, _, path)| path)
     }
 }
 
@@ -308,9 +344,8 @@ pub fn split_worktree(id: &str) -> Option<(Option<&str>, &str, &str)> {
     (repo_shape && (1..=400).contains(&path.encode_utf16().count()) && !path.chars().any(char::is_control)).then_some((host, repo, path))
 }
 
-// The ID the worktree's own host's Orca knows it by: `id` without its host.
-pub fn orca_worktree(id: &str) -> Option<String> {
-    split_worktree(id).map(|(_, repo, path)| format!("{repo}::{path}"))
+fn plain_worktree(id: &str) -> bool {
+    split_worktree(id).is_some()
 }
 
 // An Orca environment's name. Never starts with a dash: an option.

@@ -29,7 +29,7 @@ use crate::gateway::Failure;
 use crate::machine::{Command, Finished, Notice, Order, Outcome, Queued, ReapRule, Waiting};
 use crate::time::now_ms;
 use crate::panel;
-use crate::orca::{self, host_of, open_terminals};
+use crate::orca::{self, open_terminals};
 use crate::live::{LinearApp, Recipes};
 use crate::ports::{Candidate, Ports};
 use crate::request::Thread;
@@ -39,7 +39,7 @@ use crate::scheduler::{Acted, answer, turn_ended, watch_terminal};
 use crate::sessions::HISTORIES_PER_READ;
 use crate::state::new_token;
 use crate::converse::{self, InThread};
-use crate::plain::{Id, IssueKey, Time};
+use crate::plain::{Id, IssueKey, Time, WorktreeId};
 use crate::hosts::{self, Pacing};
 use crate::trace::{self, Triage, Work};
 use crate::triage::{self, Opened};
@@ -99,8 +99,8 @@ fn run(rt: &Runtime, command: &Command, order: &Order, beat: &dyn Fn(), seen: us
 pub fn carry(config: &Config, ports: &mut Ports, command: &Command, order: &Order, beat: &dyn Fn()) -> Result<Finished, Error> {
     say_queued(ports, command);
     let named = match order {
-        Order::StartWorker { worktree_id, .. } | Order::StopWorker { worktree_id, .. } => worktree_id.as_deref(),
-        Order::DeliverMessage { worktree_id, .. } | Order::CloseAgent { worktree_id } | Order::ReapWorktree { worktree_id, .. } => Some(worktree_id.as_str()),
+        Order::StartWorker { worktree_id, .. } | Order::StopWorker { worktree_id, .. } => worktree_id.as_ref(),
+        Order::DeliverMessage { worktree_id, .. } | Order::CloseAgent { worktree_id } | Order::ReapWorktree { worktree_id, .. } => Some(worktree_id),
         Order::ResumeWorker { .. } | Order::StartRound { .. } => None,
         _ => return carried(config, ports, command, order, beat),
     };
@@ -122,13 +122,13 @@ pub fn carry(config: &Config, ports: &mut Ports, command: &Command, order: &Orde
 
 // The hosts the command acts on: the worktree's it names, else those of the issue's workers'
 // records. None on this machine.
-fn worker_hosts(ports: &Ports, identifier: &str, named: Option<&str>) -> Result<Vec<String>, Error> {
+fn worker_hosts(ports: &Ports, identifier: &str, named: Option<&WorktreeId>) -> Result<Vec<String>, Error> {
     let records = match named {
         Some(_) => Vec::new(),
         None => ports.records.workers().map_err(|error| Error::Later(format!("the worker records couldn't be read: {error}")))?,
     };
-    let ids = records.iter().filter(|r| r.issue.eq_ignore_ascii_case(identifier)).map(|r| r.worktree_id.as_str()).chain(named);
-    let mut on: Vec<String> = ids.filter_map(|id| host_of(id)).map(String::from).collect();
+    let ids = records.iter().filter(|r| r.issue.eq_ignore_ascii_case(identifier)).map(|r| &r.worktree_id).chain(named);
+    let mut on: Vec<String> = ids.filter_map(|id| id.host()).map(String::from).collect();
     on.sort();
     on.dedup();
     Ok(on)
@@ -148,7 +148,7 @@ fn waits(config: &Config, pacing: &Pacing, on: &[String]) -> Option<Waits> {
 fn carried(config: &Config, ports: &mut Ports, command: &Command, order: &Order, beat: &dyn Fn()) -> Result<Finished, Error> {
     match order {
         Order::ReadIssue => read::read_issue(config, ports, command),
-        Order::StartWorker { session_id, orchestrate, worktree_id, host } => executor::start(config, ports, command, session_id, *orchestrate, worktree_id.as_deref(), host.as_deref()),
+        Order::StartWorker { session_id, orchestrate, worktree_id, host } => executor::start(config, ports, command, session_id, *orchestrate, worktree_id.as_ref(), host.as_deref()),
         Order::ResumeWorker { session_id, why } => executor::resume(config, ports, command, session_id, *why),
         Order::StartTurn { session_id, thread: false, request, after } => executor::turn(config, ports, command, session_id, request.as_ref(), after.as_ref()),
         Order::StartTurn { session_id, thread: true, request, after } => thread_turn(config, ports, command, session_id, request.as_ref(), after.as_ref(), beat),
@@ -157,7 +157,7 @@ fn carried(config: &Config, ports: &mut Ports, command: &Command, order: &Order,
         Order::StartRound { repo, number, head, round, session_id, rebase_only } => executor::round(config, ports, command, session_id.as_ref(), &executor::OnPr { repo, number: *number, head: head.as_deref(), round: *round, rebase_only: *rebase_only }),
         Order::UpdateBranch { repo, number, head } => pr::update_branch(ports, command, repo, *number, head),
         Order::MergePr { repo, number, head } => pr::merge_pr(ports, command, repo, *number, head),
-        Order::StopWorker { worktree_id, session_id } => workers::stop_worker(ports, command, worktree_id.as_deref(), session_id.as_ref()),
+        Order::StopWorker { worktree_id, session_id } => workers::stop_worker(ports, command, worktree_id.as_ref(), session_id.as_ref()),
         Order::StopTurn { session_id, thread, idle } => workers::stop_turn(ports, command, session_id, *thread, *idle),
         Order::EvaluatePr { repo, number } => pr::evaluate_pr(config, ports, command, repo, *number),
         Order::Observe { worktree_ids, session_id, thread } => workers::observe(ports, command, worktree_ids, session_id.as_ref(), *thread),

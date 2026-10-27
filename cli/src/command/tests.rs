@@ -59,7 +59,7 @@ fn start() -> Command {
 
 // None: a stop as the machine sends it before the start's result has named the worktree.
 fn stop(id: &str, worktree_id: Option<&str>) -> Command {
-    order(id, Order::StopWorker { worktree_id: worktree_id.map(String::from), session_id: Some("s1".into()) })
+    order(id, Order::StopWorker { worktree_id: worktree_id.map(WorktreeId::from), session_id: Some("s1".into()) })
 }
 
 // Each test's briefs in a directory of its own, as tests run at once.

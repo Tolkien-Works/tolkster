@@ -20,7 +20,7 @@ use crate::hosts::{Fleet, MAX_SLOTS};
 use crate::gateway::Failure;
 use crate::plain::split_repo;
 use crate::json::{non_empty, str};
-use crate::plain::{BranchName, CommandId, Id, IssueKey, Sha, Terminal, Time, plain_host};
+use crate::plain::{BranchName, CommandId, Id, IssueKey, Sha, Terminal, Time, WorktreeId, plain_host};
 // Defined in trace, the lower layer, which logs them.
 pub use crate::trace::{Answer as Outcome, Waiting};
 
@@ -196,10 +196,10 @@ pub enum Order {
     // `worktree_id`: the worktree the machine holds, in which a start that never began is
     // launched again (executor::start); None names none. `host`: the paired host the Durable
     // Object granted its slot on, None for this machine.
-    StartWorker { session_id: Id, orchestrate: bool, worktree_id: Option<String>, host: Option<String> },
+    StartWorker { session_id: Id, orchestrate: bool, worktree_id: Option<WorktreeId>, host: Option<String> },
     // `session_id` None, for the owner's comment, when no session has given the worker a
     // request: the line names the issue, not a session.
-    DeliverMessage { worktree_id: String, session_id: Option<Id>, comment: bool },
+    DeliverMessage { worktree_id: WorktreeId, session_id: Option<Id>, comment: bool },
     ReadComment { comment_id: Id },
     // `why`: what the fixed line that brings it back says.
     ResumeWorker { session_id: Id, why: Resume },
@@ -209,16 +209,16 @@ pub enum Order {
     StartRound { repo: String, number: u64, head: Option<Sha>, round: Option<u32>, session_id: Option<Id>, rebase_only: bool },
     // `worktree_id` None: no worktree is recorded, so there is no terminal to close.
     // `session_id` None: no session gave the worker a request, so "Stopped." is said nowhere.
-    StopWorker { worktree_id: Option<String>, session_id: Option<Id> },
+    StopWorker { worktree_id: Option<WorktreeId>, session_id: Option<Id> },
     // `request`: the time of the request decided, which a note's thread's turn takes replies
     // up to. `after`: the newest request a reader was shown, which a turn reads after.
     StartTurn { session_id: Id, thread: bool, request: Option<Time>, after: Option<Time> },
     // `idle`: a warm turn's close, which reports one already gone ended.
     StopTurn { session_id: Id, thread: bool, idle: bool },
     EvaluatePr { repo: String, number: u64 },
-    Observe { worktree_ids: Vec<String>, session_id: Option<Id>, thread: bool },
-    CloseAgent { worktree_id: String },
-    ReapWorktree { worktree_id: String, rule: ReapRule },
+    Observe { worktree_ids: Vec<WorktreeId>, session_id: Option<Id>, thread: bool },
+    CloseAgent { worktree_id: WorktreeId },
+    ReapWorktree { worktree_id: WorktreeId, rule: ReapRule },
     // `blockers`, their issue IDs, for `blocked`, `pr` for a PR's notice and `rounds` for
     // `roundsCap`. `through`, for `stalled`, the time of the request the turn was for.
     // `session_id` None: no session gave the worker a request, so the notice is said nowhere.
@@ -316,11 +316,6 @@ pub fn parse_base(value: &Value) -> Option<Result<BaseTip, String>> {
     })
 }
 
-// The shape the Durable Object stores a worktree ID in (plain::split_worktree).
-pub fn worktree_shape(worktree_id: &str) -> bool {
-    crate::plain::split_worktree(worktree_id).is_some()
-}
-
 fn envelope(value: &Value) -> Result<Command, String> {
     let id = str(value, "/id").and_then(CommandId::parse).ok_or("a command without a plain id")?;
     let kind = value.get("kind").and_then(|k| serde_json::from_value::<Kind>(k.clone()).ok()).ok_or_else(|| format!("{id}: a command of an unknown kind"))?;
@@ -356,7 +351,7 @@ fn order(kind: Kind, args: &Value) -> Option<Order> {
     let session = || str(args, "/sessionId").and_then(Id::parse);
     let maybe_session = || optional(args, "sessionId", |_| session());
     let flag = |key: &str| optional(args, key, Value::as_bool).map(Option::unwrap_or_default);
-    let worktree = || non_empty(args, "/worktreeId").filter(|w| worktree_shape(w));
+    let worktree = || str(args, "/worktreeId").and_then(WorktreeId::parse);
     let maybe_worktree = || optional(args, "worktreeId", |_| worktree());
     let repo = || non_empty(args, "/repo").filter(|r| split_repo(r).is_some());
     let number = || args.get("number").and_then(Value::as_u64).filter(|n| *n > 0);
@@ -408,7 +403,7 @@ fn order(kind: Kind, args: &Value) -> Option<Order> {
         Kind::StopTurn => Order::StopTurn { session_id: session()?, thread: flag("thread")?, idle: flag("idle")? },
         Kind::EvaluatePr => Order::EvaluatePr { repo: repo()?, number: number()? },
         Kind::Observe => Order::Observe {
-            worktree_ids: list("worktreeIds")?.into_iter().map(|w| worktree_shape(w).then(|| w.to_string())).collect::<Option<_>>()?,
+            worktree_ids: list("worktreeIds")?.into_iter().map(WorktreeId::parse).collect::<Option<_>>()?,
             session_id: maybe_session()?,
             thread: flag("thread")?,
         },
@@ -535,7 +530,7 @@ pub fn result_line(command: &Command, finished: &Finished) -> String {
 }
 
 // `sequence` counts from 1 on each connection (src/worker/machine.ts, Report).
-pub fn observation_line(observed: Observed, worktree_id: &str, sequence: u64) -> String {
+pub fn observation_line(observed: Observed, worktree_id: &WorktreeId, sequence: u64) -> String {
     json!({ "report": observed, "worktreeId": worktree_id, "sequence": sequence }).to_string()
 }
 
@@ -552,8 +547,8 @@ pub const MAX_LISTED: usize = 1000;
 pub struct Snapshot {
     pub began: Instant,
     pub at: String,
-    pub agents: Vec<(String, Observed)>,
-    pub listed: Option<Vec<String>>,
+    pub agents: Vec<(WorktreeId, Observed)>,
+    pub listed: Option<Vec<WorktreeId>>,
     pub hosts: Vec<String>,
     pub paired: Vec<String>,
     pub fleet: Fleet,
@@ -575,18 +570,16 @@ impl Snapshot {
 // worktree, every worktree, null when incomplete or more than MAX_LISTED, so that a
 // worktree missing from it is never taken as gone, the paired hosts that answered, as a
 // worktree on any other is in neither, and every paired host, so that a worktree on one in
-// neither list is on a host unpaired, which is gone at once. Only the agents' states are said, and a worktree ID
-// of a shape the relay would refuse the whole listing for is left out: none such is ever a
-// worker's. `idle`: the recipe machines that hold nothing, by host ID (hosts.rs, `idle`), and
-// `dormant` those whose destroy clock runs, by name, None while one is made, woken, slept or
-// destroyed (hosts.rs, `dormant`). `fleet`: this machine's workers and each paired host's
-// entry (hosts.rs, `Fleet`).
+// neither list is on a host unpaired, which is gone at once. Only the agents' states are said.
+// `idle`: the recipe machines that hold nothing, by host ID (hosts.rs, `idle`), and `dormant`
+// those whose destroy clock runs, by name, None while one is made, woken, slept or destroyed
+// (hosts.rs, `dormant`). `fleet`: this machine's workers and each paired host's entry
+// (hosts.rs, `Fleet`).
 pub fn listing_line(snapshot: &Snapshot, elapsed_ms: u64) -> String {
     let Snapshot { at, listed, hosts, paired, idle_hosts: idle, dormant, fleet, .. } = snapshot;
     let agents: serde_json::Map<String, Value> = snapshot
         .agents
         .iter()
-        .filter(|(id, _)| worktree_shape(id))
         .filter_map(|(id, observed)| {
             let state = match observed {
                 Observed::AgentWorking => "working",
@@ -594,10 +587,10 @@ pub fn listing_line(snapshot: &Snapshot, elapsed_ms: u64) -> String {
                 Observed::AgentWaiting => "waiting",
                 Observed::AgentBackground | Observed::AgentExited | Observed::WorktreeGone => return None,
             };
-            Some((id.clone(), json!(state)))
+            Some((id.to_string(), json!(state)))
         })
         .collect();
-    let listed: Option<Vec<&String>> = listed.as_deref().filter(|ids| ids.len() <= MAX_LISTED).map(|ids| ids.iter().filter(|id| worktree_shape(id)).collect());
+    let listed = listed.as_deref().filter(|ids| ids.len() <= MAX_LISTED);
     json!({ "report": "listing", "at": at, "elapsedMs": elapsed_ms, "agents": agents, "listed": listed, "hosts": hosts, "paired": paired, "idle": idle, "dormant": dormant, "fleet": fleet }).to_string()
 }
 
@@ -652,9 +645,9 @@ fn worker_report(report: &str, session_id: &str, activity_id: &str, at: &str, re
 // worktree's hooks, and `elapsed_ms` before this by the monotonic one, which is all the
 // Durable Object sets against a listing (`tolkster hook state`): never `worktreeGone`, which
 // only Orca's listing says.
-pub fn agent_state(observed: Observed, worktree_id: &str, at: &str, elapsed_ms: u64) -> Option<Value> {
+pub fn agent_state(observed: Observed, worktree_id: &WorktreeId, at: &str, elapsed_ms: u64) -> Option<Value> {
     let at = Time::parse(at)?;
-    (observed != Observed::WorktreeGone && worktree_shape(worktree_id)).then(|| json!({ "op": "report", "report": observed, "worktreeId": worktree_id, "at": at, "elapsedMs": elapsed_ms }))
+    (observed != Observed::WorktreeGone).then(|| json!({ "op": "report", "report": observed, "worktreeId": worktree_id, "at": at, "elapsedMs": elapsed_ms }))
 }
 
 // A session's turn in `terminal` is done with Claude's input and waits for the next

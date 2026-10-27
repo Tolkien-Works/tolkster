@@ -21,7 +21,7 @@ fn a_launch_reads_back_as_written() {
 fn the_report_and_its_forward_are_the_contracts() {
     let contract = contract();
     let summary: Summary = serde_json::from_value(contract["timing"]["report"]["timing"].clone()).unwrap();
-    assert_eq!(report("r1::D:/wt/tw-1", &summary), Some(contract["timing"]["report"].clone()));
+    assert_eq!(report(&"r1::D:/wt/tw-1".into(), &summary), Some(contract["timing"]["report"].clone()));
     assert_eq!(forwarded(&contract["timing"]["forward"]), Some(Ok((Id::parse("0a1b-2c").unwrap(), summary.clone()))));
     let mut bent = contract["timing"]["forward"].clone();
     bent["timing"]["build"] = json!("not a sha");
@@ -30,7 +30,6 @@ fn the_report_and_its_forward_are_the_contracts() {
     bent["timing"]["path"] = json!("D:/wt");
     assert!(matches!(forwarded(&bent), Some(Err(_))));
     assert_eq!(forwarded(&contract["baseTip"]), None);
-    assert_eq!(report("D:/wt/tw-1", &summary), None);
 }
 
 // Every kind, check and side, and the cap, are the contract's, which the relay holds to too: a
