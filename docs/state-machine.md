@@ -208,7 +208,7 @@ away. Shapes are `Command` and `PrRead` in `types.ts`.
 A command with no result in its timeout
 (2 min; 10 for `startWorker` and `startTriage`) is sent again with its ID, three times in
 all, then ends `lost`, applied as `failed`, though it may have run: `startWorker`'s leaves
-`exited`, and `startTurn`'s holds its claim until `observe` finds or ends the turn. `listenConnected` sends a command held away again as one of its three. One answered `retryable` names its wait (`waitsOn`: a host, the recipe-machine lock, or Orca) and goes again once that clears (a listing hears the host or Orca, a machine command ends, or `listen`'s settings change), its send unspent unless its last was one too. One `waking` gets its send back for 30 minutes.
+`exited`, and `startTurn`'s holds its claim until `observe` finds or ends the turn. `listenConnected` sends a command held away again as one of its three. One answered `retryable` names its wait (`waitsOn`: a host, the recipe-machine lock, or Orca) and goes again once that clears (a listing that began after its answer hears the host or Orca, a machine command ends, or `listen`'s settings change), its send unspent unless its last was one too. One `waking` gets its send back for 30 minutes.
 
 **A stop owed.** In `halted`, `merged` and `stopping`, a halt's, cancel's or
 owner's stop goes every 2 minutes until confirmed by the newest stop's success,

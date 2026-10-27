@@ -374,7 +374,7 @@ export class Relay extends DurableObject<LinearApp> {
           if (report.fleet !== null) await fleetReported(storage, { hosts: report.fleet }, nowMs, sender);
           if (report.listed !== null) await fleetEvent(storage, { kind: "listed", idle: report.idle, dormant: report.dormant, elapsedMs: report.elapsedMs }, nowMs, sender);
           // `listen` sends no listing whose own Orca didn't answer.
-          await waitsCleared(storage, { hosts: report.hosts, orca: true }, nowMs, sender);
+          await waitsCleared(storage, { hosts: report.hosts, orca: true, beganMs: nowMs - report.elapsedMs }, nowMs, sender);
         }
       } else if (report.report === "terminalClosed") {
         await terminalClosed(storage, report.terminal, `${connection}:${report.sequence}`, nowMs, sender);
@@ -408,7 +408,6 @@ export class Relay extends DurableObject<LinearApp> {
         const started = report.report === "commandResult" ? startedIn(report) : null;
         const kept = started === null ? null : await keptListing(storage);
         if (started !== null && kept !== null) await applyListing(storage, kept, started.id, event.issue as string, nowMs, sender);
-        if (report.report === "commandResult" && report.result === "retryable") await heardSince(storage, event.issue as string, report.id, nowMs, sender);
         // A worker's command waiting on a host holds it awake, and wakes it should it sleep.
         const waitsOn = report.report === "commandResult" && report.result === "retryable" && report.detail.waitsOn !== undefined ? parseWaitsOn(report.detail.waitsOn) : null;
         if (waitsOn !== null && "host" in waitsOn) await fleetEvent(storage, { kind: "wanted", host: waitsOn.host }, nowMs, sender);
@@ -644,17 +643,6 @@ export class Relay extends DurableObject<LinearApp> {
       // Already closed.
     }
   }
-}
-
-// A listing begun since the command was sent may have heard the host or Orca it now waits on
-// before its result came: that clears the wait on its own issue, as the next listing would.
-async function heardSince(storage: DurableObjectStorage, issue: string, id: string, nowMs: number, sender: (c: Command[]) => void): Promise<void> {
-  const c = (await loadStore(storage, issue)).queue.find((q) => q.id === id);
-  if (c?.sentMs == null || c.waitsOn == null || "lock" in c.waitsOn) return;
-  const kept = await keptListing(storage);
-  if (kept === null || kept.began < c.sentMs) return;
-  if ("orca" in c.waitsOn) await waitsCleared(storage, { orca: true }, nowMs, sender, [issue]);
-  else if (kept.listing.hosts.includes(c.waitsOn.host)) await waitsCleared(storage, { hosts: [c.waitsOn.host] }, nowMs, sender, [issue]);
 }
 
 // The worktree an ok result names, by a valid ID, with its branch and repo as they came.

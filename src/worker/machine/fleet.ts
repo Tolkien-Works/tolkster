@@ -252,6 +252,7 @@ export function stepFleet(before: Run, e: FleetEvent, nowMs: number): FleetStepp
       if (c?.id !== e.command) return { run: before, send };
       if (e.result === "retryable") {
         c.waitsOn = e.data?.waitsOn ?? null;
+        c.answeredMs = nowMs;
         break;
       }
       r.command = null;
