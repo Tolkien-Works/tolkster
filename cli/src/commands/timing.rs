@@ -6,8 +6,8 @@ use ureq::Agent;
 
 use super::logs::since_ms;
 use crate::args::{Kind, parse};
-use crate::cli::{NOTHING_TO_DO, print, print_json, timing_file};
-use crate::error::{Context, Error};
+use crate::cli::{NOTHING_TO_DO, print, print_json, read_if_there, timing_file};
+use crate::error::Error;
 use crate::time::{iso, now_ms};
 use crate::timing::report::{GROUPS, Group, checks, report, runs};
 
@@ -33,11 +33,7 @@ pub fn run(_: &Agent, argv: &[String]) -> Result<u8, Error> {
         None => Group::Size,
     };
     let file = timing_file()?;
-    let text = match std::fs::read_to_string(&file) {
-        Ok(text) => text,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(error) => return Err(error).context(file.display()),
-    };
+    let text = read_if_there(&file)?.unwrap_or_default();
     let runs = runs(&text, from, to);
     if runs.is_empty() {
         eprintln!("no worker started from {} to {}", iso(from), iso(to));

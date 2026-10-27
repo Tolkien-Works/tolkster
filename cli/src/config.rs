@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
-use crate::cli::{config_file, credentials_file, env, machines_file, merge_json_file, shown};
+use crate::cli::{config_file, credentials_file, env, machines_file, merge_json_file, read_if_there, shown};
 use crate::error::{Context, Error};
 use crate::estimates::Size;
 use ladder::Ladder;
@@ -221,10 +221,9 @@ pub fn config(files: &Files, owner_id: String, home: &Path) -> Result<Config, Er
     let path = machines_file()?;
     // One that doesn't read stops the load: counted as none, it would let a repo's `machines` be
     // passed.
-    let made = match fs::read_to_string(&path) {
-        Ok(text) => Value::Object(serde_json::from_str(&text).context(path.display())?),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Value::Null,
-        Err(error) => return Err(error).context(path.display()),
+    let made = match read_if_there(&path)? {
+        Some(text) => Value::Object(serde_json::from_str(&text).context(path.display())?),
+        None => Value::Null,
     };
     Ok(Config { machines: machines(&made), ..from_files(files, owner_id, home, env("TOLKSTER_CO_AUTHOR"))? })
 }

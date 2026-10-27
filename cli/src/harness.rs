@@ -179,11 +179,7 @@ pub fn trust(file: &Path, dir: &str) -> Result<bool, Error> {
     let folder = folder.trim_end_matches('/');
     let failed = |error: &dyn std::fmt::Display| Error::Failed(format!("{}: {error}", file.display()));
     for attempt in 0..=TRUST_WRITES {
-        let text = match std::fs::read_to_string(file) {
-            Ok(text) => text,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => "{}".into(),
-            Err(error) => return Err(error).context(file.display()),
-        };
+        let text = crate::cli::read_if_there(file)?.unwrap_or_else(|| "{}".into());
         // Claude's own file, every key of which is kept: an open shape, read by index.
         let mut settings: Value = serde_json::from_str(&text).context(file.display())?;
         let trusted = settings["projects"].as_object().is_some_and(|projects| projects.iter().any(|(path, project)| project["hasTrustDialogAccepted"] == json!(true) && crate::plain::inside(folder, path)));
