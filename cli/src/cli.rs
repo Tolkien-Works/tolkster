@@ -124,6 +124,19 @@ pub fn write_file(path: &std::path::Path, text: &str) -> Result<(), Error> {
     fs::write(path, text).context(path.display())
 }
 
+// Writes `text` to `path` aside, as `<path>.<pid>`, and renames it over, so a reader never sees
+// half a file. The caller keeps this process's writes to `path` one at a time, as they share
+// the part file's name; a failed rename removes it.
+pub fn replace_file(path: &Path, text: &str) -> Result<(), Error> {
+    let mut part = path.as_os_str().to_owned();
+    part.push(format!(".{}", std::process::id()));
+    let part = PathBuf::from(part);
+    write_file(&part, text)?;
+    fs::rename(&part, path).context(path.display()).inspect_err(|_| {
+        let _ = fs::remove_file(&part);
+    })
+}
+
 // The text of `path`, or `None` when there is no such file.
 pub fn read_if_there(path: &Path) -> Result<Option<String>, Error> {
     match fs::read_to_string(path) {

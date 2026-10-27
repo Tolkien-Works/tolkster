@@ -10,7 +10,7 @@ use std::sync::Mutex;
 
 use serde_json::{Value, json};
 
-use crate::cli::write_file;
+use crate::cli::replace_file;
 use crate::error::{Context, Error};
 use crate::config::ladder::{Launch, plain_model};
 use crate::harnesses::{DEFAULT, Harness, named};
@@ -134,11 +134,7 @@ static WRITING: Mutex<()> = Mutex::new(());
 
 pub fn write_settings(hooks: &Path) -> Result<(), Error> {
     let _writing = lock(&WRITING);
-    settings(hooks).iter().filter(|(path, text)| std::fs::read_to_string(path).ok().as_deref() != Some(text)).try_for_each(|(path, text)| {
-        let part = path.with_extension(format!("json.{}", std::process::id()));
-        write_file(&part, text)?;
-        std::fs::rename(&part, path).context(path.display())
-    })
+    settings(hooks).iter().filter(|(path, text)| std::fs::read_to_string(path).ok().as_deref() != Some(text)).try_for_each(|(path, text)| replace_file(path, text))
 }
 
 fn settings(hooks: &Path) -> [(PathBuf, &'static str); 2] {
@@ -193,12 +189,7 @@ pub fn trust(file: &Path, dir: &str) -> Result<bool, Error> {
         let projects = settings.as_object_mut().ok_or_else(not_an_object)?.entry("projects").or_insert_with(|| json!({}));
         let project = projects.as_object_mut().ok_or_else(not_an_object)?.entry(folder).or_insert_with(|| json!({}));
         project.as_object_mut().ok_or_else(not_an_object)?.insert("hasTrustDialogAccepted".into(), json!(true));
-        let part = file.with_extension(format!("json.tolkster-{}", std::process::id()));
-        write_file(&part, &serde_json::to_string_pretty(&settings).context(file.display())?)?;
-        if let Err(error) = std::fs::rename(&part, file) {
-            let _ = std::fs::remove_file(&part);
-            return Err(error).context(file.display());
-        }
+        replace_file(file, &serde_json::to_string_pretty(&settings).context(file.display())?)?;
     }
     Err(failed(&"another program rewrote it each time"))
 }
