@@ -9,8 +9,7 @@ use crate::error::Error;
 use crate::estimates::{Estimation, with_team_fields};
 use crate::issue_state::WorkflowState;
 use crate::issues::{Label, TeamProject};
-use crate::json::decode;
-use crate::linear::{Nodes, Ref, TeamKey, answer_to, graphql, read_as};
+use crate::linear::{Nodes, Ref, TeamKey, read_as, read_with};
 use crate::plain::Sha;
 
 #[derive(Debug, Deserialize)]
@@ -163,7 +162,7 @@ pub fn team_by_key(agent: &Agent, token: &str, key: &str) -> Result<Option<Filin
         teams: Nodes<FilingTeam>,
     }
     let query = with_team_fields(TEAM_BY_KEY);
-    let read: Read = decode(graphql(agent, token, &query, json!({ "key": key }))?, &answer_to(&query))?;
+    let read: Read = read_with(agent, token, &query, json!({ "key": key }))?;
     Ok(read.teams.nodes.into_iter().next())
 }
 
@@ -182,7 +181,7 @@ pub fn team_states(agent: &Agent, token: &str, team_id: &str) -> Result<TeamStat
     struct Read {
         team: TeamStates,
     }
-    Ok(decode::<Read>(graphql(agent, token, STATES, json!({ "id": team_id }))?, &answer_to(STATES))?.team)
+    Ok(read_with::<Read>(agent, token, STATES, json!({ "id": team_id }))?.team)
 }
 
 const LABELS: &str = "query Labels($filter: IssueLabelFilter!) { issueLabels(first: 250, filter: $filter) { nodes { id name team { id } } } }";
@@ -194,7 +193,7 @@ pub fn labels(agent: &Agent, token: &str, filter: Value) -> Result<Vec<Label>, E
     struct Read {
         issue_labels: Nodes<Label>,
     }
-    Ok(decode::<Read>(graphql(agent, token, LABELS, json!({ "filter": filter }))?, &answer_to(LABELS))?.issue_labels.nodes)
+    Ok(read_with::<Read>(agent, token, LABELS, json!({ "filter": filter }))?.issue_labels.nodes)
 }
 
 const PROJECTS: &str = "query Projects($id: String!, $name: String!) { team(id: $id) { projects(first: 50, filter: { name: { eqIgnoreCase: $name } }) { nodes { id name completedAt canceledAt } } } }";
@@ -210,7 +209,7 @@ pub fn team_projects(agent: &Agent, token: &str, team_id: &str, name: &str) -> R
     struct Read {
         team: Team,
     }
-    Ok(decode::<Read>(graphql(agent, token, PROJECTS, json!({ "id": team_id, "name": name }))?, &answer_to(PROJECTS))?.team.projects.nodes)
+    Ok(read_with::<Read>(agent, token, PROJECTS, json!({ "id": team_id, "name": name }))?.team.projects.nodes)
 }
 
 #[derive(Debug, Deserialize)]

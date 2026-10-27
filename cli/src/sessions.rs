@@ -26,7 +26,7 @@ use crate::issues::{Link, Relations};
 use crate::config::repo_map::Place;
 use crate::json::decode;
 use crate::plain::Id;
-use crate::linear::{ActivityType, Kind, Named, Nodes, PageInfo, Project, Ref, Relation, StateOf, StateType, answer_to, graphql, with_token};
+use crate::linear::{ActivityType, Kind, Named, Nodes, PageInfo, Project, Ref, Relation, StateOf, StateType, answer_to, graphql, read_with, with_token};
 use crate::state::{Record, Records, State};
 
 // The fields every session query reads, with the newest `activities` activities: the
@@ -558,7 +558,7 @@ pub fn read(agent: &Agent, token: &str, records: Option<&State>, session_id: &st
         agent_session: Option<SessionNode>,
     }
     let query = format!("query ReadSession($id: String!) {{ agentSession(id: $id) {{ {} }} }}", read_fields(what));
-    let answer: Answer = decode(graphql(agent, token, &query, json!({ "id": session_id }))?, &answer_to(&query))?;
+    let answer: Answer = read_with(agent, token, &query, json!({ "id": session_id }))?;
     let mut session = session_from(agent, token, answer.agent_session)?;
     if let Some(state) = records {
         load_records(state, std::slice::from_mut(&mut session))?;

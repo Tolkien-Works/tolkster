@@ -482,19 +482,20 @@ pub fn create_label(agent: &Agent, access_token: &str, name: &str, team_id: Opti
     Ok(mutate::<Created>(agent, access_token, "issueLabelCreate", CREATE_LABEL, json!({ "input": input }))?.issue_label.id)
 }
 
-// One read of `query`, under a token of its own. Logged under the module that called it
-// (`cost::site`): `with_token` runs a closure, which `#[track_caller]` doesn't pass
-// through, so the caller is taken here and handed to `graphql_at`.
+// One read of `query` under a token the caller holds, decoded into its shape
+// (`json::decode`), the error naming the query. Logged under the module that called it
+// (`cost::site`).
 #[track_caller]
-pub fn read(agent: &Agent, query: &str, variables: Value) -> Result<Value, Error> {
-    let caller = Location::caller();
-    with_token(agent, |token| graphql_at(agent, token, query, variables.clone(), caller))
+pub fn read_with<T: DeserializeOwned>(agent: &Agent, token: &str, query: &str, variables: Value) -> Result<T, Error> {
+    decode(graphql_at(agent, token, query, variables, Location::caller())?, &answer_to(query))
 }
 
-// One read of `query`, decoded into its shape (`json::decode`), the error naming the query.
+// `read_with` under a token of its own. `with_token` runs a closure, which `#[track_caller]`
+// doesn't pass through, so the caller is taken here and handed to `graphql_at`.
 #[track_caller]
 pub fn read_as<T: DeserializeOwned>(agent: &Agent, query: &str, variables: Value) -> Result<T, Error> {
-    decode(read(agent, query, variables)?, &answer_to(query))
+    let caller = Location::caller();
+    with_token(agent, |token| decode(graphql_at(agent, token, query, variables.clone(), caller)?, &answer_to(query)))
 }
 
 // What a decode error names a query by, e.g. "Linear's answer to Closed".
