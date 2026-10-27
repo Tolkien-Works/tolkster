@@ -7,6 +7,7 @@ use serde::Deserialize;
 use serde_json::Value;
 
 use super::*;
+use crate::error::Waits;
 use crate::git;
 use crate::health::Health;
 use crate::json::decode;
@@ -18,7 +19,8 @@ use crate::trace;
 // command that never reaches Orca never fails on it. Each answers or not once for the run's
 // listings (`asked`), so one command never sees a host's worktrees listed and its terminals
 // not: `health`, which other runs change, decides only for a host no listing of this run has
-// asked yet.
+// asked yet. `waits_from` is the thread's Orca write count as a command's `Cli` was made
+// (`waiting`).
 pub struct Cli<'r> {
     pub(super) run: &'r mut Run<'r>,
     pub(super) hosts: Option<Vec<Host>>,
@@ -27,6 +29,7 @@ pub struct Cli<'r> {
     pub(super) unanswered: HashSet<String>,
     pub(super) refused_pause: Duration,
     pub(super) at_once: Option<Ask>,
+    pub(super) waits_from: Option<u64>,
 }
 
 // The program runner a listing's threads call, which a `Run` borrowing its caller can't be.
@@ -34,16 +37,25 @@ pub type Ask = fn(&str, &[&str], Option<&str>) -> Result<Output, Error>;
 
 type Answered = Vec<(Option<String>, Vec<Value>)>;
 
+// A listing call's answer, and whether it found Orca absent (`Cli::failed`).
+type Listed = (Result<Value, Error>, bool);
+
 impl<'r> Cli<'r> {
     // This machine's Orca alone.
     pub fn new(run: &'r mut Run<'r>, health: &'r Health) -> Cli<'r> {
-        Cli { run, hosts: Some(Vec::new()), health, answered: HashSet::new(), unanswered: HashSet::new(), refused_pause: REFUSED_PAUSE, at_once: None }
+        Cli { run, hosts: Some(Vec::new()), health, answered: HashSet::new(), unanswered: HashSet::new(), refused_pause: REFUSED_PAUSE, at_once: None, waits_from: None }
     }
 
     // A listing asks every host at once, each call on a thread of its own made by `ask`, so it
     // costs the slowest host's, not their sum. Without, the calls are made in turn by `run`.
     pub fn at_once(self, ask: Ask) -> Cli<'r> {
         Cli { at_once: Some(ask), ..self }
+    }
+
+    // A command's: a listing that finds Orca absent waits on it, as a read does (`orca_read`),
+    // until the command's first Orca write.
+    pub fn waiting(self) -> Cli<'r> {
+        Cli { waits_from: Some(writes()), ..self }
     }
 
     // This machine's Orca and every host paired with it as the first call needs them.
@@ -69,7 +81,8 @@ impl<'r> Cli<'r> {
 
     fn hosts(&mut self) -> Result<&[Host], Error> {
         if self.hosts.is_none() {
-            self.hosts = Some(paired(self.run)?);
+            let (listed, absent) = orca_listed(self.run, &HOSTS);
+            self.hosts = Some(hosts_of(listed.map_err(|error| self.failed(error, absent))?)?);
         }
         Ok(self.hosts.as_deref().unwrap_or_default())
     }
@@ -100,6 +113,16 @@ impl<'r> Cli<'r> {
         reads
     }
 
+    // What a listing's failed call fails with. One that found Orca absent before its command's
+    // first Orca write waits on it; after, the command sent again would repeat that write, a
+    // line typed included (`send`'s `waits_now`), so it fails.
+    fn failed(&self, error: Error, absent: bool) -> Error {
+        match self.waits_from {
+            Some(from) if absent && from == writes() => Error::Waits(Waits::Orca, error.to_string()),
+            _ => error,
+        }
+    }
+
     fn is_silent(&self, host: &str) -> bool {
         self.unanswered.contains(host) || (!self.answered.contains(host) && self.health.silent(host))
     }
@@ -107,21 +130,30 @@ impl<'r> Cli<'r> {
     // A listing's call to `host`, None once that host hasn't answered: `early` when it was
     // asked already, else asked now. One that fails is silent for the calls after it, and fails
     // this one if it answered before.
-    fn asked(&mut self, host: Option<&str>, args: &[&str], early: Option<Result<Value, Error>>) -> Result<Option<Value>, Error> {
-        let answer = |run: &mut Run| early.unwrap_or_else(|| orca_json(run, &at(host, args)));
-        let Some(host) = host else { return answer(self.run).map(Some) };
+    fn asked(&mut self, host: Option<&str>, args: &[&str], early: Option<Listed>) -> Result<Option<Value>, Error> {
+        let answer = |run: &mut Run| early.unwrap_or_else(|| orca_listed(run, &at(host, args)));
+        let Some(host) = host else {
+            let (answer, absent) = answer(self.run);
+            return answer.map(Some).map_err(|error| self.failed(error, absent));
+        };
         if self.is_silent(host) {
             self.unanswered.insert(host.to_string());
             return Ok(None);
         }
-        let error = match answer(self.run) {
-            Ok(answer) => {
+        let (error, absent) = match answer(self.run) {
+            (Ok(answer), _) => {
                 if self.answered.insert(host.to_string()) {
                     self.health.heard(host, Instant::now());
                 }
                 return Ok(Some(answer));
             }
-            Err(error) => error,
+            (Err(error), absent) => (error, absent),
+        };
+        // An absent Orca is this machine's, never the host's fault: one the command waits on
+        // marks no host silent.
+        let error = match self.failed(error, absent) {
+            Error::Waits(waits, why) => return Err(Error::Waits(waits, why)),
+            error => error,
         };
         let name: Option<String> = self.hosts().ok().and_then(|hosts| hosts.iter().find(|h| h.id == host).map(|h| h.name.chars().filter(|c| !c.is_control()).collect()));
         if self.health.stopped(host, name.clone(), Instant::now()) {
@@ -157,18 +189,18 @@ impl<'r> Cli<'r> {
     // Each call to each host not silent now, made at once: the first host's first by `run`,
     // whose beat shows the command at work, every other by `ask` on a thread that acts as the
     // command's job (`trace::acting_as`).
-    fn ask_at_once(&mut self, ask: Ask, hosts: &[Option<String>], calls: &[&[&str]]) -> Vec<Option<Vec<Result<Value, Error>>>> {
+    fn ask_at_once(&mut self, ask: Ask, hosts: &[Option<String>], calls: &[&[&str]]) -> Vec<Option<Vec<Listed>>> {
         let asking: Vec<Option<&str>> = hosts.iter().map(Option::as_deref).filter(|host| host.is_none_or(|host| !self.is_silent(host))).collect();
         let job = trace::job();
         let one = |host: Option<&str>, args: &[&str]| {
             let _acting = job.as_ref().map(|(id, issue, kind)| trace::acting_as(id, issue.as_deref(), kind.clone()));
             let mut ask = ask;
-            orca_json(&mut ask, &at(host, args))
+            orca_listed(&mut ask, &at(host, args))
         };
-        let gone = || Err(Error::Orca("an orca listing's thread panicked".into()));
+        let gone = || (Err(Error::Orca("an orca listing's thread panicked".into())), false);
         let mut answers = std::thread::scope(|scope| {
             let threads: Vec<Vec<_>> = asking.iter().enumerate().map(|(h, &host)| calls.iter().enumerate().map(|(n, &args)| (h + n > 0).then(|| scope.spawn(move || one(host, args)))).collect()).collect();
-            let mut here = asking.first().map(|&host| orca_json(self.run, &at(host, calls[0])));
+            let mut here = asking.first().map(|&host| orca_listed(self.run, &at(host, calls[0])));
             let joined = threads.into_iter().map(|calls| calls.into_iter().map(|call| call.map_or_else(|| here.take().unwrap_or_else(gone), |thread| thread.join().unwrap_or_else(|_| gone()))).collect());
             joined.collect::<Vec<Vec<_>>>().into_iter()
         });

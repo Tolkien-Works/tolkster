@@ -217,6 +217,34 @@ fn a_read_that_finds_orca_absent_waits_on_it_but_a_write_fails() {
     assert!(matches!(call(&mut missing, &send), Err(Error::Orca(_))));
 }
 
+// A command's listing that finds Orca absent waits on it, from a listing's thread too, until
+// the command's first Orca write: sent again after it, the command would repeat that write.
+#[test]
+fn a_commands_listing_waits_on_an_absent_orca_until_its_first_write() {
+    use crate::error::Waits;
+    fn ask(_: &str, args: &[&str], _: Option<&str>) -> Result<Output, Error> {
+        let absent = json!({ "ok": false, "error": { "code": "runtime_unavailable", "message": "down" } });
+        Ok(match args[..2] {
+            ["worktree", "ps"] => Output::ok(json!({ "result": { "truncated": false, "worktrees": [] } }).to_string()),
+            _ => Output { ok: false, code: Some(1), stdout: absent.to_string(), stderr: String::new() },
+        })
+    }
+    let waits = |result: Result<Listing, Error>| matches!(result, Err(Error::Waits(Waits::Orca, _)));
+    let mut run = ask;
+    assert!(matches!(Cli::paired(&mut run, Box::leak(Box::default())).waiting().terminals(), Err(Error::Waits(Waits::Orca, _))));
+    let mut run = ask;
+    assert!(waits(Cli::alone(&mut run).at_once(ask).waiting().listing_on(None)));
+    let mut run = ask;
+    assert!(matches!(Cli::alone(&mut run).at_once(ask).listing_on(None), Err(Error::Orca(_))));
+    let mut run = ask;
+    let mut orca = Cli::alone(&mut run).waiting();
+    assert!(waits(orca.listing_on(None)));
+    assert!(orca.close_all("repo::/wt/tw-1").is_err());
+    assert!(matches!(orca.listing_on(None), Err(Error::Orca(_))));
+    let mut absent = |_: &str, _: &[&str], _: Option<&str>| ask("orca", &["terminal", "list"], None);
+    assert!(waits(Cli::with_hosts(&mut absent, &["mac"]).waiting().listing_on(Some("mac"))));
+}
+
 // A `Cli` that retries a refused send at once, not seconds apart.
 fn quick<'r>(run: &'r mut Run<'r>) -> Cli<'r> {
     Cli { refused_pause: Duration::ZERO, ..Cli::alone(run) }
