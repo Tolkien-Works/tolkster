@@ -66,11 +66,7 @@ pub struct Update {
 }
 
 impl Update {
-    pub fn building_since(&self) -> Option<Instant> {
-        self.building()
-    }
-
-    fn building(&self) -> Option<Instant> {
+    pub fn building(&self) -> Option<Instant> {
         *lock(&self.building)
     }
 
