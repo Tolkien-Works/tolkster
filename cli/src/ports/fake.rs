@@ -84,7 +84,6 @@ pub struct Linear {
     // Completed issues as their context reads them, by ID.
     pub closed: RefCell<HashMap<String, ClosedRead>>,
     pub started: RefCell<Vec<String>>,
-    pub released: RefCell<Vec<String>>,
     // Every issue triage may read, by ID: the queue is those in Triage and not archived.
     pub triage_issues: RefCell<Vec<(Id, Candidate)>>,
     // The issues, by identifier, whose history shows them moved into Triage, not filed there.
@@ -227,9 +226,8 @@ impl LinearPort for Linear {
         self.started.borrow_mut().push(issue.id.clone());
         Ok(())
     }
-    fn release_issue(&self, issue_id: &Id) -> Result<(), Error> {
+    fn release_issue(&self, _issue_id: &Id) -> Result<(), Error> {
         self.budget()?;
-        self.released.borrow_mut().push(issue_id.to_string());
         Ok(())
     }
 }
