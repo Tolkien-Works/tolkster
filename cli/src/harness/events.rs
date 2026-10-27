@@ -173,6 +173,12 @@ pub struct ToolUse {
 }
 
 impl ToolUse {
+    // The `tool_use` part `id` calling `name` on `input`, at `at`.
+    fn of(at: i64, id: &str, name: &str, input: &Value) -> ToolUse {
+        let tool = tool(name);
+        ToolUse { at, id: id.to_string(), tool, command: command(tool, input), file: file(input) }
+    }
+
     // The call as a hook's input would give it, in the hook `of`'s transcript and directory.
     pub fn as_call(&self, of: &Call) -> Call {
         Call { tool: self.tool, command: self.command.clone(), file: self.file.clone(), detail: None, id: self.id.clone(), transcript: of.transcript.clone(), cwd: of.cwd.clone(), sub_agent: false, failed: false, launched: false }
@@ -264,8 +270,7 @@ pub fn tool_calls(tail: &str) -> Vec<ToolUse> {
         let Some(at) = instant(&timestamp) else { continue };
         for part in message.parts() {
             if let Part::ToolUse { id, name, input } = part {
-                let tool = tool(name);
-                calls.push(ToolUse { at, id: id.clone(), tool, command: command(tool, input), file: file(input) });
+                calls.push(ToolUse::of(at, id, name, input));
             }
         }
     }
@@ -335,6 +340,13 @@ pub enum End {
     Notice(Option<bool>),
 }
 
+impl End {
+    // A tool result's end, in an entry that says whether it `launched` the call in the background.
+    fn of_result(launched: bool, is_error: Option<bool>) -> End {
+        if launched { End::Launched } else { End::Returned(is_error == Some(true)) }
+    }
+}
+
 // How each call in `tail` ended, by id. The notice Claude Code queues for the worker when a
 // call in the background ends wins over its result.
 pub fn ends(tail: &str) -> HashMap<String, End> {
@@ -350,7 +362,7 @@ pub fn ends(tail: &str) -> HashMap<String, End> {
                 let launched = launch(&tool_use_result);
                 for part in message.parts() {
                     if let Part::ToolResult { tool_use_id, is_error } = part {
-                        ends.entry(tool_use_id.clone()).or_insert(if launched { End::Launched } else { End::Returned(*is_error == Some(true)) });
+                        ends.entry(tool_use_id.clone()).or_insert(End::of_result(launched, *is_error));
                     }
                 }
             }
@@ -378,10 +390,7 @@ pub fn moments(text: &str) -> Vec<(i64, Moment)> {
         let (at, mut these) = match entry {
             Entry::Assistant { timestamp, message, .. } => {
                 let calls = message.parts().iter().filter_map(|part| match part {
-                    Part::ToolUse { id, name, input } => {
-                        let tool = tool(name);
-                        Some(Moment::Call(ToolUse { at: 0, id: id.clone(), tool, command: command(tool, input), file: file(input) }))
-                    }
+                    Part::ToolUse { id, name, input } => Some(Moment::Call(ToolUse::of(0, id, name, input))),
                     _ => None,
                 });
                 (Some(timestamp), message.id.clone().map(Moment::Reply).into_iter().chain(calls).collect::<Vec<_>>())
@@ -389,7 +398,7 @@ pub fn moments(text: &str) -> Vec<(i64, Moment)> {
             Entry::User { timestamp, message, tool_use_result } => {
                 let launched = launch(&tool_use_result);
                 let ended: Vec<Moment> = message.parts().iter().filter_map(|part| match part {
-                    Part::ToolResult { tool_use_id, is_error } => Some(Moment::Ended(tool_use_id.clone(), if launched { End::Launched } else { End::Returned(*is_error == Some(true)) })),
+                    Part::ToolResult { tool_use_id, is_error } => Some(Moment::Ended(tool_use_id.clone(), End::of_result(launched, *is_error))),
                     _ => None,
                 }).collect();
                 (timestamp, if ended.is_empty() { vec![Moment::Prompt] } else { ended })
