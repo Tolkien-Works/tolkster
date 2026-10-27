@@ -8,6 +8,7 @@ use std::collections::HashMap;
 
 use serde::Serialize;
 
+use crate::args::named;
 use crate::error::Error;
 use crate::estimates::Size;
 use crate::github::CopilotReview;
@@ -390,11 +391,11 @@ pub fn copilot_name(copilot: CopilotReview) -> &'static str {
 }
 
 pub fn size_named(name: &str) -> Option<ReviewSize> {
-    [ReviewSize::Below, ReviewSize::At, ReviewSize::Above, ReviewSize::Unsized].into_iter().find(|size| size_name(*size) == name)
+    named(&[ReviewSize::Below, ReviewSize::At, ReviewSize::Above, ReviewSize::Unsized], size_name, name)
 }
 
 pub fn copilot_named(name: &str) -> Option<CopilotReview> {
-    [CopilotReview::Off, CopilotReview::OnOpening, CopilotReview::OnEachPush].into_iter().find(|copilot| copilot_name(*copilot) == name)
+    named(&[CopilotReview::Off, CopilotReview::OnOpening, CopilotReview::OnEachPush], copilot_name, name)
 }
 
 #[cfg(test)]
