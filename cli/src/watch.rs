@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use crate::error::Error;
 use crate::hosts::Fleet;
-use crate::machine::Observed;
+use crate::machine::{Observed, Snapshot};
 use crate::orca::{Terminal, Worktree, agent_panes, candidates, waits_in};
 use crate::plain::{split_terminal, split_worktree};
 use crate::sync::lock;
@@ -124,33 +124,6 @@ impl Agents {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Missed {
     pub closed: Vec<String>,
-}
-
-// One listing whole, but for `Agents::others`, for the Durable Object (machine.rs,
-// `listing_line`): `began` by this process's monotonic clock and `at` by the wall clock, which
-// only names it; each an agent runs in, with its state (`states_of`); every one
-// Orca has on the hosts that answered, sorted, None when the listing was incomplete; those
-// hosts, the paired ones and each one's entry, the settings, and the idle and dormant recipe
-// machines.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Snapshot {
-    pub began: Instant,
-    pub at: String,
-    pub agents: Vec<(String, Observed)>,
-    pub listed: Option<Vec<String>>,
-    pub hosts: Vec<String>,
-    pub paired: Vec<String>,
-    pub fleet: Fleet,
-    pub config: String,
-    pub idle_hosts: BTreeMap<String, i64>,
-    pub dormant: Option<BTreeMap<String, i64>>,
-}
-
-impl Snapshot {
-    // Whether it shows what `other` does, whenever each began.
-    pub fn same(&self, other: &Snapshot) -> bool {
-        self.agents == other.agents && self.listed == other.listed && self.hosts == other.hosts && self.paired == other.paired && self.fleet == other.fleet && self.idle_hosts == other.idle_hosts && self.dormant == other.dormant
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

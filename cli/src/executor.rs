@@ -71,6 +71,16 @@ fn session_on_issue(ports: &Ports, command: &Command, session_id: &Id, with_reco
     Ok(session)
 }
 
+// What a start, a resume, a round or a turn is carried out with, once its session is found on
+// the command's issue.
+struct Call<'a, 'p> {
+    config: &'a Config,
+    ports: &'a mut Ports<'p>,
+    command: &'a Command,
+    session_id: &'a Id,
+    issue: &'a Issue,
+}
+
 fn issue_of(session: &Session) -> Result<&Issue, Error> {
     session.issue.as_ref().ok_or_else(|| Error::Failed(format!("session {} has no issue", session.id)))
 }
@@ -208,20 +218,20 @@ pub fn start(config: &Config, ports: &mut Ports, command: &Command, session_id: 
     }
     // A worktree that was there stays there whatever failed.
     let there = existing.is_some();
-    let done = start_in(config, ports, command, session_id, issue, orchestrate, (named, host), existing, &worktrees);
+    let done = start_in(&mut Call { config, ports, command, session_id, issue }, orchestrate, named, host, existing, &worktrees);
     said_if_failed(ports, command, session_id, voice::COULDNT_START, json!({ "madeWorktree": there }), done)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn start_in(config: &Config, ports: &mut Ports, command: &Command, session_id: &Id, issue: &Issue, orchestrate: bool, (named, granted_on): (Option<&str>, Option<&str>), existing: Option<Worktree>, worktrees: &[Worktree]) -> Result<Finished, Error> {
+fn start_in(call: &mut Call, orchestrate: bool, named: Option<&str>, granted_on: Option<&str>, existing: Option<Worktree>, worktrees: &[Worktree]) -> Result<Finished, Error> {
+    let Call { config, command, session_id, issue, .. } = *call;
     let identifier = issue.identifier.as_str();
     // Orca's repos are listed only once a worktree there may be relaunched, so a start run
     // again beside its working agent is answered without them.
     let may_start = match &existing {
-        Some(worktree) => named == Some(worktree.id.as_str()) && worktree.agents.is_empty() && record_of(ports.records, &worktree.id)?.is_some_and(|r| r.issue.eq_ignore_ascii_case(identifier)),
+        Some(worktree) => named == Some(worktree.id.as_str()) && worktree.agents.is_empty() && record_of(call.ports.records, &worktree.id)?.is_some_and(|r| r.issue.eq_ignore_ascii_case(identifier)),
         None => true,
     };
-    let resolved = if may_start { find_repo(&ports.orca.repos(None)?, config.repos.repo_for(&issue.place)) } else { None };
+    let resolved = if may_start { find_repo(&call.ports.orca.repos(None)?, config.repos.repo_for(&issue.place)) } else { None };
     // An origin not read is no answer: the start that never began is tried again later.
     if let (Some(worktree), Some((repo_id, _))) = (&existing, &resolved)
         && worktree.host().is_some()
@@ -246,32 +256,32 @@ fn start_in(config: &Config, ports: &mut Ports, command: &Command, session_id: &
         trace::event(Work::NoRepo { issue: command.identifier.clone() });
         return Ok(Finished::failed_with(json!({ "madeWorktree": false })));
     };
-    let (answering, project) = (ports.orca.answering(), local_origin(worktrees, &repo_id).map(|origin| project_id(&origin)));
+    let (answering, project) = (call.ports.orca.answering(), local_origin(worktrees, &repo_id).map(|origin| project_id(&origin)));
     let at = match existing {
         Some(worktree) => Where::Existing(worktree.id),
-        None => Where::New(granted(ports, &repo_id, project.as_deref(), granted_on, &answering)?),
+        None => Where::New(granted(call.ports, &repo_id, project.as_deref(), granted_on, &answering)?),
     };
     // Moved to started once, before the pickup, so a start run again finds it started.
     if issue.state_type.is_unstarted() {
-        ports.linear.start_issue(issue)?;
+        call.ports.linear.start_issue(issue)?;
     }
     let wording = format!("{}[{identifier}]({})…", voice::STARTING_IN, issue.url);
-    pick_up(ports, command, session_id, None, &wording)?;
+    pick_up(call.ports, command, session_id, None, &wording)?;
     let made = matches!(at, Where::New(_));
     let host = match &at {
         Where::Existing(worktree_id) => host_of(worktree_id).map(String::from),
         Where::New(Place::On { host, .. }) => Some(host.to_string()),
         Where::New(Place::Here { .. }) => None,
     };
-    match start_worker(config, ports, session_id, issue, &repo, orchestrate, at, None) {
+    match start_worker(call, &repo, orchestrate, at, None) {
         Ok(worker) => {
             if let Work::Started { rung, .. } = &worker {
-                ports.shared.timing.started(&command.issue_id, identifier, &command.id, issue.size(), rung);
+                call.ports.shared.timing.started(&command.issue_id, identifier, &command.id, issue.size(), rung);
             }
             trace::event(worker);
             // Read on its host alone. A listing that fails now doesn't undo the start: it is
             // said without its worktree.
-            match ports.orca.listing_on(host.as_deref()).ok().and_then(|listing| linked_in(&listing.worktrees, identifier).cloned()) {
+            match call.ports.orca.listing_on(host.as_deref()).ok().and_then(|listing| linked_in(&listing.worktrees, identifier).cloned()) {
                 Some(worktree) => Ok(started(&worktree, local_origin(worktrees, &repo_id), made, true)),
                 None => Ok(Finished::ok(json!({ "worktree": Value::Null, "madeWorktree": made, "launched": true }))),
             }
@@ -279,8 +289,8 @@ fn start_in(config: &Config, ports: &mut Ports, command: &Command, session_id: &
         Err(error) if matches!(error, Error::RateLimited { .. }) || error.later() => Err(error),
         Err(error) => {
             // None when Orca couldn't say, which counts as one made.
-            let there = linked_worktree(ports, identifier).map_or(true, |w| w.is_some());
-            Ok(failed_and_said(ports, command, session_id, voice::COULDNT_START, &error, json!({ "madeWorktree": there })))
+            let there = linked_worktree(call.ports, identifier).map_or(true, |w| w.is_some());
+            Ok(failed_and_said(call.ports, command, session_id, voice::COULDNT_START, &error, json!({ "madeWorktree": there })))
         }
     }
 }
@@ -291,11 +301,11 @@ fn traces(config: &Config, repo: Option<&str>) -> bool {
     repo.and_then(|repo| config.repos.entry(repo)).is_some_and(|entry| entry.trace)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn start_worker(config: &Config, ports: &mut Ports, session_id: &Id, issue: &Issue, repo: &str, orchestrate: bool, at: Where, then: Option<Resume>) -> Result<Work, Error> {
+fn start_worker(call: &mut Call, repo: &str, orchestrate: bool, at: Where, then: Option<Resume>) -> Result<Work, Error> {
+    let Call { config, session_id, issue, .. } = *call;
     // A name reaches a path or a command line, so it must be the plain value it claims to be.
     let (identifier, repo) = (&IssueKey::check(&issue.identifier)?, &RepoName::check(repo)?);
-    let host = host_name(&at, &ports.orca.answering());
+    let host = host_name(&at, &call.ports.orca.answering());
     // Chosen once, from the issue as read now: the worker keeps it, and its host's setup
     // renders its briefs from it.
     let (rung, notes) = config.ladder.choose(issue.size(), &issue.labels);
@@ -304,15 +314,15 @@ fn start_worker(config: &Config, ports: &mut Ports, session_id: &Id, issue: &Iss
     let worker = Worker { session_id: session_id.clone(), identifier: identifier.clone(), repo: Some(repo.clone()), launch: Some(rung.launch.clone()), build: prebuilt::commit(), trace: traces(config, Some(repo)), timing: config.timing, how };
     let rung_from = if review == ReviewSize::Unsized { RungFrom::NoEstimate } else { RungFrom::Claim };
     let mut problems: Vec<Problem> = notes.into_iter().map(Problem::Rung).collect();
-    let worktree_id = create_worktree(ports, &worker, &rung.launch, rung_from, at)?;
+    let worktree_id = create_worktree(call.ports, &worker, &rung.launch, rung_from, at)?;
     let name = worktree_name(issue);
     // The worker runs either way: a worktree not named only looks plainer.
-    if let Err(error) = ports.orca.name_worktree(&worktree_id, &name) {
+    if let Err(error) = call.ports.orca.name_worktree(&worktree_id, &name) {
         problems.push(Problem::NotNamed(error));
     }
     // Only a phrase: should it fail, the worker runs all the same.
     let text = format!("{} ({})", voice::say(voice::READING_ISSUE), rung.running_as());
-    if let Err(error) = ports.linear.send(&ActivityInput::text(session_id, ActivityType::Thought, &text, true)) {
+    if let Err(error) = call.ports.linear.send(&ActivityInput::text(session_id, ActivityType::Thought, &text, true)) {
         problems.push(Problem::FirstThought(error));
     }
     let mode = if orchestrate {
@@ -423,18 +433,19 @@ fn exited_since(ports: &mut Ports, worktree_id: &str, identifier: &str) -> Optio
 pub fn resume(config: &Config, ports: &mut Ports, command: &Command, session_id: &Id, why: Resume) -> Result<Finished, Error> {
     let session = session_on_issue(ports, command, session_id, false)?;
     let issue = issue_of(&session)?;
-    let done = resume_in(config, ports, command, session_id, issue, why);
+    let done = resume_in(&mut Call { config, ports, command, session_id, issue }, why);
     said_if_failed(ports, command, session_id, voice::COULDNT_DELIVER, json!({}), done)
 }
 
-fn resume_in(config: &Config, ports: &mut Ports, command: &Command, session_id: &Id, issue: &Issue, why: Resume) -> Result<Finished, Error> {
+fn resume_in(call: &mut Call, why: Resume) -> Result<Finished, Error> {
+    let Call { config, command, session_id, issue, .. } = *call;
     let identifier = issue.identifier.as_str();
     let (what, wording) = match why {
         Resume::Message => ("your reply", voice::say(voice::READING_REPLY)),
         Resume::ChildrenEnd => ("the sub-issues' end", voice::say(voice::READING_ISSUE)),
         Resume::ChildrenAdded => ("the sub-issues added", voice::say(voice::READING_ISSUE)),
     };
-    let Some(worktree) = linked_worktree(ports, identifier)? else {
+    let Some(worktree) = linked_worktree(call.ports, identifier)? else {
         // An orchestrator ends with no branch or PR, so its worktree holds no work and is easy
         // to lose: a resume for the sub-issues, or an owner's message on an issue that has some,
         // starts a new orchestrator on the session. Any other worker's work is lost with its worktree.
@@ -442,30 +453,30 @@ fn resume_in(config: &Config, ports: &mut Ports, command: &Command, session_id: 
             trace::event(Work::NoWorktree { issue: command.identifier.clone(), purpose: Purpose::Resume });
             return Ok(Finished::failed());
         }
-        return restart(config, ports, command, session_id, issue, why, what, &wording);
+        return restart(call, why, what, &wording);
     };
-    if agent_in(&ports.orca.listing_at(&worktree.id)?.terminals, &worktree.id) {
+    if agent_in(&call.ports.orca.listing_at(&worktree.id)?.terminals, &worktree.id) {
         return Ok(Finished::ok(json!({ "launched": true })));
     }
     // Its host's setup runs only in a worktree Tolkster's record holds (setup.rs): one made by
     // hand has no worker to bring back.
-    let Some(record) = recorded(ports.records, &worktree.id, identifier)? else {
+    let Some(record) = recorded(call.ports.records, &worktree.id, identifier)? else {
         trace::event(Work::NoWorkerRecord { issue: command.identifier.clone(), pr: None });
         return Ok(Finished::failed());
     };
-    pick_up(ports, command, session_id, Some(what), &wording)?;
+    pick_up(call.ports, command, session_id, Some(what), &wording)?;
     let (launch, rerecord) = relaunch(Some(&record), &worktree.id, issue, &config.ladder);
     // Should the new record not be written, the resume still takes the new rung, and the
     // next one picks it again.
-    if let Some(Err(error)) = rerecord.map(|record| ports.records.start_worker(&record)) {
+    if let Some(Err(error)) = rerecord.map(|record| call.ports.records.start_worker(&record)) {
         trace::event(Work::NotDone { what: Undone::Rung, error });
     }
-    let repo = repo_of(ports.orca, &worktree);
+    let repo = repo_of(call.ports.orca, &worktree);
     let trace = traces(config, repo.as_deref());
     let worker = Worker { session_id: session_id.clone(), identifier: IssueKey::check(identifier)?, repo, launch, build: prebuilt::commit(), trace, timing: config.timing, how: How::Continue(why) }.command()?;
     // As a start's relaunch: no setup is left running beside it.
-    ports.orca.close_all(&worktree.id)?;
-    ports.orca.start_agent(&worktree.id, &worker)?;
+    call.ports.orca.close_all(&worktree.id)?;
+    call.ports.orca.start_agent(&worktree.id, &worker)?;
     Ok(Finished::ok(json!({ "launched": true })))
 }
 
@@ -480,20 +491,20 @@ fn in_progress(ports: &mut Ports, worktree_id: &str) {
 // A new orchestrator in a new worktree for a parent whose own is gone, on the brief and then
 // the line a resume for `why` would have typed. Its result names the worktree, as a start's does. A run
 // again finds the worktree it made, and its agent, in `resume_in`.
-#[allow(clippy::too_many_arguments)]
-fn restart(config: &Config, ports: &mut Ports, command: &Command, session_id: &Id, issue: &Issue, why: Resume, what: &str, wording: &str) -> Result<Finished, Error> {
+fn restart(call: &mut Call, why: Resume, what: &str, wording: &str) -> Result<Finished, Error> {
+    let Call { config, command, session_id, issue, .. } = *call;
     let identifier = issue.identifier.as_str();
-    let worktrees = ports.orca.worktrees()?;
-    let Some((repo_id, repo)) = find_repo(&ports.orca.repos(None)?, config.repos.repo_for(&issue.place)) else {
+    let worktrees = call.ports.orca.worktrees()?;
+    let Some((repo_id, repo)) = find_repo(&call.ports.orca.repos(None)?, config.repos.repo_for(&issue.place)) else {
         trace::event(Work::NoRepo { issue: command.identifier.clone() });
         return Ok(Finished::failed());
     };
     // Its slot is held already, as a resume's: it starts on this machine.
-    pick_up(ports, command, session_id, Some(what), wording)?;
-    let started_line = start_worker(config, ports, session_id, issue, &repo, true, Where::New(Place::Here { repo_id: &repo_id }), Some(why))?;
+    pick_up(call.ports, command, session_id, Some(what), wording)?;
+    let started_line = start_worker(call, &repo, true, Where::New(Place::Here { repo_id: &repo_id }), Some(why))?;
     trace::event(started_line);
     // A listing that fails now doesn't undo the start: it is said without its worktree.
-    Ok(match linked_worktree(ports, identifier).ok().flatten() {
+    Ok(match linked_worktree(call.ports, identifier).ok().flatten() {
         Some(worktree) => started(&worktree, local_origin(&worktrees, &repo_id), true, true),
         None => Finished::ok(json!({ "worktree": Value::Null, "madeWorktree": true, "launched": true })),
     })
@@ -502,20 +513,33 @@ fn restart(config: &Config, ports: &mut Ports, command: &Command, session_id: &I
 // A review round (`startRound`): a fixed line typed to the running worker, or the exited one
 // brought back in a new session on its round brief, both sending it to `tolkster pr feedback`
 // and `tolkster pr checks`, or for a rebase alone, on its rebase brief. Nothing is typed into
-// an agent waiting at a prompt, which could answer it: that is `held`. `round` is the round's
-// number, which says whether it is the repo's last.
-#[allow(clippy::too_many_arguments)]
-pub fn round(config: &Config, ports: &mut Ports, command: &Command, repo: &str, number: u64, head: Option<&str>, round: Option<u32>, session_id: Option<&Id>, rebase_only: bool) -> Result<Finished, Error> {
-    let identifier = command.identifier.as_str();
+// an agent waiting at a prompt, which could answer it: that is `held`.
+pub fn round(config: &Config, ports: &mut Ports, command: &Command, session_id: Option<&Id>, pr: &OnPr) -> Result<Finished, Error> {
     let Some(session_id) = session_id else {
         trace::event(Work::NoSession);
         return Ok(Finished::failed());
     };
     let session = session_on_issue(ports, command, session_id, false)?;
     let issue = issue_of(&session)?;
+    round_in(&mut Call { config, ports, command, session_id, issue }, pr)
+}
+
+// The PR a round is on, as the machine ordered it.
+pub struct OnPr<'a> {
+    pub repo: &'a str,
+    pub number: u64,
+    pub head: Option<&'a str>,
+    // The round's number, which says whether it is the repo's last.
+    pub round: Option<u32>,
+    pub rebase_only: bool,
+}
+
+fn round_in(call: &mut Call, &OnPr { repo, number, head, round, rebase_only }: &OnPr) -> Result<Finished, Error> {
+    let Call { config, command, session_id, issue, .. } = *call;
+    let identifier = command.identifier.as_str();
     // Found in a listing of every host, then read again on its own just before anything is typed.
-    let listing = match linked_worktree(ports, identifier)? {
-        Some(worktree) => ports.orca.listing_at(&worktree.id)?,
+    let listing = match linked_worktree(call.ports, identifier)? {
+        Some(worktree) => call.ports.orca.listing_at(&worktree.id)?,
         None => Listing::default(),
     };
     let Some(worktree) = linked_in(&listing.worktrees, identifier).cloned() else {
@@ -538,20 +562,20 @@ pub fn round(config: &Config, ports: &mut Ports, command: &Command, repo: &str, 
         return Ok(Finished::failed_with(json!({ "unnamed": true })));
     }
     // An exited worker is relaunched on its host only where Tolkster's record holds its worktree.
-    let record = if terminal.is_none() { recorded(ports.records, &worktree.id, identifier)? } else { None };
+    let record = if terminal.is_none() { recorded(call.ports.records, &worktree.id, identifier)? } else { None };
     if terminal.is_none() && record.is_none() {
         trace::event(Work::NoWorkerRecord { issue: command.identifier.clone(), pr: Some(number) });
         return Ok(Finished::failed());
     }
     let short = head.map(github::short_head);
     let what = review::picked_up(number, short, round);
-    pick_up(ports, command, session_id, Some(&what), &format!("Picking up {what}…"))?;
+    pick_up(call.ports, command, session_id, Some(&what), &format!("Picking up {what}…"))?;
     // The issue moves back to started with its worker; should the move fail, the worker is
     // still told.
-    if let Err(error) = ports.linear.start_issue(issue) {
+    if let Err(error) = call.ports.linear.start_issue(issue) {
         trace::event(Work::NotDone { what: Undone::IssueStarted, error });
     }
-    in_progress(ports, &worktree.id);
+    in_progress(call.ports, &worktree.id);
     // An exited worker is brought back on its host, in a new session on its round brief, not
     // the one that built the PR, and may re-pick its rung.
     let bring_back = |ports: &mut Ports, record: &WorkerRecord| -> Result<Option<Typed>, Error> {
@@ -570,17 +594,17 @@ pub fn round(config: &Config, ports: &mut Ports, command: &Command, repo: &str, 
     // sit in its input, or wait out the worker's turn, so it is never typed again, nor said
     // to have failed: the machine leaves the round in flight to it.
     let done = match (&terminal, &record) {
-        (Some(terminal), _) => match ports.orca.send(&worktree.id, terminal, &typed, Proof::Turn) {
+        (Some(terminal), _) => match call.ports.orca.send(&worktree.id, terminal, &typed, Proof::Turn) {
             // The agent exited after the listing, and Orca typed nothing: it is the exited
             // worker's case if none runs now and the record holds it. Any other failure
             // may have typed the line, which is never typed again.
-            Err(unsent @ Error::Unsent(..)) => match exited_since(ports, &worktree.id, identifier) {
-                Some(record) => bring_back(ports, &record),
+            Err(unsent @ Error::Unsent(..)) => match exited_since(call.ports, &worktree.id, identifier) {
+                Some(record) => bring_back(call.ports, &record),
                 None => Err(unsent),
             },
             sent => sent.map(Some),
         },
-        (None, Some(record)) => bring_back(ports, record),
+        (None, Some(record)) => bring_back(call.ports, record),
         (None, None) => Err(Error::Failed(format!("{identifier}'s worker has neither a terminal nor a launch"))),
     };
     match done {
@@ -588,7 +612,7 @@ pub fn round(config: &Config, ports: &mut Ports, command: &Command, repo: &str, 
         Ok(Some(Typed::Delivered)) => Ok(Finished::ok(json!({}))),
         Ok(Some(Typed::Waiting)) => Ok(Finished::held()),
         Ok(Some(Typed::Unproven)) => Ok(Finished::failed_with(json!({ "typed": true }))),
-        Err(error) => said_if_failed(ports, command, session_id, voice::COULDNT_RESUME, json!({}), Err(error)),
+        Err(error) => said_if_failed(call.ports, command, session_id, voice::COULDNT_RESUME, json!({}), Err(error)),
     }
 }
 

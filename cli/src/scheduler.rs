@@ -24,11 +24,11 @@ use crate::panel;
 use crate::plain::{Id, IssueKey, Sha};
 use crate::runtime::Shared;
 use crate::timing::Summary;
-use crate::machine::{BaseTip, Command, listing_line, observation_line, terminal_closed_line, turn_ended_line};
+use crate::machine::{BaseTip, Command, Snapshot, listing_line, observation_line, terminal_closed_line, turn_ended_line};
 use crate::sync::lock;
 use crate::trace::{self, Call, Ended, Kind, STUCK_AFTER, Step, Stuck, Update as Said, Work};
 use crate::update::{Restart, Update};
-use crate::watch::{Agents, Missed, Seen, Snapshot, WATCH_EVERY, Watcher};
+use crate::watch::{Agents, Missed, Seen, WATCH_EVERY, Watcher};
 
 mod lanes;
 
@@ -608,7 +608,7 @@ impl Scheduler {
         if self.listing_sent.as_ref().is_some_and(|sent| sent.same(newest) && newest.began.saturating_duration_since(sent.began) < WATCH_EVERY) {
             return None;
         }
-        if let Err(error) = send(listing_line(&newest.at, u64::try_from(newest.began.elapsed().as_millis()).unwrap_or(u64::MAX), &newest.agents, newest.listed.as_deref(), &newest.hosts, &newest.paired, &newest.idle_hosts, newest.dormant.as_ref(), &newest.fleet)) {
+        if let Err(error) = send(listing_line(newest, u64::try_from(newest.began.elapsed().as_millis()).unwrap_or(u64::MAX))) {
             return Some(End::Retry(Ended::failed(Step::Listing, error)));
         }
         self.listing_sent = Some(newest.clone());

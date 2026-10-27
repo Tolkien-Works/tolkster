@@ -8,6 +8,7 @@
 // has a plain shape, checked here (plain.rs).
 
 use std::collections::BTreeMap;
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -541,6 +542,33 @@ pub fn observation_line(observed: Observed, worktree_id: &str, sequence: u64) ->
 // More worktrees than the relay takes in one listing (src/worker/machine.ts, MAX_LISTED).
 pub const MAX_LISTED: usize = 1000;
 
+// One listing whole, but for `Agents::others`, for the Durable Object
+// (`listing_line`): `began` by this process's monotonic clock and `at` by the wall clock, which
+// only names it; each an agent runs in, with its state (watch.rs, `states_of`); every one
+// Orca has on the hosts that answered, sorted, None when the listing was incomplete; those
+// hosts, the paired ones and each one's entry, the settings, and the idle and dormant recipe
+// machines.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Snapshot {
+    pub began: Instant,
+    pub at: String,
+    pub agents: Vec<(String, Observed)>,
+    pub listed: Option<Vec<String>>,
+    pub hosts: Vec<String>,
+    pub paired: Vec<String>,
+    pub fleet: Fleet,
+    pub config: String,
+    pub idle_hosts: BTreeMap<String, i64>,
+    pub dormant: Option<BTreeMap<String, i64>>,
+}
+
+impl Snapshot {
+    // Whether it shows what `other` does, whenever each began.
+    pub fn same(&self, other: &Snapshot) -> bool {
+        self.agents == other.agents && self.listed == other.listed && self.hosts == other.hosts && self.paired == other.paired && self.fleet == other.fleet && self.idle_hosts == other.idle_hosts && self.dormant == other.dormant
+    }
+}
+
 // Orca's listing whole (src/worker/machine.ts, Listing): `at` when it began by the
 // workstation's clock, which only names it, and `elapsed_ms` how long before this it was, by
 // the monotonic one, which is what the Durable Object orders it by; each agent's state by
@@ -553,9 +581,10 @@ pub const MAX_LISTED: usize = 1000;
 // `dormant` those whose destroy clock runs, by name, None while one is made, woken, slept or
 // destroyed (hosts.rs, `dormant`). `fleet`: this machine's workers and each paired host's
 // entry (hosts.rs, `Fleet`).
-#[allow(clippy::too_many_arguments)]
-pub fn listing_line(at: &str, elapsed_ms: u64, agents: &[(String, Observed)], listed: Option<&[String]>, hosts: &[String], paired: &[String], idle: &BTreeMap<String, i64>, dormant: Option<&BTreeMap<String, i64>>, fleet: &Fleet) -> String {
-    let agents: serde_json::Map<String, Value> = agents
+pub fn listing_line(snapshot: &Snapshot, elapsed_ms: u64) -> String {
+    let Snapshot { at, listed, hosts, paired, idle_hosts: idle, dormant, fleet, .. } = snapshot;
+    let agents: serde_json::Map<String, Value> = snapshot
+        .agents
         .iter()
         .filter(|(id, _)| worktree_shape(id))
         .filter_map(|(id, observed)| {
@@ -568,7 +597,7 @@ pub fn listing_line(at: &str, elapsed_ms: u64, agents: &[(String, Observed)], li
             Some((id.clone(), json!(state)))
         })
         .collect();
-    let listed: Option<Vec<&String>> = listed.filter(|ids| ids.len() <= MAX_LISTED).map(|ids| ids.iter().filter(|id| worktree_shape(id)).collect());
+    let listed: Option<Vec<&String>> = listed.as_deref().filter(|ids| ids.len() <= MAX_LISTED).map(|ids| ids.iter().filter(|id| worktree_shape(id)).collect());
     json!({ "report": "listing", "at": at, "elapsedMs": elapsed_ms, "agents": agents, "listed": listed, "hosts": hosts, "paired": paired, "idle": idle, "dormant": dormant, "fleet": fleet }).to_string()
 }
 
