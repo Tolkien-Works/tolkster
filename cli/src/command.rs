@@ -87,7 +87,7 @@ pub fn carry_out(agent: &Agent, shared: &Arc<Shared>, command: &Command, beat: &
 fn run(rt: &Runtime, command: &Command, order: &Order, beat: &dyn Fn(), seen: usize) -> Result<Finished, Error> {
     let mut shell = beating(beat);
     let linear = LinearApp { agent: rt.agent, state: &rt.state, owner_id: &rt.config.owner.id, started: &rt.shared.started };
-    let mut ports = Ports { linear: &linear, records: &rt.state, orca: &mut orca::Cli::paired(&mut shell, &rt.shared.health).at_once(run_command), github: &mut AppReader::new(rt.agent, beat), machines: &Recipes { agent: rt.agent, shared: rt.shared, seen, beat }, shared: rt.shared, watch: &watch_terminal };
+    let mut ports = Ports { linear: &linear, records: &rt.state, orca: &mut orca::Cli::paired(&mut shell, &rt.shared.health).at_once(run_command).waiting(), github: &mut AppReader::new(rt.agent, beat), machines: &Recipes { agent: rt.agent, shared: rt.shared, seen, beat }, shared: rt.shared, watch: &watch_terminal };
     carry(&rt.config, &mut ports, command, order, beat)
 }
 

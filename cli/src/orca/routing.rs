@@ -1,6 +1,7 @@
 // Which host's Orca a call goes to, and how a worktree's ID or a terminal's handle names it.
 
 use serde::Deserialize;
+use serde_json::Value;
 
 use super::{orca_json, Answer, Run};
 use crate::error::Error;
@@ -34,7 +35,13 @@ struct HostRow {
 // takes no `--environment`, and an ID that isn't plain would reach a command line: neither
 // is a host.
 pub fn paired(run: &mut Run) -> Result<Vec<Host>, Error> {
-    let listed: Answer<Hosts> = decode(orca_json(run, &["host", "list", "--json"])?, "Orca's answer to host list")?;
+    hosts_of(orca_json(run, &HOSTS)?)
+}
+
+pub(super) const HOSTS: [&str; 3] = ["host", "list", "--json"];
+
+pub(super) fn hosts_of(listed: Value) -> Result<Vec<Host>, Error> {
+    let listed: Answer<Hosts> = decode(listed, "Orca's answer to host list")?;
     // A list with no host at all (Orca lists this machine's) is no list: a host missing from a
     // list releases its workers.
     if listed.result.hosts.is_empty() {

@@ -22,11 +22,11 @@ mod live;
 mod routing;
 
 pub use call::{call, take_listing_stale, Answer};
-use call::{call_said, orca_json, orca_read, unsent, Said};
+use call::{call_said, orca_json, orca_listed, orca_read, unsent, writes, Said};
 pub use listing::*;
 pub use live::Cli;
 pub use routing::{paired, Host, Place};
-use routing::{at, by_id, hosted, terminal_at, worktree_at};
+use routing::{at, by_id, hosted, hosts_of, terminal_at, worktree_at, HOSTS};
 
 // How a caller asks whether a host's own `tolkster` reads its config.json: one that can't takes
 // no work. Err where the host can't be asked. The verdict is kept per host, whichever probe

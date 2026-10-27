@@ -37,8 +37,12 @@ fn called(run: &mut Run, args: &[&str]) -> (Result<String, Error>, Option<String
         }
         Err(error) => (Err(Error::Orca(format!("orca {} failed: {error}", args[..args.len().min(2)].join(" ")))), None, error.not_found()),
     };
-    if args.get(..2).is_some_and(|verb| LISTING_WRITES.contains(&verb.join(" ").as_str())) {
+    let verb = args.get(..2).map(|verb| verb.join(" "));
+    if verb.as_deref().is_some_and(|verb| LISTING_WRITES.contains(&verb)) {
         STALE.with(|stale| stale.set(true));
+    }
+    if verb.as_deref().is_none_or(|verb| !READS.contains(&verb)) {
+        WRITES.with(|writes| writes.set(writes.get() + 1));
     }
     if let Some((site, detail)) = written(args) {
         trace::event(Call::Wrote { site, detail, failed: result.as_ref().err().cloned() });
@@ -156,6 +160,19 @@ thread_local! {
     static STALE: Cell<bool> = const { Cell::new(false) };
 }
 
+// The Orca calls known to change nothing. Any other counts as a write, failed or not, so a
+// read missing here only loses its command's wait on an absent Orca (`Cli::waiting`).
+const READS: [&str; 9] = ["worktree ps", "worktree list", "worktree show", "terminal list", "terminal read", "terminal wait", "host list", "repo list", "project setups"];
+
+// This thread's Orca writes so far, which a command's `Cli` compares with its own start.
+thread_local! {
+    static WRITES: Cell<u64> = const { Cell::new(0) };
+}
+
+pub(super) fn writes() -> u64 {
+    WRITES.with(Cell::get)
+}
+
 // Whether this thread has made a listing write since it last asked; the lane that ran the job
 // asks as the job ends, so the watcher lists once for all its writes.
 pub fn take_listing_stale() -> bool {
@@ -177,6 +194,15 @@ fn written(args: &[&str]) -> Option<(String, String)> {
 
 pub(super) fn orca_json(run: &mut Run, args: &[&str]) -> Result<Value, Error> {
     json_of(&call(run, args)?, args)
+}
+
+// As `orca_json`, with whether Orca was absent (`called`), for a listing whose caller decides
+// if it may wait (`Cli::failed`).
+pub(super) fn orca_listed(run: &mut Run, args: &[&str]) -> (Result<Value, Error>, bool) {
+    match called(run, args) {
+        (Ok(answer), ..) => (json_of(&answer, args), false),
+        (Err(error), _, absent) => (Err(error), absent),
+    }
 }
 
 fn json_of(answer: &str, args: &[&str]) -> Result<Value, Error> {
