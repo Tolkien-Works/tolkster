@@ -12,7 +12,7 @@ use serde_json::Value;
 use super::sleep::sleeper;
 use super::{Change, Entries, NOTHING_TO_DO, Printed, Script, USER_DATA_MAX, env, find, payload, recorded, recorded_machines, unshown, written};
 use crate::cli::machines_file;
-use crate::error::{Error, Waits};
+use crate::error::Error;
 use crate::exec::run_command;
 use crate::plain::plain_host;
 use crate::runtime::{Making, Shared};
@@ -26,7 +26,7 @@ pub fn update(shared: &Arc<Shared>, name: &str, revision: &str) -> Result<bool, 
     if !plain_host(name) {
         return Ok(false);
     }
-    let Some(updating) = Making::alone(shared) else { return Err(Error::Waits(Waits::Lock, "a recipe machine is being made, woken or put to sleep".into())) };
+    let Some(updating) = Making::alone(shared) else { return Err(Error::lock_held()) };
     let Some(kept) = recorded_machines()?.get(name).cloned() else { return Ok(false) };
     let Some((recipe, true)) = sleeper(&kept) else { return Ok(false) };
     let found = find(&mut run_command, &recipe.id, Some(&recipe.repo))?;

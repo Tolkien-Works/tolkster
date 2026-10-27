@@ -114,6 +114,11 @@ impl Error {
         }
     }
 
+    // A recipe machine is in the making's hands: what would act on one waits for it.
+    pub fn lock_held() -> Error {
+        Error::Waits(Waits::Lock, "a recipe machine is being made, woken or put to sleep".into())
+    }
+
     // `host` isn't answering: what acts on it waits for it.
     pub fn silent(host: &str) -> Error {
         Error::Waits(Waits::Host(host.to_string()), format!("{host} isn't answering"))

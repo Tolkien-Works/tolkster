@@ -25,7 +25,7 @@ use crate::trace::{self, Declined, Unslept};
 fn begun(asked: Begun) -> Result<Finished, Error> {
     match asked {
         Ok(()) => Ok(Finished::ok(json!({ "began": true }))),
-        Err(Some(Declined::Running)) => Err(Error::Waits(Waits::Lock, "a recipe machine is being made, woken or put to sleep".into())),
+        Err(Some(Declined::Running)) => Err(Error::lock_held()),
         Err(Some(Declined::CoolDown)) => Ok(Finished::ok(json!({ "began": false, "coolDown": true }))),
         Err(None) => Err(Error::Later("a make ended since the settings were read".into())),
     }
@@ -105,7 +105,7 @@ pub fn suspend_host(config: &Config, ports: &mut Ports, host: &str) -> Result<Fi
 // revision still trails.
 pub fn update_host(config: &Config, ports: &mut Ports, name: &str) -> Result<Finished, Error> {
     if ports.machines.making() {
-        return Err(Error::Waits(Waits::Lock, "a recipe machine is being made, woken or put to sleep".into()));
+        return Err(Error::lock_held());
     }
     let wanted = config.machines.get(name).filter(|made| made.sleeps && made.asleep).and_then(|made| config.revisions.iter().find(|(repo, _)| repo.eq_ignore_ascii_case(&made.repo)));
     let Some((_, revision)) = wanted else { return Ok(Finished::ok(json!({ "updated": false }))) };
@@ -123,7 +123,7 @@ pub fn update_host(config: &Config, ports: &mut Ports, name: &str) -> Result<Fin
 pub fn destroy_host(config: &Config, ports: &mut Ports, name: &str) -> Result<Finished, Error> {
     let worktrees = ports.orca.worktrees()?;
     if ports.machines.making() {
-        return Err(Error::Waits(Waits::Lock, "a recipe machine is being made, woken or put to sleep".into()));
+        return Err(Error::lock_held());
     }
     let answering = ports.orca.answering();
     let kept = Finished::ok(json!({ "destroyed": false }));
