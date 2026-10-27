@@ -81,7 +81,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
 
 // The team `key`, as `workspace::read_team` read it, set up: its answers taken first, then its
 // `repos` entries merged into `file`, then its labels created.
-pub(crate) fn init(key: &str, data: &TeamRead, repos: &[Repo], group: Option<&Group>, ask: &mut dyn Ask, linear: &mut dyn Labels, file: &Path) -> Result<Done, Error> {
+pub(crate) fn init(key: &str, data: &TeamRead, repos: &[Repo], group: Option<&Group>, ask: &mut Owner, linear: &mut dyn Labels, file: &Path) -> Result<Done, Error> {
     let team = the_team(data).ok_or_else(|| Error::Failed(format!("the app can see no team with the key {key}")))?;
     let config = match read_if_there(file)? {
         Some(text) => serde_json::from_str(&text).context(file.display())?,
@@ -111,7 +111,7 @@ fn unset(current: Option<&Value>, edits: &[(String, Change)]) -> Vec<(String, Ch
 // one, a repo for each open project that no entry maps and no one Orca repo is named after; then,
 // for each repo the team reaches, its `review.reviewers` and `review.maxRounds` where its entry
 // sets neither.
-fn mapping(current: Option<&Value>, repos: &[Repo], key: &str, team: &DoctorTeam, ask: &mut dyn Ask) -> Result<Vec<(String, Change)>, Error> {
+fn mapping(current: Option<&Value>, repos: &[Repo], key: &str, team: &DoctorTeam, ask: &mut Owner) -> Result<Vec<(String, Change)>, Error> {
     let map = RepoMap::from_config(current)?;
     let names: Vec<String> = repos.iter().map(|r| r.name.clone()).collect();
     let in_orca = |repo: &str| find_repo(repos, Some(repo)).map(|(_, name)| name).ok_or_else(|| Error::Failed(format!("Orca has no repo, or more than one, with the display name {repo}")));
@@ -247,17 +247,6 @@ impl Labels for App<'_> {
     }
 }
 
-// The owner's answers. Each is Err(Usage) when it can't be asked and no flag gives it.
-pub(crate) trait Ask {
-    // The team's default repo, or None for none.
-    fn default_repo(&mut self, key: &str, repos: &[String]) -> Result<Option<String>, Error>;
-    // The repo for a project of a team without a default that nothing maps, or None for none.
-    fn project_repo(&mut self, project: &str, proposal: Option<&str>, repos: &[String]) -> Result<Option<String>, Error>;
-    // A repo's own reviewers and cap on review rounds, or None to leave the global one.
-    fn reviewers(&mut self, repo: &str) -> Result<Option<Vec<String>>, Error>;
-    fn max_rounds(&mut self, repo: &str) -> Result<Option<i64>, Error>;
-}
-
 // From the flags, else on a terminal, the questions on stderr so stdout stays JSON. `yes` takes
 // each proposal and asks no repo's settings.
 pub(crate) struct Owner {
@@ -266,7 +255,9 @@ pub(crate) struct Owner {
     pub terminal: bool,
 }
 
-impl Ask for Owner {
+// The owner's answers. Each is Err(Usage) when it can't be asked and no flag gives it.
+impl Owner {
+    // The team's default repo, or None for none.
     fn default_repo(&mut self, key: &str, repos: &[String]) -> Result<Option<String>, Error> {
         match &self.default_repo {
             Some(repo) if repo.trim().eq_ignore_ascii_case("none") => Ok(None),
@@ -276,6 +267,7 @@ impl Ask for Owner {
         }
     }
 
+    // The repo for a project of a team without a default that nothing maps, or None for none.
     fn project_repo(&mut self, project: &str, proposal: Option<&str>, repos: &[String]) -> Result<Option<String>, Error> {
         match proposal {
             _ if self.yes => Ok(proposal.map(String::from)),
@@ -285,6 +277,7 @@ impl Ask for Owner {
         }
     }
 
+    // A repo's own reviewers and cap on review rounds, or None to leave the global one.
     fn reviewers(&mut self, repo: &str) -> Result<Option<Vec<String>>, Error> {
         match self.terminal && !self.yes {
             true => answer(&format!("Reviewers for {repo}: GitHub logins, comma-separated, or none (Enter for the global setting)"), reviewers),
