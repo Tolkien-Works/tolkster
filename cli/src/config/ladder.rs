@@ -80,7 +80,7 @@ impl Default for Ladder {
         let rung = |name: &str, model: &str, effort, up_to| Rung { name: name.into(), launch: Launch::new(DEFAULT, model, effort), up_to };
         Ladder {
             rungs: vec![
-                rung("Sonnet 5.5", "claude-sonnet-5-5", "medium", Some(Size::XS)),
+                rung("Haiku 5.5", "claude-haiku-5-5", "high", Some(Size::XS)),
                 rung("Sonnet 5.5", "claude-sonnet-5-5", "high", Some(Size::S)),
                 rung("Opus 5.5", "claude-opus-5-5", "medium", Some(Size::M)),
                 rung("Opus 5.5", "claude-opus-5-5", "high", None),
