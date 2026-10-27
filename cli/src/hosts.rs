@@ -13,8 +13,7 @@ use serde::Serialize;
 
 use crate::config::{Config, DEFAULT_DESTROY_AFTER, DEFAULT_IDLE_MINUTES, Machine};
 use crate::error::Error;
-use crate::orca::{Host, Pane, Worktree, plain_project, project_id};
-use crate::plain::split_worktree;
+use crate::orca::{Host, Pane, Worktree, host_of, plain_project, project_id};
 use crate::state::WorkerRecord;
 use crate::sync::{lock, read, write};
 use crate::time::instant;
@@ -236,7 +235,7 @@ pub struct Row {
 // host its record's worktree names, whether or not the host answers; a record on a host no
 // longer paired shows nowhere.
 pub fn report(config: &Config, answering: &[Host], silent: &[Host], records: &[WorkerRecord]) -> Vec<Row> {
-    let held = |host: Option<&str>| records.iter().filter(|r| split_worktree(&r.worktree_id).and_then(|(at, _, _)| at) == host).map(|r| r.issue.clone()).collect();
+    let held = |host: Option<&str>| records.iter().filter(|r| host_of(&r.worktree_id) == host).map(|r| r.issue.clone()).collect();
     let row = |host: &Host, answers| Row { name: Some(host.name.clone()), answers, cap: cap(config, host), workers: held(Some(&host.id)), recipe: config.machines.get(host.name.trim()).map(|made| made.recipe.clone()) };
     let here = Row { name: None, answers: true, cap: config.local_slots(), workers: held(None), recipe: None };
     std::iter::once(here).chain(answering.iter().map(|host| row(host, true))).chain(silent.iter().map(|host| row(host, false))).collect()
@@ -252,7 +251,7 @@ pub fn asleep_as<'a>(config: &'a Config, host: &str) -> Option<&'a String> {
 // before its agent is listed. A worker waiting on the owner, or exited, keeps no machine
 // awake: a command for it wakes the machine (docs/hosts.md, Sleep and wake).
 pub fn rests(worktrees: &[Worktree], records: &[WorkerRecord], host: &str, now_ms: i64) -> bool {
-    let on = |id: &str| split_worktree(id).and_then(|(at, _, _)| at) == Some(host);
+    let on = |id: &str| host_of(id) == Some(host);
     let resting = |pane: &Pane| matches!(pane.state.as_str(), "done" | "waiting" | "blocked");
     worktrees.iter().filter(|w| on(&w.id)).all(|w| w.agents.iter().all(resting)) && !records.iter().any(|r| on(&r.worktree_id) && instant(&r.at).is_some_and(|at| now_ms - at < SETTING_UP_MS))
 }
@@ -260,7 +259,7 @@ pub fn rests(worktrees: &[Worktree], records: &[WorkerRecord], host: &str, now_m
 // Whether `host` holds no worktree but its checkouts, and no worker's record there was launched
 // within SETTING_UP_MS: a destroy takes nothing with it (docs/hosts.md, Destroying).
 pub fn holds_nothing(worktrees: &[Worktree], records: &[WorkerRecord], host: &str, now_ms: i64) -> bool {
-    let on = |id: &str| split_worktree(id).and_then(|(at, _, _)| at) == Some(host);
+    let on = |id: &str| host_of(id) == Some(host);
     worktrees.iter().all(|w| w.is_main || !on(&w.id)) && !records.iter().any(|r| on(&r.worktree_id) && instant(&r.at).is_some_and(|at| now_ms - at < SETTING_UP_MS))
 }
 

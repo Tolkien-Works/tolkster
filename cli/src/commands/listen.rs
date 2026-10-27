@@ -16,8 +16,8 @@ use crate::listen;
 use crate::panel::{self, HostShare, Listing, Slot};
 use crate::scheduler::{self, Acted, BASE_AGAIN, Job};
 use crate::watch::{Agents, idle_worktrees, states_of, waiting_worktrees};
-use crate::orca::{Cli, Host, Orca, agent_handles, agent_worktrees, candidates, open_terminals, answers, origin_repo, paired, terminal_worktrees, wait_exit};
-use crate::plain::{IssueKey, Terminal, split_worktree};
+use crate::orca::{Cli, Host, Orca, agent_handles, agent_worktrees, candidates, host_of, open_terminals, answers, origin_repo, paired, terminal_worktrees, wait_exit};
+use crate::plain::{IssueKey, Terminal};
 use crate::recipe;
 use crate::command::carry_out;
 use crate::runtime::{Shared, load, settings};
@@ -157,7 +157,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
             let (idle, waiting, workers, others, listed, all) = match orca.agents_listed() {
                 Ok((worktrees, listed)) => {
                     let silent = orca.unanswered();
-                    let on_silent = |id: &String| split_worktree(id).and_then(|(at, _, _)| at).is_some_and(|at| silent.iter().any(|s| s == at));
+                    let on_silent = |id: &String| host_of(id).is_some_and(|at| silent.iter().any(|s| s == at));
                     let kept = std::mem::take(&mut issues_before).into_iter().filter(|(id, _)| on_silent(id));
                     issues_before = kept.chain(candidates(&worktrees).into_iter().filter_map(|w| Some((w.id.clone(), w.linked_issue.clone()?)))).collect();
                     let workers: HashSet<String> = candidates(&worktrees).into_iter().map(|w| w.id.clone()).collect();
@@ -209,7 +209,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
             // Each host's ready projects, read once per listing: a host with room is one with a
             // cap and any of them (`Orca::ready_projects`). One whose read fails is told as
             // silent, never as having none ready, which would move its grants elsewhere.
-            let held = |at: Option<&str>| now.running.iter().filter(|id| !now.others.contains(*id) && split_worktree(id).and_then(|(at, _, _)| at) == at).count() as i64;
+            let held = |at: Option<&str>| now.running.iter().filter(|id| !now.others.contains(*id) && host_of(id) == at).count() as i64;
             let mut silent: Vec<(Host, i64)> = orca.silent().into_iter().map(|h| { let held = held(Some(&h.id)); (h, held) }).collect();
             let mut answered: Vec<(Host, Vec<String>, i64)> = Vec::new();
             for h in answering {
@@ -237,7 +237,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
                 Some(h) => HostShare { id: Some(h.id.clone()), name: h.name.clone(), cap: cap(config, h), answering: !silent.contains(&h.id), refused: watching.health.refused(&h.id, Instant::now()) },
             }).collect();
             if states_listed {
-                let slots = states_of(&now).into_iter().filter(|(id, _)| !now.others.contains(id)).map(|(id, state)| Slot { issue: issues_before.get(&id).cloned(), host: split_worktree(&id).and_then(|(at, _, _)| at).map(String::from), worktree: id, state }).collect();
+                let slots = states_of(&now).into_iter().filter(|(id, _)| !now.others.contains(id)).map(|(id, state)| Slot { issue: issues_before.get(&id).cloned(), host: host_of(&id).map(String::from), worktree: id, state }).collect();
                 panel::listed(Listing { at: began, took: began.elapsed(), slots, hosts, cap: total }, &now.terminals);
             }
             *lock(&issues_of) = terminals.iter().filter(|t| t.agent).filter_map(|t| Some((t.handle.clone()?, issues_before.get(t.worktree_id.as_ref()?).filter(|i| IssueKey::parse(i).is_some())?.clone()))).collect();

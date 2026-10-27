@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 
 use crate::error::{Error, Unsent};
 use crate::exec::{Output, Run};
-use crate::orca::{Host, Listing, Pane, Place, Proof, ReadsConfig, Repo, Status, Terminal, Typed, Worktree, waits_in};
+use crate::orca::{Host, Listing, Pane, Place, Proof, ReadsConfig, Repo, Status, Terminal, Typed, Worktree, host_of, waits_in};
 use crate::runtime::Shared;
 use crate::plain::{CommandLine, Line, Terminal as Handle, orca_worktree, split_terminal, split_worktree};
 use crate::sessions::Tolksters;
@@ -311,7 +311,7 @@ impl crate::orca::Orca for Orca<'_> {
                 return Err(Error::silent(host));
             }
         }
-        let on = |id: &str| split_worktree(id).and_then(|(at, _, _)| at) == host.as_deref();
+        let on = |id: &str| host_of(id) == host.as_deref();
         let worktrees: Vec<Worktree> = world.worktrees.iter().filter(|w| on(&w.id)).filter_map(|w| self.view(w)).map(|w| Worktree { origin: None, ..w }).collect();
         let terminals = world.terminals.iter().filter(|t| t.worktree_id.as_deref().is_some_and(on)).filter_map(|t| self.view_terminal(t)).collect();
         let listed = (!world.incomplete).then(|| worktrees.iter().map(|w| w.id.clone()).collect());
@@ -416,7 +416,7 @@ impl crate::orca::Orca for Orca<'_> {
     // on that host's Orca over this world: an Orca error for a host this machine doesn't reach.
     fn run_to_exit(&mut self, worktree_id: &str, command: &CommandLine) -> Result<Option<i32>, Error> {
         use crate::reap::{KEPT, STEP_OPTIONS, Step, reap_here};
-        let host = split_worktree(worktree_id).and_then(|(host, _, _)| host).map(String::from);
+        let host = host_of(worktree_id).map(String::from);
         let (hosts, tolksters, prs) = (self.world.borrow().hosts.clone(), self.world.borrow().tolksters_there.clone(), self.world.borrow().prs_there.clone());
         let Some(host) = host.filter(|host| hosts.contains(host)) else { return Err(Error::Orca(format!("orca: {worktree_id} is on no host this machine reaches"))) };
         self.world.borrow_mut().opened.push((worktree_id.into(), None, command.as_str().into()));

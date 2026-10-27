@@ -45,7 +45,7 @@ const EXIT_WITHIN_MS: &str = "300000";
 
 // The host a worktree's ID names, None for this machine.
 pub fn host_of(worktree_id: &str) -> Option<&str> {
-    worktree_at(worktree_id).0
+    split_worktree(worktree_id).and_then(|(host, _, _)| host)
 }
 
 pub fn origin_repo(run: &mut Run, path: Option<&str>) -> Result<String, Error> {
@@ -576,7 +576,7 @@ pub trait Orca {
     }
     // Whether the host `worktree_id` is on answered this run: this machine always.
     fn heard(&self, worktree_id: &str) -> bool {
-        split_worktree(worktree_id).and_then(|(host, _, _)| host).is_none_or(|host| self.answering().iter().any(|h| h.id == host))
+        host_of(worktree_id).is_none_or(|host| self.answering().iter().any(|h| h.id == host))
     }
     // Whether `project`, or with None any project, is set up and ready on `host`, whose
     // `tolkster` reads its config.json as `reads_config` asks it.
