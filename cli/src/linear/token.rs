@@ -7,8 +7,7 @@ use std::io::{self, Write};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use serde::Deserialize;
-use serde_json::json;
+use serde::{Deserialize, Serialize};
 use ureq::Agent;
 
 use crate::cli::{credentials_file, env, home, shown, token_file};
@@ -26,27 +25,21 @@ const TOKEN_URL: &str = "https://api.linear.app/oauth/token";
 
 const DAY_MS: f64 = 24.0 * 60.0 * 60.0 * 1000.0;
 
-#[derive(Debug, PartialEq)]
+// The token.json format: `expiresAt` is in epoch milliseconds.
+#[derive(Debug, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AppToken {
     pub access_token: String,
     pub expires_at: f64,
 }
 
 impl AppToken {
-    // The token.json format: `expiresAt` is in epoch milliseconds.
     pub fn from_json(text: &str) -> Option<AppToken> {
-        #[derive(Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct Stored {
-            access_token: String,
-            expires_at: f64,
-        }
-        let stored: Stored = serde_json::from_str(text).ok()?;
-        Some(AppToken { access_token: stored.access_token, expires_at: stored.expires_at })
+        serde_json::from_str(text).ok()
     }
 
     pub fn to_json(&self) -> String {
-        json!({ "accessToken": self.access_token, "expiresAt": self.expires_at }).to_string()
+        serde_json::to_string(self).unwrap_or_default()
     }
 }
 
