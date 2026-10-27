@@ -101,12 +101,12 @@ fn ends_at(text: &str, ends: impl Fn(&str) -> bool) -> Option<usize> {
     None
 }
 
-// A program's name, without its directory or `.exe`.
 // Whether any part of the command runs one of `programs`.
 pub(super) fn runs_program(command: &str, programs: &[&str]) -> bool {
     segments(command).iter().any(|words| programs.contains(&program(words).as_str()))
 }
 
+// A program's name, without its directory or `.exe`.
 pub(super) fn program(words: &[String]) -> String {
     let name = words[0].rsplit(['/', '\\']).next().unwrap_or_default();
     name.strip_suffix(".exe").unwrap_or(name).to_string()
