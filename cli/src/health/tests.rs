@@ -113,7 +113,7 @@ fn a_restart_takes_a_machine_marked_asleep_as_asleep_and_another_silent_host_as_
     assert!(!health.stopped("e2", None, start + Duration::from_secs(1)));
     assert!(health.owed(start + Duration::from_secs(1)).is_empty());
     assert_eq!(health.next("e2"), Some(start + ASLEEP_AGAIN));
-    assert_eq!(health.silences(), [("e2".to_string(), Some("tolkster-2".to_string()), true, start, start + ASLEEP_AGAIN)]);
+    assert_eq!(health.silences(), [Silent { host: "e2".into(), name: Some("tolkster-2".into()), asleep: true, since: start, next: start + ASLEEP_AGAIN }]);
     assert!(health.stopped("mac", None, start));
     assert_eq!(health.owed(start), [("mac".to_string(), Mark::Offline)]);
     // The next listing's mark keeps a back-off already running.

@@ -142,7 +142,7 @@ fn work_says_what_came_of_a_command_and_names_its_issue() {
 
 #[test]
 fn a_queued_line_names_what_the_request_waits_for() {
-    let queued = |waiting: machine::Waiting, blocked_by: &[&str]| shown(Work::Queued { waiting: waiting.into(), blocked_by: blocked_by.iter().map(|b| b.to_string()).collect() }, false);
+    let queued = |waiting: machine::Waiting, blocked_by: &[&str]| shown(Work::Queued { waiting, blocked_by: blocked_by.iter().map(|b| b.to_string()).collect() }, false);
     assert_eq!(queued(machine::Waiting::Slot, &[]), "queued: waiting for a slot");
     assert_eq!(queued(machine::Waiting::Held, &[]), "queued: waiting for a held worker");
     assert_eq!(queued(machine::Waiting::Merged, &[]), "queued: waiting for a reap");
@@ -154,11 +154,11 @@ fn a_queued_line_names_what_the_request_waits_for() {
 #[test]
 fn an_outcome_sums_up_its_job_with_its_mark() {
     for (outcome, word, sign) in [
-        (Outcome::Answered(machine::Outcome::Ok.into()), "ok", Mark::Quiet),
-        (Outcome::Answered(machine::Outcome::Held.into()), "held", Mark::Routine),
-        (Outcome::Answered(machine::Outcome::Gone.into()), "gone", Mark::Routine),
-        (Outcome::Answered(machine::Outcome::Retryable.into()), "retryable", Mark::Warning),
-        (Outcome::Answered(machine::Outcome::Failed.into()), "failed", Mark::Error),
+        (Outcome::Answered(machine::Outcome::Ok), "ok", Mark::Quiet),
+        (Outcome::Answered(machine::Outcome::Held), "held", Mark::Routine),
+        (Outcome::Answered(machine::Outcome::Gone), "gone", Mark::Routine),
+        (Outcome::Answered(machine::Outcome::Retryable), "retryable", Mark::Warning),
+        (Outcome::Answered(machine::Outcome::Failed), "failed", Mark::Error),
         (Outcome::Awaits, "waits for a machine", Mark::Routine),
         (Outcome::Unconfirmed, "typed, not confirmed", Mark::Warning),
         (Outcome::Reported, "reported", Mark::Quiet),

@@ -3,6 +3,7 @@ use std::time::Duration;
 use super::event::{Line, Parts, Show, pr};
 use super::{Kind, Mark};
 use crate::error::Error;
+use crate::machine::{Outcome as Answer, Waiting};
 use crate::plain::{Id, IssueKey};
 
 // What carrying out a command came to on the way.
@@ -46,14 +47,6 @@ pub enum Work {
     ConfigChanged { changes: Vec<String> },
     // A re-read that failed, so the last config stays in use.
     ConfigKept(Error),
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Waiting {
-    Slot,
-    Held,
-    Merged,
-    Blockers,
 }
 
 // The most blockers a queued line names.
@@ -131,16 +124,6 @@ pub enum Outcome {
     Error(Error),
 }
 
-// What the Durable Object is told a command came to.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Answer {
-    Ok,
-    Failed,
-    Retryable,
-    Held,
-    Gone,
-}
-
 // A conversations checkout brought up to date, or not (converse::refresh_idle), by its repo's
 // Orca ID.
 #[derive(Debug, PartialEq)]
@@ -215,17 +198,22 @@ impl Work {
             Work::ResultHeld { command } => Line::routine(Parts::of("a command").opaque(command).text("'s connection has gone; its result waits for the resend")),
             Work::ConfigChanged { changes } => Line::routine(Parts::of(format!("config.json changed: {}", changes.join("; ")))).area("config"),
             Work::ConfigKept(error) => Line::warning(Parts::of("config.json wasn't applied: it didn't read or failed its checks, so the last config stays in use").error(error)).area("config"),
-            Work::Queued { waiting, blocked_by } => Line::routine(Parts::of(match waiting {
-                Waiting::Slot => "queued: waiting for a slot".to_string(),
-                Waiting::Held => "queued: waiting for a held worker".into(),
-                Waiting::Merged => "queued: waiting for a reap".into(),
-                Waiting::Blockers if blocked_by.is_empty() => "queued: blocked".into(),
-                Waiting::Blockers => {
-                    let more = blocked_by.len().saturating_sub(NAMED);
-                    let more = if more > 0 { format!(" and {more} more") } else { String::new() };
-                    format!("queued: blocked by {}{more}", blocked_by.iter().take(NAMED).map(String::as_str).collect::<Vec<_>>().join(", "))
-                }
-            })),
+            Work::Queued { waiting, blocked_by } => Line::routine(Parts::of(format!("queued: {}", queued_reason(*waiting, blocked_by)))),
+        }
+    }
+}
+
+// Why a queued request waits, as its line says it after `queued: ` and the panel's row whole.
+pub fn queued_reason(waiting: Waiting, blocked_by: &[String]) -> String {
+    match waiting {
+        Waiting::Slot => "waiting for a slot".into(),
+        Waiting::Held => "waiting for a held worker".into(),
+        Waiting::Merged => "waiting for a reap".into(),
+        Waiting::Blockers if blocked_by.is_empty() => "blocked".into(),
+        Waiting::Blockers => {
+            let more = blocked_by.len().saturating_sub(NAMED);
+            let more = if more > 0 { format!(" and {more} more") } else { String::new() };
+            format!("blocked by {}{more}", blocked_by.iter().take(NAMED).map(String::as_str).collect::<Vec<_>>().join(", "))
         }
     }
 }

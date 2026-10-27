@@ -6,33 +6,14 @@ use std::time::{Duration, Instant};
 
 use super::frame::{Checks, DeadlineKind, Pr, TriageState, Why, Work};
 use super::{Connection, Finish, Lane, State};
+pub use crate::gateway::Shown as Budget;
+pub use crate::health::Silent as Silence;
 use crate::machine::{Observed, Outcome, Waiting};
 use crate::time;
+use crate::trace::queued_reason;
 
 // How many failures the outcomes line names.
 const FAILURES: usize = 3;
-// The most blockers a queued row names, as the log's line does.
-const NAMED: usize = 5;
-
-// One API's budget, the scarcest of its budgets as its responses said.
-#[derive(Clone, Debug, PartialEq)]
-pub struct Budget {
-    pub api: &'static str,
-    pub limit: Option<u64>,
-    pub remaining: u64,
-    pub resets: Duration,
-    pub spent: bool,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Silence {
-    pub host: String,
-    pub name: Option<String>,
-    // A recipe machine put to sleep: it needs nothing from the owner.
-    pub asleep: bool,
-    pub since: Instant,
-    pub next: Instant,
-}
 
 // What `draw` reads live, beside the panel's state.
 #[derive(Clone, Debug, Default)]
@@ -282,9 +263,9 @@ pub fn view(state: &State, live: &Live, now: Instant) -> View {
 
     let mut queued: Vec<QueuedRow> = match framed {
         // In the coordinator's order, then the waits that aren't a slot's.
-        Some(frame) => frame.queue.iter().map(|q| QueuedRow { issue: name(&q.identifier), reason: reason(q.waiting, &q.blockers), blockers: q.blockers.clone(), age: time::instant(&q.at).map_or(Duration::ZERO, ago_ms), through: None }).collect(),
+        Some(frame) => frame.queue.iter().map(|q| QueuedRow { issue: name(&q.identifier), reason: queued_reason(q.waiting, &q.blockers), blockers: q.blockers.clone(), age: time::instant(&q.at).map_or(Duration::ZERO, ago_ms), through: None }).collect(),
         None => {
-            let mut queued: Vec<QueuedRow> = state.queued.iter().filter(|(issue, _)| !slotted.contains(issue.as_str())).map(|(issue, q)| QueuedRow { issue: issue.clone(), reason: reason(q.waiting, &q.blocked_by), blockers: q.blocked_by.clone(), age: since(q.said), through: None }).collect();
+            let mut queued: Vec<QueuedRow> = state.queued.iter().filter(|(issue, _)| !slotted.contains(issue.as_str())).map(|(issue, q)| QueuedRow { issue: issue.clone(), reason: queued_reason(q.waiting, &q.blocked_by), blockers: q.blocked_by.clone(), age: since(q.said), through: None }).collect();
             queued.sort_by(|a, b| a.age.cmp(&b.age).then_with(|| a.issue.cmp(&b.issue)));
             queued
         }
@@ -392,21 +373,6 @@ fn deadline_name(kind: DeadlineKind, work: Option<Work>) -> String {
         DeadlineKind::TakeBack => "take-back".into(),
         DeadlineKind::Quiet => "away notice".into(),
         DeadlineKind::Warm => "turn close".into(),
-    }
-}
-
-// As the log's queued line says it, without its `queued: `.
-fn reason(waiting: Waiting, blocked_by: &[String]) -> String {
-    match waiting {
-        Waiting::Slot => "waiting for a slot".into(),
-        Waiting::Held => "waiting for a held worker".into(),
-        Waiting::Merged => "waiting for a reap".into(),
-        Waiting::Blockers if blocked_by.is_empty() => "blocked".into(),
-        Waiting::Blockers => {
-            let more = blocked_by.len().saturating_sub(NAMED);
-            let more = if more > 0 { format!(" and {more} more") } else { String::new() };
-            format!("blocked by {}{more}", blocked_by.iter().take(NAMED).map(String::as_str).collect::<Vec<_>>().join(", "))
-        }
     }
 }
 

@@ -12,8 +12,8 @@ use std::path::Path;
 
 use crate::error::Error;
 use crate::github::{self, CheckState, Pr, Reader, is_copilot};
+use crate::machine::Notice;
 use crate::plain::{Id, IssueKey, Line};
-use crate::state::Told;
 
 // What one read of a PR's head checks found, for the resume and for the notice that CI
 // couldn't run.
@@ -128,14 +128,16 @@ pub fn capped_number(number: u64, cap: u32) -> String {
     format!("PR #{} has had {rounds}, so I've stopped picking up Copilot's reviews on it. Can you take a look?", number)
 }
 
-// A response, so the card shows it as the latest word.
-pub fn told(number: u64, kind: Told) -> String {
-    match kind {
-        Told::Closed => format!("PR #{number} was closed without merging. I've left its branch as it is."),
-        Told::AutoMergeOff => format!("Auto-merge is off on PR #{number}, so it won't merge by itself."),
-        Told::CiCouldntRun => format!("CI couldn't run on PR #{number}, so it can't merge until it does."),
-        Told::ChecksPending => format!("PR #{number}'s checks have been pending for over an hour, so it can't merge until they finish."),
-        Told::CopilotWontApprove => format!("Copilot won't approve PR #{number} without a person looking. Can you take a look?"),
+// Why a PR won't merge by itself, as a response, so the card shows it as the latest word.
+// `notice_text` passes only these five notices.
+pub fn told(number: u64, notice: Notice) -> String {
+    match notice {
+        Notice::PrClosed => format!("PR #{number} was closed without merging. I've left its branch as it is."),
+        Notice::AutoMergeOff => format!("Auto-merge is off on PR #{number}, so it won't merge by itself."),
+        Notice::CiCouldntRun => format!("CI couldn't run on PR #{number}, so it can't merge until it does."),
+        Notice::ChecksPending => format!("PR #{number}'s checks have been pending for over an hour, so it can't merge until they finish."),
+        Notice::CopilotWontApprove => format!("Copilot won't approve PR #{number} without a person looking. Can you take a look?"),
+        _ => unreachable!("no merge notice"),
     }
 }
 

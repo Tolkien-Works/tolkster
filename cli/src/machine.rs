@@ -20,7 +20,6 @@ use crate::gateway::Failure;
 use crate::plain::split_repo;
 use crate::json::{non_empty, str};
 use crate::plain::{BranchName, CommandId, Id, IssueKey, Sha, Terminal, Time, plain_host};
-use crate::trace;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -119,18 +118,6 @@ pub enum Outcome {
     // Nothing was typed: the worktree has no agent, as when it ends just as a line arrives. Not
     // a failure; the machine observes the exit.
     Gone,
-}
-
-impl From<Outcome> for trace::Answer {
-    fn from(outcome: Outcome) -> trace::Answer {
-        match outcome {
-            Outcome::Ok => trace::Answer::Ok,
-            Outcome::Failed => trace::Answer::Failed,
-            Outcome::Retryable => trace::Answer::Retryable,
-            Outcome::Held => trace::Answer::Held,
-            Outcome::Gone => trace::Answer::Gone,
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -304,17 +291,6 @@ pub enum Waiting {
     Held,
     Merged,
     Blockers,
-}
-
-impl From<Waiting> for trace::Waiting {
-    fn from(waiting: Waiting) -> trace::Waiting {
-        match waiting {
-            Waiting::Slot => trace::Waiting::Slot,
-            Waiting::Held => trace::Waiting::Held,
-            Waiting::Merged => trace::Waiting::Merged,
-            Waiting::Blockers => trace::Waiting::Blockers,
-        }
-    }
 }
 
 fn queued(args: &Value) -> Option<Queued> {

@@ -31,7 +31,7 @@ pub use listen::Unbuilt;
 #[cfg(any(feature = "develop", test))]
 pub use listen::Unpulled;
 pub use notes::{Context, Keep, Missing, Reap, Reaping, Refusal, Rule, Triage, TriageNote, Why};
-pub use work::{UNCONFIRMED, Answer, Mode, Outcome, Problem, Purpose, Refresh, RungNote, Turn, Undone, Waiting, Work};
+pub use work::{UNCONFIRMED, Mode, Outcome, Problem, Purpose, Refresh, RungNote, Turn, Undone, Work, queued_reason};
 
 // How this process logs, set once as it starts: every line, from any thread, reads them.
 static ENABLED: AtomicBool = AtomicBool::new(false);

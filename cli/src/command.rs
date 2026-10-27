@@ -78,7 +78,7 @@ pub fn carry_out(agent: &Agent, shared: &Arc<Shared>, command: &Command, beat: &
     trace::event(match (unconfirmed, finished.awaits) {
         (true, _) => trace::Outcome::Unconfirmed,
         (false, true) => trace::Outcome::Awaits,
-        (false, false) => trace::Outcome::Answered(finished.outcome.into()),
+        (false, false) => trace::Outcome::Answered(finished.outcome),
     });
     answer(command, &finished);
     Acted::Done
@@ -238,7 +238,7 @@ fn say_queued(ports: &Ports, command: &Command) {
         Vec::new()
     };
     panel::queued(command.identifier.as_str(), *waiting, at.as_str(), Some(blocked_by.clone()));
-    trace::event(Work::Queued { waiting: (*waiting).into(), blocked_by });
+    trace::event(Work::Queued { waiting: *waiting, blocked_by });
 }
 
 // A triage batch (docs/triage.md): each issue asked, read fresh, ahead of one page of the
