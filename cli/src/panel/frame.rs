@@ -167,7 +167,6 @@ pub enum Why {
     NoRecipe,
 }
 
-
 impl Why {
     pub fn said(self) -> &'static str {
         match self {

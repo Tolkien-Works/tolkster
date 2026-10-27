@@ -13,7 +13,7 @@ const HOOK: &str = "tolkster-co-author";
 
 // False for the primary checkout, a directory outside any repo, and anywhere git can't be asked.
 pub fn marked(run: &mut Run, dir: Option<&str>) -> bool {
-    marked_session(run, dir).is_some()
+    git::git_dir(run, dir).is_some_and(|git_dir| Path::new(&git_dir).join(MARKER).is_file())
 }
 
 // The session a marked worktree was marked for, None where `marked` is false.
