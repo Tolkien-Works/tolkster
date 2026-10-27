@@ -154,10 +154,12 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
             let mut orca = Cli::paired(&mut run, &watching.health).at_once(run_command);
             let terminals = orca.terminals()?;
             let mut states_listed = true;
-            let (idle, waiting, workers, others, listed, all) = match orca.agents_listed() {
+            let listing_now = orca.agents_listed();
+            // The hosts this listing found silent, read once so that its every part agrees.
+            let unanswered = orca.unanswered();
+            let (idle, waiting, workers, others, listed, all) = match listing_now {
                 Ok((worktrees, listed)) => {
-                    let silent = orca.unanswered();
-                    let on_silent = |id: &String| host_of(id).is_some_and(|at| silent.iter().any(|s| s == at));
+                    let on_silent = |id: &String| host_of(id).is_some_and(|at| unanswered.iter().any(|s| s == at));
                     let kept = std::mem::take(&mut issues_before).into_iter().filter(|(id, _)| on_silent(id));
                     issues_before = kept.chain(candidates(&worktrees).into_iter().filter_map(|w| Some((w.id.clone(), w.linked_issue.clone()?)))).collect();
                     let workers: HashSet<String> = candidates(&worktrees).into_iter().map(|w| w.id.clone()).collect();
@@ -185,8 +187,8 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
             };
             let answering = orca.answering();
             let hosts = answering.iter().map(|h| h.id.clone()).collect();
-            let paired = watching.health.withholding(answering.iter().map(|h| h.id.clone()).chain(orca.unanswered()).collect(), Instant::now());
-            let mut now = Agents { running: agent_worktrees(&terminals), open: terminal_worktrees(&terminals), terminals: open_terminals(&terminals, None).into_iter().map(String::from).collect(), agents: agent_handles(&terminals, &workers).into_iter().map(String::from).collect(), idle, waiting, listed, others, hosts, paired, fleet: Fleet::default(), config: String::new(), idle_hosts: BTreeMap::new(), dormant: None }.keeping(&before, &orca.unanswered());
+            let paired = watching.health.withholding(answering.iter().map(|h| h.id.clone()).chain(unanswered.iter().cloned()).collect(), Instant::now());
+            let mut now = Agents { running: agent_worktrees(&terminals), open: terminal_worktrees(&terminals), terminals: open_terminals(&terminals, None).into_iter().map(String::from).collect(), agents: agent_handles(&terminals, &workers).into_iter().map(String::from).collect(), idle, waiting, listed, others, hosts, paired, fleet: Fleet::default(), config: String::new(), idle_hosts: BTreeMap::new(), dormant: None }.keeping(&before, &unanswered);
             // The caps as config.json has them now, as the fleet reports them, and the hosts
             // holding an admitted credential, which a command reads as last listed here. A read
             // that fails keeps the last. What the owner changed is said once (`Reread`).
@@ -231,10 +233,9 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
             let holding: Vec<(Host, i64)> = idle.into_iter().map(|(h, _, held)| (h, held)).chain(silent).collect();
             let total = total(config, held(None), &ready, &holding);
             let shares = hosts::shares(config, held(None), &ready, &holding);
-            let silent = orca.unanswered();
             let hosts = shares.into_iter().map(|(host, _)| match host {
                 None => HostShare { id: None, name: "local".into(), cap: config.local_slots(), answering: true, refused: false },
-                Some(h) => HostShare { id: Some(h.id.clone()), name: h.name.clone(), cap: cap(config, h), answering: !silent.contains(&h.id), refused: watching.health.refused(&h.id, Instant::now()) },
+                Some(h) => HostShare { id: Some(h.id.clone()), name: h.name.clone(), cap: cap(config, h), answering: !unanswered.contains(&h.id), refused: watching.health.refused(&h.id, Instant::now()) },
             }).collect();
             if states_listed {
                 let slots = states_of(&now).into_iter().filter(|(id, _)| !now.others.contains(id)).map(|(id, state)| Slot { issue: issues_before.get(&id).cloned(), host: host_of(&id).map(String::from), worktree: id, state }).collect();
