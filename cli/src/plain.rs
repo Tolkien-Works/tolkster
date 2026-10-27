@@ -68,12 +68,6 @@ macro_rules! plain {
             }
         }
 
-        impl PartialEq<$name> for str {
-            fn eq(&self, other: &$name) -> bool {
-                self == other.0
-            }
-        }
-
         impl PartialEq<String> for $name {
             fn eq(&self, other: &String) -> bool {
                 self.0 == *other
