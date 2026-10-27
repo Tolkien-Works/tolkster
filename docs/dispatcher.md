@@ -160,7 +160,7 @@ effort as it names them, and `upTo`, the largest size it takes. By default:
 
 | Rung | Model | Effort | Size |
 |---|---|---|---|
-| 1 | Sonnet 5.5 | medium | up to XS |
+| 1 | Haiku 5.5 | high | up to XS |
 | 2 | Sonnet 5.5 | high | S |
 | 3, the default | Opus 5.5 | medium | M |
 | 4 | Opus 5.5 | high | above |

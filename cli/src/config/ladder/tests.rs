@@ -32,18 +32,19 @@ fn the_estimate_picks_the_rung_and_no_estimate_the_default() {
 #[test]
 fn labels_move_within_the_ladder_to_the_nearest_matching_rung() {
     let ladder = Ladder::default();
-    // A big issue, held to Sonnet: its strongest rung.
+    // A big issue, held to Sonnet: its only rung.
     assert_eq!(pick(&ladder, Some(8.0), &["model:sonnet"]), (2, false));
     assert_eq!(pick(&ladder, Some(8.0), &["Model: Sonnet 5.5"]), (2, false));
     assert_eq!(pick(&ladder, Some(8.0), &["model:claude-sonnet-5-5"]), (2, false));
-    // A small one, raised to Opus: its weakest.
+    // A small one, raised to Sonnet, or to Opus: its weakest.
+    assert_eq!(pick(&ladder, Some(1.0), &["model:sonnet"]), (2, false));
     assert_eq!(pick(&ladder, Some(1.0), &["model:opus"]), (3, false));
     // Effort alone, nearest the estimate's rung, the stronger on a tie.
-    assert_eq!(pick(&ladder, Some(1.0), &["effort:high"]), (2, false));
+    assert_eq!(pick(&ladder, Some(1.0), &["effort:medium"]), (3, false));
     assert_eq!(pick(&ladder, Some(8.0), &["effort:medium"]), (3, false));
     assert_eq!(pick(&ladder, Some(3.0), &["effort:high"]), (4, false));
     // Both.
-    assert_eq!(pick(&ladder, Some(8.0), &["model:sonnet", "effort:medium"]), (1, false));
+    assert_eq!(pick(&ladder, Some(8.0), &["model:haiku", "effort:high"]), (1, false));
 }
 
 #[test]
@@ -53,8 +54,8 @@ fn a_label_off_the_ladder_gives_the_default_and_is_logged_without_its_text() {
         assert_eq!(pick(&ladder, Some(1.0), off), (3, true), "{off:?}");
     }
     // Each on the ladder, but no rung has both.
-    let single = Ladder { rungs: vec![Ladder::default().rungs[0].clone(), Ladder::default().rungs[3].clone()], default: 2 };
-    assert_eq!(pick(&single, Some(1.0), &["model:sonnet", "effort:high"]), (2, true));
+    let single = Ladder { rungs: vec![Ladder::default().rungs[0].clone(), Ladder::default().rungs[2].clone()], default: 2 };
+    assert_eq!(pick(&single, Some(1.0), &["model:haiku", "effort:medium"]), (2, true));
     let (_, notes) = ladder.choose(Some(Size::XS), &labels(&["model:$(rm -rf)"]));
     assert_eq!(notes, [RungNote::Unmatched("model")]);
 }
