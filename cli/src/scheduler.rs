@@ -202,7 +202,7 @@ impl Scheduler {
             // The first thread is the shared lane's.
             let shared = n == 0;
             std::thread::spawn(move || {
-                LANE.with(|l| *l.borrow_mut() = Some((Arc::clone(&lanes), mine.clone(), shared)));
+                LANE.with(|l| *l.borrow_mut() = Some(Arc::clone(&lanes)));
                 while let Some(Queued { id, lane, job, .. }) = lanes.take(shared) {
                     id.clone_into(&mut lock(&mine.id));
                     let (issue, kind) = job.named();
