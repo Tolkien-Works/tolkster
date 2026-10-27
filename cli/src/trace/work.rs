@@ -1,9 +1,10 @@
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
+
 use super::event::{Line, Parts, Show, pr};
 use super::{Kind, Mark};
 use crate::error::Error;
-use crate::machine::{Outcome as Answer, Waiting};
 use crate::plain::{Id, IssueKey};
 
 // What carrying out a command came to on the way.
@@ -47,6 +48,16 @@ pub enum Work {
     ConfigChanged { changes: Vec<String> },
     // A re-read that failed, so the last config stays in use.
     ConfigKept(Error),
+}
+
+// Why a queued request waits, as the machine says it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Waiting {
+    Slot,
+    Held,
+    Merged,
+    Blockers,
 }
 
 // The most blockers a queued line names.
@@ -122,6 +133,21 @@ pub enum Outcome {
     // A command given back while its worker's host is made, woken or put to sleep.
     Awaits,
     Error(Error),
+}
+
+// What the Durable Object is told a command came to (machine::Outcome).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Answer {
+    Ok,
+    Failed,
+    // Worth sending again: GitHub's or Linear's budget was spent.
+    Retryable,
+    // Nothing was typed: the agent waits at a prompt.
+    Held,
+    // Nothing was typed: the worktree has no agent, as when it ends just as a line arrives. Not
+    // a failure; the machine observes the exit.
+    Gone,
 }
 
 // A conversations checkout brought up to date, or not (converse::refresh_idle), by its repo's
