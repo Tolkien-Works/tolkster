@@ -14,11 +14,10 @@ const TELLING: &[&str] = &["testing", "building", "pushing", "committing", "reba
 // A shell command's kind, from its programs' names and its write markers alone: it is never
 // echoed. None when any part of it runs `tolkster` or `orca`, or it only sets up or sleeps.
 pub(super) fn command_kind(command: &str) -> Option<&'static str> {
-    let segments = segments(command);
-    if segments.iter().any(|words| matches!(program(words).as_str(), "tolkster" | "orca")) {
+    if runs_program(command, &["tolkster", "orca"]) {
         return None;
     }
-    let mut kinds: Vec<&str> = segments.iter().filter_map(|words| segment_kind(words)).collect();
+    let mut kinds: Vec<&str> = segments(command).iter().filter_map(|words| segment_kind(words)).collect();
     if script_writes(command) {
         kinds.push("editing");
     }
@@ -103,6 +102,11 @@ fn ends_at(text: &str, ends: impl Fn(&str) -> bool) -> Option<usize> {
 }
 
 // A program's name, without its directory or `.exe`.
+// Whether any part of the command runs one of `programs`.
+pub(super) fn runs_program(command: &str, programs: &[&str]) -> bool {
+    segments(command).iter().any(|words| programs.contains(&program(words).as_str()))
+}
+
 pub(super) fn program(words: &[String]) -> String {
     let name = words[0].rsplit(['/', '\\']).next().unwrap_or_default();
     name.strip_suffix(".exe").unwrap_or(name).to_string()
@@ -270,15 +274,11 @@ pub(super) fn pair_of(tool: Tool, command: Option<&str>) -> Option<&'static str>
         Tool::Shell => {}
         _ => return None,
     }
-    let segments = segments(command?);
-    let kinds: Vec<&str> = segments.iter().filter_map(|words| segment_kind(words)).collect();
-    if kinds.contains(&"committing") {
+    let command = command?;
+    if runs(command, &["committing"]) {
         return None;
     }
-    if segments.iter().any(|words| matches!(program(words).as_str(), "tolkster" | "orca")) {
-        return None;
-    }
-    TELLING.iter().copied().find(|kind| kinds.contains(kind)).filter(|kind| PAIRED.contains(kind))
+    command_kind(command).filter(|kind| PAIRED.contains(kind))
 }
 
 // Whether a call's end says how its check went: a sub-agent's does, and a shell command's

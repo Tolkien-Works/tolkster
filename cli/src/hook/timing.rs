@@ -10,7 +10,7 @@ use crate::plain::Sha;
 use crate::time::iso;
 use crate::timing::{By, CheckKind, CheckRun, Kind, MOST_CHECKS, Offsets, Summary, Tools};
 
-use super::shell::{check_of, command_kind, program, runs, runs_words, segments};
+use super::shell::{check_of, command_kind, runs, runs_program, runs_words};
 use super::{BACKGROUND_FOR_MS, Tool};
 
 // A gap this long between two moments, with no call running across it, is idle: the agent
@@ -36,7 +36,7 @@ fn spent(tool: Tool, command: Option<&str>) -> Spent {
         Tool::Other => Spent::Other,
         Tool::Shell => {
             let command = command.unwrap_or_default();
-            if segments(command).iter().any(|words| matches!(program(words).as_str(), "tolkster" | "orca")) {
+            if runs_program(command, &["tolkster", "orca"]) {
                 return Spent::Bookkeeping;
             }
             if check_of(command).is_some() {

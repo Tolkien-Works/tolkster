@@ -10,7 +10,7 @@
 // lines.
 
 use super::redact::{Scrub, cap};
-use super::shell::{known, pair_of, program, segments};
+use super::shell::{known, pair_of, runs_program};
 use super::transcript::tool_calls;
 use super::whereabouts::report;
 use super::{Call, Tool};
@@ -36,7 +36,7 @@ pub fn thought(tail: &str, id: &str, scrub: &Scrub) -> Option<String> {
 // whose text before it `hook start` posts, and one that runs `orca`, as the closing command
 // does after the final response, which a post would reopen.
 pub fn left_out(call: &Call) -> bool {
-    call.sub_agent || call.command.as_deref().is_some_and(|command| report(command).is_some() || runs(command, &["orca"]))
+    call.sub_agent || call.command.as_deref().is_some_and(|command| report(command).is_some() || runs_program(command, &["orca"]))
 }
 
 // Whether the call `id` was made in `session`, the one the launch traces, by the worker's
@@ -48,10 +48,6 @@ pub fn traced(tail: &str, id: &str, session: &str) -> bool {
 // Whether the call is the worker's own post (`tolkster activity` or `plan`), and its session.
 pub fn posts_in(call: &Call) -> Option<String> {
     call.command.as_deref().and_then(report).map(|r| r.session).filter(|s| !s.is_empty())
-}
-
-fn runs(command: &str, programs: &[&str]) -> bool {
-    segments(command).iter().any(|words| programs.contains(&program(words).as_str()))
 }
 
 // A call's durable action: what it did, what on, and how it went; a commit's names its subject
@@ -94,7 +90,7 @@ fn outcome(call: &Call, output: &Output, scrub: &Scrub) -> String {
     let command = call.command.as_deref();
     match call.tool {
         _ if output.launched => "running in the background".into(),
-        Tool::Shell if command.is_some_and(|c| runs(c, &["tolkster", "orca"])) => {
+        Tool::Shell if command.is_some_and(|c| runs_program(c, &["tolkster", "orca"])) => {
             let read = format!("read {}", lines(count, "line"));
             if output.failed { format!("failed · {read}") } else { read }
         }
