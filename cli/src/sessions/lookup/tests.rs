@@ -1,4 +1,5 @@
 use super::*;
+use crate::json::decode;
 
 #[test]
 fn a_session_listed_through_its_issue_or_from_the_newest_decodes_either_way() {

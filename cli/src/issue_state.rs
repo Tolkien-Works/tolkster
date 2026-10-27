@@ -6,14 +6,12 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use serde::Deserialize;
-use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use ureq::Agent;
 
-use crate::linear::{Nodes, Ref, Relation, StateType, answer_to, graphql, update_issue, with_token};
+use crate::linear::{Nodes, Ref, Relation, StateType, read_with, update_issue, with_token};
 use crate::request::Issue;
 use crate::error::Error;
-use crate::json::decode;
 use crate::plain::Commit;
 use crate::sync::lock;
 
@@ -39,12 +37,6 @@ struct Current {
     state: WorkflowState,
 }
 
-// The read of `query` decoded, with the error naming it.
-#[track_caller]
-fn read_as<T: DeserializeOwned>(agent: &Agent, token: &str, query: &str, variables: Value) -> Result<T, Error> {
-    decode(graphql(agent, token, query, variables)?, &answer_to(query))
-}
-
 struct Read {
     current: WorkflowState,
     started: Vec<WorkflowState>,
@@ -65,7 +57,7 @@ fn read(agent: &Agent, token: &str, issue_id: &str) -> Result<Read, Error> {
     struct Answer {
         issue: Issue,
     }
-    let issue = read_as::<Answer>(agent, token, READ, json!({ "id": issue_id }))?.issue;
+    let issue = read_with::<Answer>(agent, token, READ, json!({ "id": issue_id }))?.issue;
     Ok(Read { current: issue.state, started: in_order(issue.team.states.nodes) })
 }
 
@@ -93,7 +85,7 @@ fn started_states(agent: &Agent, token: &str, known: &Started, team_id: &str) ->
     struct Answer {
         team: States,
     }
-    let started = in_order(read_as::<Answer>(agent, token, TEAM_STARTED, json!({ "id": team_id }))?.team.states.nodes);
+    let started = in_order(read_with::<Answer>(agent, token, TEAM_STARTED, json!({ "id": team_id }))?.team.states.nodes);
     lock(&known.0).insert(team_id.into(), started.clone());
     Ok(started)
 }
@@ -113,7 +105,7 @@ pub fn guarded_update(agent: &Agent, token: &str, issue_id: &str, decide: impl F
     struct Answer {
         issue: Current,
     }
-    let current = read_as::<Answer>(agent, token, CURRENT, json!({ "id": issue_id }))?.issue.state;
+    let current = read_with::<Answer>(agent, token, CURRENT, json!({ "id": issue_id }))?.issue.state;
     let Some(input) = decide(&current)? else { return Ok(false) };
     update_issue(agent, token, issue_id, input)?;
     Ok(true)
@@ -257,7 +249,7 @@ pub fn complete_issue(agent: &Agent, token: &str, issue_id: &str) -> Result<bool
     struct Answer {
         issue: Issue,
     }
-    let completed = in_order(read_as::<Answer>(agent, token, TEAM_COMPLETED, json!({ "id": issue_id }))?.issue.team.states.nodes);
+    let completed = in_order(read_with::<Answer>(agent, token, TEAM_COMPLETED, json!({ "id": issue_id }))?.issue.team.states.nodes);
     guarded_update(agent, token, issue_id, |current| Ok(done_target(current, &completed)?.map(|target| json!({ "stateId": target.id }))))
 }
 
@@ -275,7 +267,7 @@ pub fn release_issue(agent: &Agent, id: &str) -> Result<(), Error> {
             // None once the issue is gone, which leaves nothing to undo.
             issue: Option<Issue>,
         }
-        let read: Answer = read_as(agent, token, "query Issue($id: String!) { viewer { id } issue(id: $id) { id delegate { id } } }", json!({ "id": id }))?;
+        let read: Answer = read_with(agent, token, "query Issue($id: String!) { viewer { id } issue(id: $id) { id delegate { id } } }", json!({ "id": id }))?;
         let Some(issue) = read.issue.filter(|issue| issue.delegate.as_ref().map(|d| &d.id) == Some(&read.viewer.id)) else { return Ok(()) };
         update_issue(agent, token, &issue.id, json!({ "delegateId": null }))
     })

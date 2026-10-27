@@ -4,23 +4,15 @@
 use std::collections::HashMap;
 
 use serde::Deserialize;
-use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use ureq::Agent;
 
 use crate::error::Error;
 use crate::estimates::with_team_fields;
 use crate::issues::{Identified, Relations, RELATION_FIELDS};
-use crate::json::decode;
-use crate::linear::{IssueRef, Nodes, Ref, StateOf, answer_to, graphql, read_as};
+use crate::linear::{IssueRef, Nodes, Ref, StateOf, graphql, read_as, read_with};
 use crate::sessions::workspace::FilingTeam;
 use crate::sessions::{OfApp, Through, issue_sessions};
-
-// `query`'s answer, decoded, with the error naming it.
-#[track_caller]
-fn answer<T: DeserializeOwned>(agent: &Agent, token: &str, query: &str, variables: Value) -> Result<T, Error> {
-    decode(graphql(agent, token, query, variables)?, &answer_to(query))
-}
 
 // `{ issue }`, null when Linear has no such issue.
 #[derive(Deserialize)]
@@ -31,7 +23,7 @@ struct Issue<T> {
 // The issue `id`, by its ID and identifier: Err when Linear has none.
 #[track_caller]
 pub fn issue_ref(agent: &Agent, token: &str, id: &str) -> Result<IssueRef, Error> {
-    let found: Issue<IssueRef> = answer(agent, token, "query Target($id: String!) { issue(id: $id) { id identifier } }", json!({ "id": id }))?;
+    let found: Issue<IssueRef> = read_with(agent, token, "query Target($id: String!) { issue(id: $id) { id identifier } }", json!({ "id": id }))?;
     found.issue.ok_or_else(|| Error::Failed(format!("no issue {id}")))
 }
 
@@ -42,7 +34,7 @@ pub fn issues_by_id(agent: &Agent, token: &str, ids: &[&str]) -> Result<Vec<Opti
     let reads: Vec<String> = (0..ids.len()).map(|i| format!("o{i}: issue(id: $o{i}) {{ id identifier }}")).collect();
     let variables: serde_json::Map<String, Value> = ids.iter().enumerate().map(|(i, id)| (format!("o{i}"), json!(id))).collect();
     // Keyed by alias, `o0` the first.
-    let mut found: HashMap<String, Option<IssueRef>> = answer(agent, token, &format!("query Others({}) {{ {} }}", declared.join(", "), reads.join(" ")), Value::Object(variables))?;
+    let mut found: HashMap<String, Option<IssueRef>> = read_with(agent, token, &format!("query Others({}) {{ {} }}", declared.join(", "), reads.join(" ")), Value::Object(variables))?;
     Ok((0..ids.len()).map(|i| found.remove(&format!("o{i}")).flatten()).collect())
 }
 
@@ -69,7 +61,7 @@ pub fn relation_pair(agent: &Agent, token: &str, a: &str, b: &str) -> Result<Pai
         b: Option<IssueRef>,
     }
     let query = format!("query Pair($a: String!, $b: String!) {{ a: issue(id: $a) {{ id identifier {RELATION_FIELDS} }} b: issue(id: $b) {{ id identifier }} }}");
-    let found: Answer = answer(agent, token, &query, json!({ "a": a, "b": b }))?;
+    let found: Answer = read_with(agent, token, &query, json!({ "a": a, "b": b }))?;
     Ok(Pair { a: found.a.ok_or_else(|| Error::Failed(format!("no issue {a}")))?, b: found.b.ok_or_else(|| Error::Failed(format!("no issue {b}")))? })
 }
 
@@ -100,7 +92,7 @@ pub fn update_target(agent: &Agent, token: &str, id: &str) -> Result<UpdateTarge
         issue: Option<Target>,
     }
     let query = with_team_fields("query Target($id: String!) { viewer { id } issue(id: $id) { id identifier team { id TEAM_FIELDS } parent { id } state { type } delegate { id } } }");
-    let found: Answer = answer(agent, token, &query, json!({ "id": id }))?;
+    let found: Answer = read_with(agent, token, &query, json!({ "id": id }))?;
     Ok(UpdateTarget { viewer: found.viewer, issue: found.issue.ok_or_else(|| Error::Failed(format!("no issue {id}")))? })
 }
 
@@ -135,7 +127,7 @@ pub fn filing_context(agent: &Agent, token: &str, id: &str) -> Result<FilingCont
         issue: Option<Context>,
     }
     let query = with_team_fields("query Context($id: String!) { viewer { id } issue(id: $id) { id team { id key TEAM_FIELDS } project { id } delegate { id } } }");
-    let found: Answer = answer(agent, token, &query, json!({ "id": id }))?;
+    let found: Answer = read_with(agent, token, &query, json!({ "id": id }))?;
     Ok(FilingContext { viewer: found.viewer, issue: found.issue.ok_or_else(|| Error::Failed(format!("no issue {id}")))? })
 }
 
@@ -179,7 +171,7 @@ pub struct Blocked {
 
 #[track_caller]
 pub fn my_work(agent: &Agent, token: &str, id: &str) -> Result<MyWork, Error> {
-    answer(agent, token, MY_WORK, json!({ "id": id }))
+    read_with(agent, token, MY_WORK, json!({ "id": id }))
 }
 
 // What `issue chain` reads of the parent: its sub-issues, each with the issues blocking it.
@@ -215,7 +207,7 @@ pub struct ChainBlocker {
 
 #[track_caller]
 pub fn chain_target(agent: &Agent, token: &str, id: &str) -> Result<ChainTarget, Error> {
-    answer(agent, token, CHAIN_TARGET, json!({ "id": id }))
+    read_with(agent, token, CHAIN_TARGET, json!({ "id": id }))
 }
 
 // The ID of the issue of session `session_id`: None when Linear has no such session, or it
@@ -275,7 +267,7 @@ pub fn agent_sessions(agent: &Agent, token: &str, issue: Option<&str>) -> Result
             struct Answer {
                 agent_sessions: Nodes<Listed>,
             }
-            Ok(answer::<Answer>(agent, token, SESSIONS_BY_UPDATE, json!({}))?.agent_sessions.nodes)
+            Ok(read_with::<Answer>(agent, token, SESSIONS_BY_UPDATE, json!({}))?.agent_sessions.nodes)
         }
     }
 }
