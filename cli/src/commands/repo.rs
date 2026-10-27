@@ -11,9 +11,10 @@ use serde_json::{Map, Value, json};
 use ureq::Agent;
 
 use crate::args::{Kind, parse};
-use crate::cli::{NOTHING_TO_DO, config_file, conversation_session, home_dir, merge_json_file, print_json};
+use crate::cli::{NOTHING_TO_DO, config_file, conversation_session, merge_json_file, print_json};
 use crate::coauthor;
-use crate::config::{self, files, owner};
+use crate::config::files;
+use crate::runtime::settings;
 use crate::error::Error;
 use crate::exec::run_command;
 use crate::sessions::workspace::{KeyedTeam, teams_with_projects};
@@ -49,7 +50,7 @@ pub(crate) enum Edit {
 pub fn list(rest: &[String]) -> Result<u8, Error> {
     parse(rest, &[], false)?;
     let files = files()?;
-    let config = config::config(&files, owner(&files)?, &home_dir()?)?;
+    let config = settings(&files)?;
     let orca = repos(&mut run_command, None)?;
     let entries = config.repos.0.iter().map(|entry| {
         let mut row = serde_json::to_value(entry).unwrap_or_default();

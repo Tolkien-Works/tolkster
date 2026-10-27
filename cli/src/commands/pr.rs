@@ -9,11 +9,12 @@ use serde_json::json;
 use ureq::Agent;
 
 use crate::args::{self, Kind, Parsed, parse};
-use crate::cli::{home_dir, print_json, read_body};
+use crate::cli::{print_json, read_body};
 use crate::time::{instant, iso, now_secs};
 use crate::commands::asker::session_issue;
 use crate::commands::link::pr_opened;
-use crate::config::{self, files, owner};
+use crate::config::{files, owner};
+use crate::runtime::settings;
 use crate::review_pass::ReviewSize;
 use crate::card;
 use crate::error::Error;
@@ -193,7 +194,7 @@ pub fn feedback(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
 // the global reviewers, which could bless one the repo left out.
 fn blessed(repo: &str) -> Result<Vec<String>, Error> {
     let files = files()?;
-    let config = config::config(&files, owner(&files)?, &home_dir()?)?;
+    let config = settings(&files)?;
     // Only a repo's own reviewers need its checkout placed, not its own cap alone.
     if !config.repo_reviewers_differ() {
         return Ok(config.review.reviewers);
@@ -330,7 +331,7 @@ pub fn review_pass(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
 
 fn deep_review_estimate() -> Result<Size, Error> {
     let files = files()?;
-    Ok(config::config(&files, owner(&files)?, &home_dir()?)?.review.deep_at)
+    Ok(settings(&files)?.review.deep_at)
 }
 
 // The size of the session's issue as Linear has it now. None when it has none, or the read
