@@ -12,7 +12,7 @@ use serde_json::{Map, Value, json};
 use ureq::Agent;
 
 use crate::args::{Kind, parse};
-use crate::cli::{config_file, credentials_file, merge_json_file, print_json};
+use crate::cli::{config_file, credentials_file, merge_json_file, print_exit};
 use crate::config::{WorkerUrl, files, unchecked_files};
 use crate::runtime::settings;
 use crate::credential::git_env;
@@ -40,8 +40,7 @@ pub fn rm(agent: &Agent, rest: &[String]) -> Result<u8, Error> {
     let id = credential_id(&paired(&mut run_command)?, host);
     let held = State::open(agent, &files)?.revoke_host(&id)?;
     let destroyed = crate::recipe::destroy(host)?;
-    print_json(&json!({ "host": host, "held": held, "destroyed": destroyed }))?;
-    Ok(if destroyed == Some(false) { 1 } else { 0 })
+    print_exit(&json!({ "host": host, "held": held, "destroyed": destroyed }), if destroyed == Some(false) { 1 } else { 0 })
 }
 
 // The credential is the environment ID's: the one Orca pairs under the name, else the
@@ -83,8 +82,7 @@ pub fn join(agent: &Agent, rest: &[String]) -> Result<u8, Error> {
     })?;
     // The editor's aid alone: the code is spent and the settings written, so a failure here is not the join's.
     let _ = crate::config::write_schema(&config_file()?);
-    print_json(&json!({ "host": host, "joined": true }))?;
-    Ok(0)
+    print_exit(&json!({ "host": host, "joined": true }), 0)
 }
 
 // What POST /enrol answered, as the host's name, its credential and the settings config.json
@@ -123,12 +121,10 @@ pub fn clone(rest: &[String]) -> Result<u8, Error> {
             return Err(Error::Failed(format!("{into} holds something other than a whole clone of {repo}: move it aside, then run host add again")));
         }
         git::fetch_with(&env, into)?;
-        print_json(&json!({ "path": into, "cloned": false, "fetched": true }))?;
-        return Ok(0);
+        return print_exit(&json!({ "path": into, "cloned": false, "fetched": true }), 0);
     }
     git::clone_with(&env, &format!("https://github.com/{repo}.git"), into)?;
-    print_json(&json!({ "path": into, "cloned": true }))?;
-    Ok(0)
+    print_exit(&json!({ "path": into, "cloned": true }), 0)
 }
 
 // Typed on the host by `add`, its values as hex so the line stays plain. `--name` and `--email`

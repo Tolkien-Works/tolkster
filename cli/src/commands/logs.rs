@@ -9,7 +9,7 @@ use serde_json::{Map, Value, json};
 use ureq::Agent;
 
 use crate::args::{Kind, Parsed, parse};
-use crate::cli::print_json;
+use crate::cli::print_exit;
 use crate::cloudflare::{Filter, LIMIT, events, query};
 use crate::config::files;
 use crate::error::Error;
@@ -63,8 +63,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
         more |= next.len() >= LIMIT || sessions.len() > SESSIONS;
         found.extend(next);
     }
-    print_json(&json!({ "lines": lines(found), "more": more }))?;
-    Ok(0)
+    print_exit(&json!({ "lines": lines(found), "more": more }), 0)
 }
 
 // The issue's Linear ID, which the Durable Object's lines carry.

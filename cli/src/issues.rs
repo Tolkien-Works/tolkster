@@ -9,6 +9,13 @@ use crate::estimates::{Estimation, Scale};
 use crate::issue_state::WorkflowState;
 use crate::linear::{Nodes, Ref, Relation};
 
+// `value` under `key` in a mutation's input, when there is one.
+pub fn put(input: &mut serde_json::Map<String, Value>, key: &str, value: Option<impl serde::Serialize>) {
+    if let Some(value) = value {
+        input.insert(key.into(), json!(value));
+    }
+}
+
 pub fn priority(text: &str) -> Result<u8, Error> {
     Ok(match text.trim().to_ascii_lowercase().as_str() {
         "0" | "none" => 0,

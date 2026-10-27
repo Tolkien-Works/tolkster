@@ -19,7 +19,7 @@ use serde_json::{Map, Value, json};
 use ureq::Agent;
 
 use crate::args::{Kind, parse};
-use crate::cli::{config_file, merge_json_file, open_browser, print_json};
+use crate::cli::{config_file, merge_json_file, open_browser, print_exit};
 use crate::coauthor::{self, hook_command};
 use crate::config::{Files, WorkerUrl, files, worker_url};
 use crate::error::{Context, Error};
@@ -75,8 +75,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
         _ => Some(install(agent, &files, &slug)?),
     };
     let wrote = write_co_author(agent, &files, &slug)?;
-    print_json(&json!({ "slug": slug, "created": created, "coAuthor": wrote, "installation": installation }))?;
-    Ok(if created || wrote || installation.is_some() { 0 } else { 3 })
+    print_exit(&json!({ "slug": slug, "created": created, "coAuthor": wrote, "installation": installation }), if created || wrote || installation.is_some() { 0 } else { 3 })
 }
 
 fn orphaned(error: Error, org: Option<&str>, slug: &str) -> Error {

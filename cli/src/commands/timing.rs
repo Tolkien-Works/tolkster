@@ -6,7 +6,7 @@ use ureq::Agent;
 
 use super::logs::window;
 use crate::args::{Kind, parse};
-use crate::cli::{NOTHING_TO_DO, print, print_json, read_if_there, timing_file};
+use crate::cli::{nothing_to_do, print, print_json, read_if_there, timing_file};
 use crate::error::Error;
 use crate::time::{iso, now_ms};
 use crate::timing::report::{GROUPS, Group, checks, report, runs};
@@ -28,8 +28,7 @@ pub fn run(_: &Agent, argv: &[String]) -> Result<u8, Error> {
     let text = read_if_there(&file)?.unwrap_or_default();
     let runs = runs(&text, from, to);
     if runs.is_empty() {
-        eprintln!("no worker started from {} to {}", iso(from), iso(to));
-        return Ok(NOTHING_TO_DO);
+        return nothing_to_do(&format!("no worker started from {} to {}", iso(from), iso(to)));
     }
     let (groups, rows) = if parsed.flag("checks") { (checks(&runs, by), CHECK_ROWS) } else { (report(&runs, by), ROWS) };
     let name = GROUPS.iter().find(|(g, _)| *g == by).map_or("", |(_, n)| n);

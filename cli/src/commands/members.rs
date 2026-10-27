@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use ureq::Agent;
 
 use crate::args::{Kind, parse};
-use crate::cli::print_json;
+use crate::cli::print_exit;
 use crate::error::Error;
 use crate::sessions::workspace::{self, User};
 
@@ -18,8 +18,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
         Some(key) => workspace::team_members(agent, &key)?.ok_or_else(|| Error::Failed(format!("no team with key {key}")))?,
         None => workspace::users(agent)?,
     };
-    print_json(&render(users))?;
-    Ok(0)
+    print_exit(&render(users), 0)
 }
 
 // The workspace's active users, by name, as `members` prints them.

@@ -14,7 +14,7 @@ use serde_json::Value;
 use ureq::Agent;
 
 use crate::args::{Kind, parse};
-use crate::cli::{config_file, print_json, read_if_there};
+use crate::cli::{config_file, print_exit, read_if_there};
 use crate::commands::doctor::{self, Check, Verdict, has_flag, the_team};
 use crate::exec::run_command;
 use crate::sessions::workspace::{DoctorTeam, TeamRead, read_team};
@@ -75,8 +75,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     });
     done.steps.extend(checks.iter().filter_map(step));
     let ok = doctor::passed(&checks);
-    print_json(&Report { created: done.created, changed: done.changed, steps: done.steps, ok, checks })?;
-    Ok(if ok { 0 } else { 1 })
+    print_exit(&Report { created: done.created, changed: done.changed, steps: done.steps, ok, checks }, if ok { 0 } else { 1 })
 }
 
 // The team `key`, as `workspace::read_team` read it, set up: its answers taken first, then its

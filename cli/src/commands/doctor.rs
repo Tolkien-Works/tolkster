@@ -9,7 +9,7 @@ use serde_json::json;
 use ureq::Agent;
 
 use crate::args::{Kind, parse};
-use crate::cli::print_json;
+use crate::cli::print_exit;
 use crate::config::{files, host_credential};
 use crate::exec::{Run, run_command};
 use crate::request::{MANUAL_MERGE_LABEL, PLAN_FIRST_LABEL};
@@ -59,8 +59,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     }
     let checks = checks(agent, team, repo)?;
     let ok = passed(&checks);
-    print_json(&json!({ "ok": ok, "checks": checks }))?;
-    Ok(if ok { 0 } else { 1 })
+    print_exit(&json!({ "ok": ok, "checks": checks }), if ok { 0 } else { 1 })
 }
 
 // Every check `doctor` runs, with the settings as they are now.
@@ -261,48 +260,38 @@ pub fn mapping_checks(map: &RepoMap, repos: &[Repo], key: &str, projects: &Nodes
 // ends them.
 pub fn repo_checks(name: &str, repos: &[Repo], worktrees: &[Worktree], gh: &mut dyn Reader) -> Vec<Check> {
     let repo_check = |which: &'static str, verdict, reason: String| check("repo", name, which, verdict, reason);
+    let fail = |which: &'static str, reason: &str| repo_check(which, Verdict::Fail, reason.into());
     let mut checks = Vec::new();
-    let Some((id, _)) = find_repo(repos, Some(name)) else {
-        checks.push(repo_check("orca", Verdict::Fail, "no Orca repo has this display name, or more than one does".into()));
-        return checks;
+    // The failed check, as the last.
+    let mut chain = || -> Result<(), Check> {
+        let (id, _) = find_repo(repos, Some(name)).ok_or_else(|| fail("orca", "no Orca repo has this display name, or more than one does"))?;
+        checks.push(repo_check("orca", Verdict::Ok, "registered in Orca".into()));
+        let primary = primary_checkout(worktrees, &id).ok_or_else(|| fail("checkout", "no primary checkout on this workstation"))?;
+        checks.push(repo_check("checkout", Verdict::Ok, "its primary checkout is on this workstation".into()));
+        let origin = primary.origin.as_deref().ok_or_else(|| fail("origin", "the primary checkout's origin isn't a GitHub repo, or couldn't be read"))?;
+        checks.push(repo_check("origin", Verdict::Ok, format!("origin is {origin} on GitHub")));
+        let read = readiness(gh, origin).map_err(|error| fail("github-app", &format!("{origin} couldn't be read as the GitHub App: {error}")))?;
+        checks.push(repo_check("github-app", Verdict::Ok, format!("the GitHub App is installed on {origin}")));
+        let branch = read.default_branch.ok_or_else(|| fail("default-branch", "the repo has no default branch"))?;
+        checks.push(repo_check("default-branch", Verdict::Ok, format!("the default branch is {branch}")));
+        checks.push(match read.auto_merge {
+            true => repo_check("auto-merge", Verdict::Ok, "the repo allows auto-merge".into()),
+            false => repo_check("auto-merge", Verdict::Fail, "the repo doesn't allow auto-merge, so a worker's PR can't merge by itself".into()),
+        });
+        checks.push(match read.required_check {
+            Ok(true) => repo_check("required-check", Verdict::Ok, format!("{branch} requires a status check")),
+            Ok(false) => repo_check("required-check", Verdict::Warn, format!("{branch} requires no status check, so GitHub may refuse a worker's auto-merge, and a PR that merges doesn't wait for CI")),
+            Err(error) => repo_check("required-check", Verdict::Warn, format!("whether {branch} requires a status check couldn't be read: {error}")),
+        });
+        checks.push(match read.instructions {
+            true => repo_check("instructions", Verdict::Ok, "the repo has an AGENTS.md or a CLAUDE.md".into()),
+            false => repo_check("instructions", Verdict::Warn, "no AGENTS.md or CLAUDE.md at the repo's root, so workers get no repo rules".into()),
+        });
+        Ok(())
     };
-    checks.push(repo_check("orca", Verdict::Ok, "registered in Orca".into()));
-    let Some(primary) = primary_checkout(worktrees, &id) else {
-        checks.push(repo_check("checkout", Verdict::Fail, "no primary checkout on this workstation".into()));
-        return checks;
-    };
-    checks.push(repo_check("checkout", Verdict::Ok, "its primary checkout is on this workstation".into()));
-    let Some(origin) = primary.origin.as_deref() else {
-        checks.push(repo_check("origin", Verdict::Fail, "the primary checkout's origin isn't a GitHub repo, or couldn't be read".into()));
-        return checks;
-    };
-    checks.push(repo_check("origin", Verdict::Ok, format!("origin is {origin} on GitHub")));
-    let read = match readiness(gh, origin) {
-        Ok(read) => read,
-        Err(error) => {
-            checks.push(repo_check("github-app", Verdict::Fail, format!("{origin} couldn't be read as the GitHub App: {error}")));
-            return checks;
-        }
-    };
-    checks.push(repo_check("github-app", Verdict::Ok, format!("the GitHub App is installed on {origin}")));
-    let Some(branch) = read.default_branch else {
-        checks.push(repo_check("default-branch", Verdict::Fail, "the repo has no default branch".into()));
-        return checks;
-    };
-    checks.push(repo_check("default-branch", Verdict::Ok, format!("the default branch is {branch}")));
-    checks.push(match read.auto_merge {
-        true => repo_check("auto-merge", Verdict::Ok, "the repo allows auto-merge".into()),
-        false => repo_check("auto-merge", Verdict::Fail, "the repo doesn't allow auto-merge, so a worker's PR can't merge by itself".into()),
-    });
-    checks.push(match read.required_check {
-        Ok(true) => repo_check("required-check", Verdict::Ok, format!("{branch} requires a status check")),
-        Ok(false) => repo_check("required-check", Verdict::Warn, format!("{branch} requires no status check, so GitHub may refuse a worker's auto-merge, and a PR that merges doesn't wait for CI")),
-        Err(error) => repo_check("required-check", Verdict::Warn, format!("whether {branch} requires a status check couldn't be read: {error}")),
-    });
-    checks.push(match read.instructions {
-        true => repo_check("instructions", Verdict::Ok, "the repo has an AGENTS.md or a CLAUDE.md".into()),
-        false => repo_check("instructions", Verdict::Warn, "no AGENTS.md or CLAUDE.md at the repo's root, so workers get no repo rules".into()),
-    });
+    if let Err(failed) = chain() {
+        checks.push(failed);
+    }
     checks
 }
 
