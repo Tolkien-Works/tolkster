@@ -236,16 +236,10 @@ impl Session {
     }
 
     // The owner's messages after `after`, oldest first: those after what its reader last read
-    // or answered (commands/messages.rs), or every one. The mention counts from when the
-    // session began.
+    // or answered (commands/messages.rs), or every one. The owner's prompts, and the mention,
+    // or a note's replies, when the session began after the bound too and every activity was
+    // read.
     pub fn messages_after(&self, owner_id: &str, after: Option<&str>) -> Vec<Message> {
-        self.owner_messages(owner_id, after)
-    }
-
-    // The owner's prompts after `after`, or all when nothing bounds it, and the mention, or a
-    // note's replies, when the session began after the bound too and every activity was read.
-    // Oldest first.
-    fn owner_messages(&self, owner_id: &str, after: Option<&str>) -> Vec<Message> {
         if !self.is_owners(owner_id) {
             return Vec::new();
         }
