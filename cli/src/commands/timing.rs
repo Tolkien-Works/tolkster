@@ -4,7 +4,7 @@
 use serde_json::{Value, json};
 use ureq::Agent;
 
-use super::logs::since_ms;
+use super::logs::window;
 use crate::args::{Kind, parse};
 use crate::cli::{NOTHING_TO_DO, print, print_json, read_if_there, timing_file};
 use crate::error::Error;
@@ -19,15 +19,7 @@ const BACK_MS: i64 = 30 * 86_400_000;
 pub fn run(_: &Agent, argv: &[String]) -> Result<u8, Error> {
     let parsed = parse(argv, OPTIONS, false)?;
     let now = now_ms();
-    let time = |name: &str, default: i64| match parsed.non_empty(name) {
-        Some(text) => since_ms(text, now).ok_or_else(|| Error::Usage(format!("--{name} takes a time with its zone, 2026-10-22T07:30:00Z, or a span back from now, 30m, 6h or 7d"))),
-        None => Ok(default),
-    };
-    let to = time("until", now)?;
-    let from = time("since", to - BACK_MS)?;
-    if from >= to {
-        return Err(Error::Usage("--since must be before --until, which is now when not given".into()));
-    }
+    let (from, to) = window(&parsed, now, BACK_MS)?;
     let by = match parsed.non_empty("by") {
         Some(name) => GROUPS.iter().find(|(_, n)| *n == name).map(|(g, _)| *g).ok_or_else(|| Error::Usage("--by takes size, model or build".into()))?,
         None => Group::Size,

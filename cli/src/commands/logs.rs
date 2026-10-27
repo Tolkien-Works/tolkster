@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 use serde_json::{Map, Value, json};
 use ureq::Agent;
 
-use crate::args::{Kind, parse};
+use crate::args::{Kind, Parsed, parse};
 use crate::cli::print_json;
 use crate::cloudflare::{Filter, LIMIT, events, query};
 use crate::config::files;
@@ -34,15 +34,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
         return Err(Error::Usage("logs takes --session <id>, --issue <TW-123> or both".into()));
     }
     let now = now_ms();
-    let time = |name: &str, default: i64| match parsed.non_empty(name) {
-        Some(text) => since_ms(text, now).ok_or_else(|| Error::Usage(format!("--{name} takes a time with its zone, 2026-10-22T07:30:00Z, or a span back from now, 30m, 6h or 2d"))),
-        None => Ok(default),
-    };
-    let to = time("until", now)?;
-    let from = time("since", to - KEPT_MS)?;
-    if from >= to {
-        return Err(Error::Usage("--since must be before --until, which is now when not given".into()));
-    }
+    let (from, to) = window(&parsed, now, KEPT_MS)?;
     let files = files()?;
     let missing = |key: &str| Error::Usage(format!("no \"{key}\" in credentials.json: docs/observability.md says how to make it"));
     // Fixed text, not the value: a token pasted under the wrong key would be printed.
@@ -78,6 +70,20 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
 // The issue's Linear ID, which the Durable Object's lines carry.
 fn issue_uuid(agent: &Agent, key: &IssueKey) -> Result<Id, Error> {
     Id::check(&with_token(agent, |token| issue_ref(agent, token, key.as_str()))?.id)
+}
+
+// The `--since` and `--until` asked for, from `back_ms` before `--until` to now when not given.
+pub fn window(parsed: &Parsed, now: i64, back_ms: i64) -> Result<(i64, i64), Error> {
+    let time = |name: &str, default: i64| match parsed.non_empty(name) {
+        Some(text) => since_ms(text, now).ok_or_else(|| Error::Usage(format!("--{name} takes a time with its zone, 2026-10-22T07:30:00Z, or a span back from now, 30m, 6h or 2d"))),
+        None => Ok(default),
+    };
+    let to = time("until", now)?;
+    let from = time("since", to - back_ms)?;
+    if from >= to {
+        return Err(Error::Usage("--since must be before --until, which is now when not given".into()));
+    }
+    Ok((from, to))
 }
 
 // `--since` and `--until`: an instant with its zone, or `<n>m`, `<n>h` or `<n>d` back from `now`.
