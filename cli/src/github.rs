@@ -133,10 +133,16 @@ pub struct Opened {
     pub existing: bool,
 }
 
+// `as_app` on `repo`, owner/name as --repo gives it, `act` given the token, the owner and
+// the name.
+fn as_app_on<T>(agent: &Agent, app: &App, repo: &str, purpose: Purpose, now_secs: u64, act: impl FnOnce(&str, &str, &str) -> Result<T, Error>) -> Result<T, Error> {
+    let (owner, name) = split_repo(repo).ok_or_else(|| Error::Usage(format!("--repo must be owner/name: {repo}")))?;
+    as_app(agent, app, owner, name, purpose, now_secs, |token| act(token, owner, name))
+}
+
 pub fn create_pr(agent: &Agent, app: &App, pr: &NewPr, now_secs: u64) -> Result<Opened, Error> {
     let _site = site("create_pr");
-    let (owner, name) = split_repo(pr.repo).ok_or_else(|| Error::Usage(format!("--repo must be owner/name: {}", pr.repo)))?;
-    as_app(agent, app, owner, name, Purpose::Create, now_secs, |token| open_pr(agent, token, owner, name, pr))
+    as_app_on(agent, app, pr.repo, Purpose::Create, now_secs, |token, owner, name| open_pr(agent, token, owner, name, pr))
 }
 
 fn open_pr(agent: &Agent, token: &str, owner: &str, name: &str, pr: &NewPr) -> Result<Opened, Error> {
@@ -217,8 +223,7 @@ const AUTO_MERGE: &str = "mutation($pr: ID!) { enablePullRequestAutoMerge(input:
 // the PR read again `CLEAN` in a repo that allows auto-merge, never by its error's text.
 pub fn auto_merge(agent: &Agent, app: &App, pr: &PrRef, now_secs: u64) -> Result<AutoMerge, Error> {
     let _site = site("auto_merge");
-    let (owner, name) = split_repo(pr.repo).ok_or_else(|| Error::Usage(format!("--repo must be owner/name: {}", pr.repo)))?;
-    as_app(agent, app, owner, name, Purpose::AutoMerge, now_secs, |token| {
+    as_app_on(agent, app, pr.repo, Purpose::AutoMerge, now_secs, |token, owner, name| {
         let read = || -> Result<PrRead, Error> { decode(graphql_read(agent, token, AUTO_MERGE_READ, json!({ "owner": owner, "name": name, "number": pr.pr }))?, "GitHub's answer to the auto-merge query") };
         if let Some(id) = needs_auto_merge(&read()?, pr)? {
             let data = match graphql(agent, token, AUTO_MERGE, json!({ "pr": id })) {
@@ -321,8 +326,7 @@ pub struct Described {
 // retry is safe.
 pub fn describe(agent: &Agent, app: &App, pr: &PrRef, body: &str, now_secs: u64) -> Result<Described, Error> {
     let _site = site("describe");
-    let (owner, name) = split_repo(pr.repo).ok_or_else(|| Error::Usage(format!("--repo must be owner/name: {}", pr.repo)))?;
-    as_app(agent, app, owner, name, Purpose::Describe, now_secs, |token| {
+    as_app_on(agent, app, pr.repo, Purpose::Describe, now_secs, |token, owner, name| {
         let read: PrRead = decode(graphql(agent, token, PR_QUERY, json!({ "owner": owner, "name": name, "number": pr.pr }))?, "GitHub's answer to the PR query")?;
         an_open_pr(&read, pr)?;
         let (status, response) = patch(agent, &format!("{API}/repos/{owner}/{name}/pulls/{}", pr.pr), token, json!({ "body": body }))?;
@@ -407,8 +411,7 @@ const RESOLVE: &str = "mutation($thread: ID!) { resolveReviewThread(input: { thr
 // Runs `act` as the app, with a token for `purpose`, once the thread is known to be on
 // that PR, and with whether it is resolved.
 fn on_thread<T>(agent: &Agent, app: &App, thread: &ThreadRef, purpose: Purpose, now_secs: u64, act: impl FnOnce(&str, bool) -> Result<T, Error>) -> Result<T, Error> {
-    let (owner, name) = split_repo(thread.repo).ok_or_else(|| Error::Usage(format!("--repo must be owner/name: {}", thread.repo)))?;
-    as_app(agent, app, owner, name, purpose, now_secs, |token| {
+    as_app_on(agent, app, thread.repo, purpose, now_secs, |token, _, _| {
         let read: ThreadRead = decode(graphql(agent, token, THREAD_QUERY, json!({ "id": thread.thread }))?, "GitHub's answer to the thread query")?;
         let resolved = check_thread(read, thread)?;
         act(token, resolved)
