@@ -7,6 +7,8 @@ use ureq::http::{Method, Request, Response};
 use ureq::config::RedirectAuthHeaders;
 use ureq::{Agent, Body};
 
+use crate::error::Error;
+
 // Each request, from connecting to the last byte of the body. ureq sets no timeouts of
 // its own, so without this a stalled connection would hang a worker's terminal forever.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
@@ -14,7 +16,20 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 // A call that fails on the way, or with a 5xx, is sent again after these pauses, by a caller
 // whose call is safe to repeat: the state's ops are, as records only move forward and a take
 // or release carries its token.
-pub const RETRIES: [Duration; 2] = [Duration::from_millis(500), Duration::from_secs(2)];
+const RETRIES: [Duration; 2] = [Duration::from_millis(500), Duration::from_secs(2)];
+
+// `once` again after each of RETRIES' pauses while it fails as `Error::Unavailable`, else its
+// last result: the one place a call that couldn't be answered is repeated.
+pub fn retried<T>(mut once: impl FnMut() -> Result<T, Error>) -> Result<T, Error> {
+    let mut pauses = RETRIES.iter();
+    loop {
+        let result = once();
+        match pauses.next().filter(|_| matches!(result, Err(Error::Unavailable(_)))) {
+            Some(pause) => std::thread::sleep(*pause),
+            None => return result,
+        }
+    }
+}
 
 pub fn agent() -> Agent {
     // Status codes are handled here, as fetch leaves them to the caller.

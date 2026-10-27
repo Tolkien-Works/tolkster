@@ -11,7 +11,7 @@ use ureq::Agent;
 use crate::config::{Files, host_credential, realtime, worker_url};
 use crate::error::Error;
 use crate::gateway;
-use crate::http::{RETRIES, get_bytes, post_json};
+use crate::http::{get_bytes, post_json, retried};
 use crate::plain::Sha;
 
 // The Worker's answer for the Linear app token, as token.json holds one (`linear::token`), for
@@ -103,17 +103,6 @@ fn unreached(kind: &str, error: ureq::Error) -> Error {
     match Error::from(error) {
         Error::Unavailable(detail) => Error::Unavailable(format!("the Worker's {} {detail}", noun(kind))),
         other => failed(kind, other.to_string()),
-    }
-}
-
-fn retried<T>(mut once: impl FnMut() -> Result<T, Error>) -> Result<T, Error> {
-    let mut pauses = RETRIES.iter();
-    loop {
-        let result = once();
-        match pauses.next().filter(|_| matches!(result, Err(Error::Unavailable(_)))) {
-            Some(pause) => std::thread::sleep(*pause),
-            None => return result,
-        }
     }
 }
 

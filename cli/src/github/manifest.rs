@@ -14,7 +14,7 @@ use ureq::http::Method;
 use super::GITHUB_EVENTS;
 use super::app::{API, HEADERS};
 use crate::error::Error;
-use crate::http::{RETRIES, call_public};
+use crate::http::{call_public, retried};
 use crate::json::decode;
 
 // What the app asks for (docs/github-app.md, Permissions). Issues: read is for the webhook's
@@ -85,13 +85,7 @@ pub fn convert(agent: &Agent, code: &str) -> Result<Created, Error> {
         return Err(Error::Failed("GitHub's code had another shape".into()));
     }
     let url = format!("{API}/app-manifests/{code}/conversions");
-    let mut pauses = RETRIES.iter();
-    let (status, text) = loop {
-        match (call_public(agent, Method::POST, &url, &HEADERS).map_err(Error::from), pauses.next()) {
-            (Err(error), Some(pause)) if error.unavailable() => std::thread::sleep(*pause),
-            (answer, _) => break answer?,
-        }
-    };
+    let (status, text) = retried(|| call_public(agent, Method::POST, &url, &HEADERS).map_err(Error::from))?;
     if status != 201 {
         return Err(Error::Failed(format!("GitHub answered HTTP {status} for the app's code: it works once, within an hour")));
     }

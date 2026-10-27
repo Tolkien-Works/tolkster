@@ -13,7 +13,7 @@ use ureq::Agent;
 use crate::config::{self, Files, WorkerUrl};
 use crate::error::{Context, Error};
 use crate::config::ladder::Launch;
-use crate::http::{RETRIES, post_json};
+use crate::http::{post_json, retried};
 use crate::plain::{Id, Time};
 use crate::trace::{self, Call, Undone, Work};
 
@@ -272,16 +272,13 @@ impl<'a> State<'a> {
     }
 
     fn call_once(&self, body: &dyn Fn() -> String) -> Result<Value, Error> {
-        let mut pauses = RETRIES.iter();
-        loop {
-            match self.once(&body()) {
-                Err((error, true)) => match pauses.next() {
-                    Some(pause) => std::thread::sleep(*pause),
-                    None => return Err(error),
-                },
-                other => return other.map_err(|(error, _)| error),
-            }
-        }
+        // Unavailable only while it is tried again: what is left after the last try is the
+        // failure `once` classed, which callers don't treat as a Worker that may answer later.
+        let again = |(error, again): (Error, bool)| if again { Error::Unavailable(error.to_string()) } else { error };
+        retried(|| self.once(&body()).map_err(again)).map_err(|error| match error {
+            Error::Unavailable(detail) => Error::Failed(detail),
+            other => other,
+        })
     }
 
     fn once(&self, body: &str) -> Result<Value, (Error, bool)> {

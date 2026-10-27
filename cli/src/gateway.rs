@@ -2,8 +2,10 @@
 // policy for a call that fails (docs/budget.md). Each budget is kept as its API's responses
 // last said, and each call runs in a lane: an urgent one waits only on a spent budget, a
 // normal read on a low one too. What a failure comes to and how long it waits are decided
-// here: nothing else sleeps for a budget or tries a call again. Orca has no budget, and its
-// one resend is `Orca::send`'s, as Orca's own answer allows.
+// here: nothing else sleeps for a budget or repeats a call through it. A call outside it
+// that couldn't be answered (the Worker's, the manifest's code exchange) is repeated by
+// `http::retried` alone. Orca has no budget, and its one resend is `Orca::send`'s, as Orca's
+// own answer allows.
 
 use std::cell::Cell;
 use std::sync::Mutex;

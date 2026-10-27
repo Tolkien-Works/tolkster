@@ -31,7 +31,7 @@ reset; a machine's command ends `retryable`, on a server or connection that fail
 
 ## Invariants
 
-- Only the gateway decides that a call to GitHub or Linear waits or is tried again: no other module sleeps for a budget or repeats a call.
+- Only the gateway decides that a call through it waits or repeats: no other module sleeps for a budget. `http::retried` alone repeats calls outside it.
 - A call is admitted before it is made, and its response's count noted, at its API's one home (`github/app.rs` `send`, `linear.rs` `post_graphql`); only the app's own calls (`/app/`) and a token's revoke go unadmitted.
 - A count noted late never raises a budget within its window, nor lifts a spent answer's hold; none is believed for more than an hour after it was first said.
 - An urgent call never waits on a low budget, only a spent one; a normal read waits on a low one too.
