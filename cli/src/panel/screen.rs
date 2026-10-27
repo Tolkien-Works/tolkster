@@ -20,7 +20,7 @@ use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 
 use super::draw::{Ui, draw};
-use super::view::{self, Budget, Live, Silence};
+use super::view::{self, Live};
 use super::{Logged, log, quit, set_on, state};
 use crate::gateway;
 use crate::health::Health;
@@ -200,7 +200,5 @@ fn pressed(key: KeyEvent, ui: &mut Ui, view: &view::View) {
 // Read as it draws: the budgets, the silent hosts, and the update.
 fn live(update: Option<&Update>, health: &Health) -> Live {
     let now = now_ms();
-    let budgets = gateway::shown(u64::try_from(now).unwrap_or(0)).into_iter().map(|b| Budget { api: b.api, limit: b.limit, remaining: b.remaining, resets: b.resets, spent: b.spent }).collect();
-    let silences = health.silences().into_iter().map(|(host, name, asleep, since, next)| Silence { host, name, asleep, since, next }).collect();
-    Live { budgets, silences, commit: prebuilt::commit().map(String::from), building: update.and_then(Update::building_since), draining: update.is_some_and(Update::draining) }
+    Live { budgets: gateway::shown(u64::try_from(now).unwrap_or(0)), silences: health.silences(), commit: prebuilt::commit().map(String::from), building: update.and_then(Update::building_since), draining: update.is_some_and(Update::draining) }
 }

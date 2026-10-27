@@ -60,17 +60,6 @@ pub struct Change {
     pub conversation: Option<Conversation>,
 }
 
-// Why a PR won't merge by itself, as a notice says it (command.rs, `notice_text`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Told {
-    Closed,
-    AutoMergeOff,
-    CiCouldntRun,
-    ChecksPending,
-    CopilotWontApprove,
-}
-
 // What the session's request machine holds of its readers (docs/state-machine.md, Facts):
 // the owner's newest request a worker, and a turn, has read, and the newest answered.
 #[derive(Clone, Debug, Default, PartialEq, Deserialize)]

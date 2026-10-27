@@ -20,7 +20,8 @@ use crate::gateway::Failure;
 use crate::plain::split_repo;
 use crate::json::{non_empty, str};
 use crate::plain::{BranchName, CommandId, Id, IssueKey, Sha, Terminal, Time, plain_host};
-use crate::trace;
+// Defined in trace, the lower layer, which logs them.
+pub use crate::trace::{Answer as Outcome, Waiting};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -106,32 +107,6 @@ pub const KINDS: [Kind; 25] = [
     Kind::UpdateHost,
     Kind::DestroyHost,
 ];
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Outcome {
-    Ok,
-    Failed,
-    // Worth sending again: GitHub's or Linear's budget was spent.
-    Retryable,
-    // Nothing was typed: the agent waits at a prompt.
-    Held,
-    // Nothing was typed: the worktree has no agent, as when it ends just as a line arrives. Not
-    // a failure; the machine observes the exit.
-    Gone,
-}
-
-impl From<Outcome> for trace::Answer {
-    fn from(outcome: Outcome) -> trace::Answer {
-        match outcome {
-            Outcome::Ok => trace::Answer::Ok,
-            Outcome::Failed => trace::Answer::Failed,
-            Outcome::Retryable => trace::Answer::Retryable,
-            Outcome::Held => trace::Answer::Held,
-            Outcome::Gone => trace::Answer::Gone,
-        }
-    }
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -295,26 +270,6 @@ pub struct Queued {
     pub waiting: Waiting,
     pub blockers: Vec<Id>,
     pub at: Time,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum Waiting {
-    Slot,
-    Held,
-    Merged,
-    Blockers,
-}
-
-impl From<Waiting> for trace::Waiting {
-    fn from(waiting: Waiting) -> trace::Waiting {
-        match waiting {
-            Waiting::Slot => trace::Waiting::Slot,
-            Waiting::Held => trace::Waiting::Held,
-            Waiting::Merged => trace::Waiting::Merged,
-            Waiting::Blockers => trace::Waiting::Blockers,
-        }
-    }
 }
 
 fn queued(args: &Value) -> Option<Queued> {

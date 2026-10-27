@@ -48,6 +48,17 @@ impl Silence {
     }
 }
 
+// A silent host as `listen`'s panel shows it (`Health::silences`).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Silent {
+    pub host: String,
+    pub name: Option<String>,
+    // A recipe machine put to sleep: it needs nothing from the owner.
+    pub asleep: bool,
+    pub since: Instant,
+    pub next: Instant,
+}
+
 // What the issues of a host's workers show in Linear (offline.rs): `host offline` while it is
 // silent, nothing once it is heard.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -226,9 +237,8 @@ impl Health {
         }
     }
 
-    // Each silent host, by its ID and name, whether it is asleep, since when, and when it is next asked.
-    pub fn silences(&self) -> Vec<(String, Option<String>, bool, Instant, Instant)> {
-        self.lock().iter().map(|(host, s)| (host.clone(), s.name.clone(), s.asleep, s.since, s.next)).collect()
+    pub fn silences(&self) -> Vec<Silent> {
+        self.lock().iter().map(|(host, s)| Silent { host: host.clone(), name: s.name.clone(), asleep: s.asleep, since: s.since, next: s.next }).collect()
     }
 
     // When `host` is next asked, None while it answers.
