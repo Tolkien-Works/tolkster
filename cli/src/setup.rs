@@ -9,7 +9,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::args::{Kind, Parsed};
-use crate::brief::{self, Brief, Reconcile, Startup, Taken, plan_from};
+use crate::brief::{self, Beside, Brief, Reconcile, Startup, Taken, plan_from};
 use crate::cli::write_file;
 use crate::coauthor;
 use crate::config::Config;
@@ -314,7 +314,7 @@ fn resume_line(why: Resume, identifier: &IssueKey, session_id: &Id) -> Result<Li
 // when they aren't there.
 fn fresh_line(briefs_dir: &str, repo: &RepoName, identifier: &IssueKey, number: u64, session_id: &Id, round: Round) -> Option<Line> {
     let task = brief::path(briefs_dir, repo, identifier);
-    let brief = brief::path(briefs_dir, repo, &review::brief_name(identifier, round));
+    let brief = brief::path(briefs_dir, repo, &Beside::from(round).name(identifier));
     (task.is_file() && brief.is_file()).then(|| review::fresh(number, identifier, &task, &brief, session_id, round)).and_then(|line| Line::parse(&line))
 }
 
@@ -384,14 +384,8 @@ fn start(host: &mut Host, worker: &Worker, taken: impl Fn(&Launch, &crate::reque
     let briefs_dir = &host.config.briefs_dir;
     let brief_path = brief::path(briefs_dir, repo, identifier);
     write_file(&brief_path, &brief.render())?;
-    for (name, text) in [
-        (brief::last_round_name(identifier), brief.render_last_round()),
-        (brief::round_name(identifier), brief.render_round()),
-        (brief::rebase_name(identifier), brief.render_rebase()),
-        (brief::reviewer_name(identifier), brief.render_reviewer()),
-        (brief::deep_name(identifier), brief.render_deep()),
-    ] {
-        write_file(&brief::path(briefs_dir, repo, &name), &text)?;
+    for which in Beside::ALL {
+        write_file(&brief::path(briefs_dir, repo, &which.name(identifier)), &brief.render_beside(which))?;
     }
     let keys = |identifiers: Vec<String>| identifiers.iter().map(|identifier| IssueKey::check(identifier)).collect::<Result<Vec<_>, _>>();
     let (children, triaged) = if taken.orchestrate { (keys(unfinished_children(issue).into_iter().map(|(identifier, _)| identifier).collect())?, keys(triaged_children(issue))?) } else { (Vec::new(), Vec::new()) };

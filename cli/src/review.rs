@@ -10,6 +10,7 @@
 
 use std::path::Path;
 
+use crate::brief::Beside;
 use crate::error::Error;
 use crate::github::{self, CheckState, Pr, Reader, is_copilot};
 use crate::plain::{Id, IssueKey, Line};
@@ -145,12 +146,12 @@ pub fn line(number: u64, identifier: &IssueKey, session_id: &Id, round: Round) -
     Line::check(&match round {
         Round::Review { last } => format!(
             "PR #{number} has new review feedback, failing checks or needs a rebase. Read the file {brief}.md beside your task brief in full, then address them as it says, {instructions}",
-            brief = crate::brief::round_name(identifier),
+            brief = Beside::Round.name(identifier),
             instructions = instructions(number, identifier, session_id, last),
         ),
         Round::Rebase => format!(
             "PR #{number} needs a rebase. Read the file {brief}.md beside your task brief in full, then rebase it as it says. Report in Linear session {session_id}.",
-            brief = crate::brief::rebase_name(identifier),
+            brief = Beside::Rebase.name(identifier),
         ),
     })
 }
@@ -161,10 +162,12 @@ fn instructions(number: u64, identifier: &IssueKey, session_id: &Id, last: bool)
     format!("reading them with tolkster pr feedback --pr {number} --session {session_id} and tolkster pr checks --pr {number}.{last} Report in Linear session {session_id}.")
 }
 
-pub fn brief_name(identifier: &IssueKey, round: Round) -> String {
-    match round {
-        Round::Review { .. } => crate::brief::round_name(identifier),
-        Round::Rebase => crate::brief::rebase_name(identifier),
+impl From<Round> for Beside {
+    fn from(round: Round) -> Beside {
+        match round {
+            Round::Review { .. } => Beside::Round,
+            Round::Rebase => Beside::Rebase,
+        }
     }
 }
 
@@ -185,7 +188,7 @@ pub fn fresh(number: u64, identifier: &IssueKey, task: &Path, brief: &Path, sess
 // What a last round does, as the line says it: after "This is the last review round: " on
 // a resume.
 pub fn last_round(identifier: &str) -> String {
-    format!("fix only blocking findings and file the rest, as the file {}.md beside your task brief says.", crate::brief::last_round_name(identifier))
+    format!("fix only blocking findings and file the rest, as the file {}.md beside your task brief says.", Beside::LastRound.name(identifier))
 }
 
 #[cfg(test)]

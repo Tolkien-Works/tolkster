@@ -69,7 +69,7 @@ fn briefs(reviewers: &[String]) -> Vec<(&'static str, String)> {
         ("children", Brief { taken: taken(true, true, true), ..brief(true, reviewers) }.render()),
         ("manual merge", Brief { taken: taken(false, false, false), ..brief(false, reviewers) }.render()),
         ("direct", Brief { land: Land::Direct, ..brief(false, reviewers) }.render()),
-        ("direct deep", Brief { land: Land::Direct, ..brief(false, reviewers) }.render_deep()),
+        ("direct deep", Brief { land: Land::Direct, ..brief(false, reviewers) }.render_beside(Beside::Deep)),
         ("reconcile", Brief { reconcile: Some(landed(2)), ..brief(false, reviewers) }.render()),
         ("reconcile and plan first", Brief { reconcile: Some(landed(2)), ..brief(true, reviewers) }.render()),
         ("unpushed", Brief { startup: Startup::Unpushed, ..brief(false, reviewers) }.render()),
@@ -81,13 +81,13 @@ fn briefs(reviewers: &[String]) -> Vec<(&'static str, String)> {
         ("turn", turn().render()),
         ("thread", thread().render()),
         ("triage", triage()),
-        ("round", brief(false, reviewers).render_round()),
-        ("round unreviewed", Brief { copilot: CopilotReview::Off, ..brief(false, reviewers) }.render_round()),
-        ("round opening only", Brief { copilot: CopilotReview::OnOpening, ..brief(false, reviewers) }.render_round()),
-        ("rebase", brief(false, reviewers).render_rebase()),
-        ("deep", brief(false, reviewers).render_deep()),
-        ("reviewer", brief(false, reviewers).render_reviewer()),
-        ("last round", brief(false, reviewers).render_last_round()),
+        ("round", brief(false, reviewers).render_beside(Beside::Round)),
+        ("round unreviewed", Brief { copilot: CopilotReview::Off, ..brief(false, reviewers) }.render_beside(Beside::Round)),
+        ("round opening only", Brief { copilot: CopilotReview::OnOpening, ..brief(false, reviewers) }.render_beside(Beside::Round)),
+        ("rebase", brief(false, reviewers).render_beside(Beside::Rebase)),
+        ("deep", brief(false, reviewers).render_beside(Beside::Deep)),
+        ("reviewer", brief(false, reviewers).render_beside(Beside::Reviewer)),
+        ("last round", brief(false, reviewers).render_beside(Beside::LastRound)),
     ]
 }
 
@@ -109,8 +109,8 @@ fn every_placeholder_is_filled_in() {
             assert!(["n", "PR url", "path", "handle", "ID", "text", "p", "name", "KEY", "other ID", "TW-123", "TW-n", "TW-m", "createdAt", "TW-124", "paths", "owner/name", "command", "sub-issue", "blocker", "new", "reason", "skipped", "sha", "line"].contains(&name.as_str()), "<{name}> in {which}");
         }
     }
-    let round = brief(false, &logins).render_round();
-    assert!(round.contains(&reviewers(&logins)) && brief(false, &[]).render_round().contains(&reviewers(&[])));
+    let round = brief(false, &logins).render_beside(Beside::Round);
+    assert!(round.contains(&reviewers(&logins)) && brief(false, &[]).render_beside(Beside::Round).contains(&reviewers(&[])));
 }
 
 #[test]
@@ -118,8 +118,8 @@ fn each_brief_takes_its_partials() {
     // The work brief reports progress and closes its terminal; the round brief judges
     // follow-ups against the rubric; it and the rebase brief push and rebase alike.
     let text = brief(false, &[]).render();
-    let round = brief(false, &[]).render_round();
-    let rebase = brief(false, &[]).render_rebase();
+    let round = brief(false, &[]).render_beside(Beside::Round);
+    let rebase = brief(false, &[]).render_beside(Beside::Rebase);
     for (placeholder, partial) in PARTIALS {
         let first = first(partial);
         // The hold and the approval are read only where plan first or reconcile applies.
