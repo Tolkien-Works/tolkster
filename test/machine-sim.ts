@@ -635,7 +635,7 @@ class Sim {
         try {
           // A minute or more on, `listen` has listed, hearing the paired host while it answers,
           // before a command's timeout of two minutes or more.
-          if (st.away !== true && st.ms >= 60_000 && this.answering) await waitsCleared(this.storage, { hosts: [NAP_HOSTS[0]], orca: true }, this.nowMs, this.sender);
+          if (st.away !== true && st.ms >= 60_000 && this.answering) await waitsCleared(this.storage, { hosts: [NAP_HOSTS[0]], orca: true, beganMs: this.nowMs - 1_000 }, this.nowMs, this.sender);
           await reconcile(this.storage, this.nowMs, this.sender, st.away !== true);
         } catch (error) {
           if (!(error instanceof Fault) && !(error instanceof Conflict)) throw error;

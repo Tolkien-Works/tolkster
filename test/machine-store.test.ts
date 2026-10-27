@@ -637,6 +637,25 @@ test("a command waiting on a host, the lock or Orca is sent again as soon as tha
   }
 });
 
+// A listing hears a host or Orca only from when it began: one begun before the command answered
+// `retryable` (a cached listing replayed on a connection, one landing late) clears nothing.
+test("a listing begun before a command's retryable answer leaves its wait, and one begun after clears it", async () => {
+  for (const waitsOn of [{ host: "mini" }, { orca: true }] as const) {
+    const storage = new MemoryStorage();
+    const { sent, sender } = sink();
+    await deliver(storage, start(ISSUE, S), NOW, sender);
+    await deliver(storage, readOk(ISSUE, S, sent[0].id), NOW, sender);
+    const command = sent.at(-1)!;
+    const sends = () => sent.filter((c) => c.id === command.id).length;
+    await deliver(storage, result(command.id, "retryable", { waitsOn }), NOW + MIN, sender);
+    const heard = { hosts: ["mini"], orca: true };
+    await waitsCleared(storage, { ...heard, beganMs: NOW + MIN - 1 }, NOW + 2 * MIN, sender);
+    assert.equal(sends(), 1, JSON.stringify(waitsOn));
+    await waitsCleared(storage, { ...heard, beganMs: NOW + MIN }, NOW + 2 * MIN, sender);
+    assert.equal(sends(), 2, JSON.stringify(waitsOn));
+  }
+});
+
 // A command that waits again on what keeps clearing, as on a host that answers while the command
 // fails otherwise, spends a send on each clearing after the first, and so still ends.
 test("a command waiting again after its clearing's send spends its sends, and ends lost", async () => {

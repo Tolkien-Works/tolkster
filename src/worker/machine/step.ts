@@ -433,7 +433,7 @@ function result(ctx: Ctx, cmd: Command, outcome: CommandResult, data: ResultData
   // WAKE_WAIT_MS from its first lasts, as a wake takes longer than its sends.
   if (outcome === "retryable") {
     const waking = data.waking === true && ctx.nowMs - (cmd.firstSentMs ?? ctx.nowMs) < WAKE_WAIT_MS;
-    s.queue.unshift({ ...cmd, sends: waking ? Math.max(0, cmd.sends - 1) : cmd.sends, waitsOn: data.waitsOn ?? null });
+    s.queue.unshift({ ...cmd, sends: waking ? Math.max(0, cmd.sends - 1) : cmd.sends, waitsOn: data.waitsOn ?? null, answeredMs: ctx.nowMs });
     return;
   }
   if ((cmd.kind === "postNotice" || cmd.kind === "postAway") && outcome !== "ok") {

@@ -72,9 +72,11 @@ export function frees(clears: Clears, waitsOn: WaitsOn | null | undefined): bool
 }
 
 // Whether the command, in flight and answered `retryable`, waits on what `clears` frees, with a
-// send left should this one be spent.
+// send left should this one be spent. A listing that began after the answer is the only one
+// that heard what the command waits on since; one before it may have heard it up before it failed.
 export function clearedBy(c: Command, clears: Clears): boolean {
-  return c.sentMs !== null && !c.superseded && frees(clears, c.waitsOn) && spent(c) <= SENDS;
+  const heard = clears.beganMs === undefined || c.answeredMs === undefined || c.answeredMs <= clears.beganMs;
+  return c.sentMs !== null && !c.superseded && frees(clears, c.waitsOn) && heard && spent(c) <= SENDS;
 }
 
 // What it waited on has cleared: it is sent again now, and its timeout begins again. It waits

@@ -318,9 +318,10 @@ export type Command = {
   sends: number;
   // Its machine moved on under a class 1 event: never sent again, its timeouts run to `lost`.
   superseded: boolean;
-  // Answered `retryable`, what it waits on, until it is sent again; `cleared`: its newest send
-  // was for that clearing (queue.ts, `resentCleared`).
+  // Answered `retryable`, what it waits on and when it did, until it is sent again; `cleared`:
+  // its newest send was for that clearing (queue.ts, `resentCleared`).
   waitsOn?: WaitsOn | null;
+  answeredMs?: number;
   cleared?: boolean;
 };
 
@@ -329,8 +330,9 @@ export type Command = {
 // to sleep, or `listen`'s own Orca, which any listing heard.
 export type WaitsOn = { host: string } | { lock: true } | { orca: true };
 // What cleared: the hosts a listing heard, the lock, as a machine command ended, Orca, as a
-// listing came, or anything, as `listen`'s settings changed.
-export type Clears = { hosts?: readonly string[]; lock?: boolean; orca?: boolean; all?: boolean };
+// listing came, or anything, as `listen`'s settings changed. `beganMs`: when that listing began,
+// which clears no host or Orca wait whose command answered after it.
+export type Clears = { hosts?: readonly string[]; lock?: boolean; orca?: boolean; all?: boolean; beganMs?: number };
 
 // An event leaving the store, written with the transition that sends it. Its ID is its
 // kind, the sending store and that store's outbox sequence.
