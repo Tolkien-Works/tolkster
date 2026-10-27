@@ -269,9 +269,6 @@ impl<'h> Orca<'h> {
 }
 
 impl crate::orca::Orca for Orca<'_> {
-    fn agents(&mut self) -> Result<Vec<Worktree>, Error> {
-        self.agents_listed().map(|(worktrees, _)| worktrees)
-    }
     fn agents_listed(&mut self) -> Result<(Vec<Worktree>, Option<Vec<String>>), Error> {
         let listing = self.listing();
         let mut world = self.world.borrow_mut();

@@ -222,9 +222,6 @@ struct MadeWorktree {
 }
 
 impl Orca for Cli<'_> {
-    fn agents(&mut self) -> Result<Vec<Worktree>, Error> {
-        self.agents_listed().map(|(worktrees, _)| worktrees)
-    }
     fn agents_listed(&mut self) -> Result<(Vec<Worktree>, Option<Vec<String>>), Error> {
         let (mut worktrees, mut listed) = (Vec::new(), Some(Vec::new()));
         let hosts = self.every_host()?;

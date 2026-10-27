@@ -541,7 +541,9 @@ fn typed(stdout: &str, proof: Proof) -> Typed {
 // nothing, a start would make a second worker, and a line could be typed twice.
 pub trait Orca {
     // The worktrees with their agents, without their origins, which cost a git read per repo.
-    fn agents(&mut self) -> Result<Vec<Worktree>, Error>;
+    fn agents(&mut self) -> Result<Vec<Worktree>, Error> {
+        self.agents_listed().map(|(worktrees, _)| worktrees)
+    }
     // The worktrees with their agents, and every worktree's ID when each host's listing is
     // complete (`complete_listing`), from one listing per host.
     fn agents_listed(&mut self) -> Result<(Vec<Worktree>, Option<Vec<String>>), Error>;
