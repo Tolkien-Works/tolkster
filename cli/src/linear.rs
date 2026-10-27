@@ -11,7 +11,6 @@ use serde_json::{Value, json};
 use ureq::Agent;
 use ureq::http::Method;
 
-use crate::args::js_trim;
 use crate::config::WorkerUrl;
 use crate::error::Error;
 use crate::gateway::{self, Api};
@@ -21,10 +20,14 @@ use crate::plain::IssueKey;
 use crate::time::now_ms;
 use crate::trace::{self, Call};
 
+mod activity;
 mod cost;
+mod plan;
 mod release;
 mod token;
+pub use activity::{ActivityContent, ActivityInput, ActivityType, Choice, Kind};
 use cost::Limits;
+pub use plan::{PlanInput, PlanStep, steps};
 pub use release::create_release_pipeline;
 #[cfg(feature = "develop")]
 pub use release::sync_release;
@@ -66,237 +69,6 @@ pub fn manifest(name: &str, worker: &WorkerUrl) -> Value {
 // Where an admin makes the app, its form filled in from the manifest.
 pub fn create_url(name: &str, worker: &WorkerUrl) -> String {
     format!("https://linear.app/settings/api/applications/new?manifest={}", url_part(&manifest(name, worker).to_string()))
-}
-
-// The activity types Tolkster posts, as `src/shared/linear.ts` has them.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum ActivityType {
-    Thought,
-    Elicitation,
-    Response,
-    Error,
-    Action,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub enum Kind {
-    Prompt,
-    // A thought or an action: work in progress, not an answer.
-    Progress,
-    Answer,
-}
-
-impl ActivityType {
-    // Ordered as `tolkster activity`'s usage lists them.
-    pub const ALL: [ActivityType; 5] = [ActivityType::Thought, ActivityType::Elicitation, ActivityType::Response, ActivityType::Error, ActivityType::Action];
-
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ActivityType::Thought => "thought",
-            ActivityType::Elicitation => "elicitation",
-            ActivityType::Response => "response",
-            ActivityType::Error => "error",
-            ActivityType::Action => "action",
-        }
-    }
-
-    pub fn answers(self) -> bool {
-        self.kind() == Kind::Answer
-    }
-
-    // Linear accepts ephemeral only on thoughts and actions.
-    pub fn may_be_ephemeral(self) -> bool {
-        matches!(self, ActivityType::Thought | ActivityType::Action)
-    }
-
-    pub fn kind(self) -> Kind {
-        match self {
-            ActivityType::Thought | ActivityType::Action => Kind::Progress,
-            ActivityType::Elicitation | ActivityType::Response | ActivityType::Error => Kind::Answer,
-        }
-    }
-
-    // None for a prompt, or for a type Linear adds later.
-    pub fn from_typename(typename: &str) -> Option<ActivityType> {
-        match typename {
-            "AgentActivityThoughtContent" => Some(ActivityType::Thought),
-            "AgentActivityElicitationContent" => Some(ActivityType::Elicitation),
-            "AgentActivityResponseContent" => Some(ActivityType::Response),
-            "AgentActivityErrorContent" => Some(ActivityType::Error),
-            "AgentActivityActionContent" => Some(ActivityType::Action),
-            _ => None,
-        }
-    }
-}
-
-impl std::fmt::Display for ActivityType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
-
-impl std::str::FromStr for ActivityType {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<ActivityType, ()> {
-        ActivityType::ALL.into_iter().find(|t| t.as_str() == s).ok_or(())
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum ActivityContent {
-    // thought, elicitation, response or error
-    Text { kind: ActivityType, body: String },
-    Action { action: String, parameter: String, result: Option<String> },
-}
-
-// An elicitation's select options, which Linear offers as buttons. A pick comes back as the
-// owner's prompt, holding its label or its value, so the two read as the same reply, the one
-// the brief waits for; typing it does the same. A worker names an option, never writes one.
-#[derive(Debug, PartialEq)]
-pub struct Choice {
-    pub name: &'static str,
-    pub label: &'static str,
-    pub value: &'static str,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct ActivityInput {
-    pub agent_session_id: String,
-    pub content: ActivityContent,
-    pub ephemeral: bool,
-    // Chosen beforehand so a writer can find the activity again (state::Posting); None
-    // lets Linear choose.
-    pub id: Option<String>,
-    // An elicitation's select options; none sends no signal.
-    pub options: Vec<&'static Choice>,
-}
-
-impl ActivityInput {
-    pub fn text(session_id: &str, kind: ActivityType, body: &str, ephemeral: bool) -> ActivityInput {
-        ActivityInput { agent_session_id: session_id.into(), content: ActivityContent::Text { kind, body: body.into() }, ephemeral, id: None, options: vec![] }
-    }
-
-    // Durable, with no result.
-    pub fn action(session_id: &str, action: &str, parameter: &str) -> ActivityInput {
-        ActivityInput {
-            agent_session_id: session_id.into(),
-            content: ActivityContent::Action { action: action.into(), parameter: parameter.into(), result: None },
-            ephemeral: false,
-            id: None,
-            options: vec![],
-        }
-    }
-
-    fn to_json(&self) -> Value {
-        let content = match &self.content {
-            ActivityContent::Text { kind, body } => json!({ "type": kind.as_str(), "body": body }),
-            ActivityContent::Action { action, parameter, result } => {
-                let mut content = json!({ "type": ActivityType::Action.as_str(), "action": action, "parameter": parameter });
-                if let Some(result) = result {
-                    content["result"] = json!(result);
-                }
-                content
-            }
-        };
-        let mut input = json!({ "agentSessionId": self.agent_session_id, "content": content });
-        if self.ephemeral {
-            input["ephemeral"] = json!(true);
-        }
-        if let Some(id) = &self.id {
-            input["id"] = json!(id);
-        }
-        if !self.options.is_empty() {
-            let options: Vec<Value> = self.options.iter().map(|c| json!({ "label": c.label, "value": c.value })).collect();
-            input["signal"] = json!("select");
-            input["signalMetadata"] = json!({ "options": options });
-        }
-        input
-    }
-}
-
-// A session's plan: the checklist Linear shows on the session. Linear takes the whole
-// plan on every update, never one step.
-pub const PLAN_STATUSES: [&str; 4] = ["pending", "inProgress", "completed", "canceled"];
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct PlanStep {
-    pub content: String,
-    pub status: &'static str,
-    // What ends the step, for the hook to move the plan on (hook::whereabouts). Never sent:
-    // Linear's plan has no such field.
-    pub until: Option<&'static str>,
-}
-
-// A plan's steps from its JSON, as `tolkster plan` takes them, or the usage error that says
-// what is wrong. The hook reads a worker's plan with it too (hook::whereabouts).
-pub fn steps(value: &Value) -> Result<Vec<PlanStep>, Error> {
-    let Some(items) = value.as_array() else {
-        return Err(Error::Usage("the plan must be a JSON array of steps".into()));
-    };
-    if items.is_empty() {
-        return Err(Error::Usage("the plan has no steps".into()));
-    }
-    let mut steps = Vec::with_capacity(items.len());
-    for (i, item) in items.iter().enumerate() {
-        let n = i + 1;
-        let Some(fields) = item.as_object() else {
-            return Err(Error::Usage(format!("step {n} must be an object with content and status")));
-        };
-        if let Some(other) = fields.keys().find(|k| !matches!(k.as_str(), "content" | "status" | "until")) {
-            return Err(Error::Usage(format!("step {n} has an unknown field '{other}': a step has only content, status and until")));
-        }
-        let Some(content) = fields.get("content").and_then(Value::as_str).map(js_trim).filter(|c| !c.is_empty()) else {
-            return Err(Error::Usage(format!("step {n} needs its content as text")));
-        };
-        let status = fields.get("status").and_then(Value::as_str).and_then(plan_status);
-        let Some(status) = status else {
-            return Err(Error::Usage(format!("step {n}'s status must be one of: {}", PLAN_STATUSES.join(", "))));
-        };
-        let until = match fields.get("until") {
-            None => None,
-            Some(until) => match until.as_str().and_then(|u| UNTILS.iter().find(|known| **known == u)) {
-                Some(until) => Some(*until),
-                None => return Err(Error::Usage(format!("step {n}'s until must be one of: {}", UNTILS.join(", ")))),
-            },
-        };
-        steps.push(PlanStep { content: content.into(), status, until });
-    }
-    if steps.iter().filter(|s| s.status == "inProgress").count() > 1 {
-        return Err(Error::Usage("only one step can be inProgress".into()));
-    }
-    Ok(steps)
-}
-
-// The events that end a step, as the hook sees them (hook::whereabouts): a commit, the
-// pre-push review's verdict and the PR's opening. Each is a git commit or a `tolkster`
-// call, so any repo has them; a repo's gate is its own commands, and the PR opens only once
-// it has passed.
-pub const UNTILS: [&str; 3] = ["commit", "review", "pr"];
-
-// A step's status as Linear spells it, ignoring case, spaces, `-` and `_`.
-fn plan_status(status: &str) -> Option<&'static str> {
-    let key: String = status.chars().filter(|c| !matches!(c, ' ' | '-' | '_')).flat_map(char::to_lowercase).collect();
-    match key.as_str() {
-        "pending" | "todo" => Some("pending"),
-        "inprogress" => Some("inProgress"),
-        "completed" | "complete" | "done" => Some("completed"),
-        "canceled" | "cancelled" => Some("canceled"),
-        _ => None,
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct PlanInput {
-    pub agent_session_id: String,
-    pub steps: Vec<PlanStep>,
-}
-
-impl PlanInput {
-    pub fn to_json(&self) -> Value {
-        let plan: Vec<Value> = self.steps.iter().map(|s| json!({ "content": s.content, "status": s.status })).collect();
-        json!({ "id": self.agent_session_id, "input": { "plan": plan } })
-    }
 }
 
 const UPDATE_SESSION: &str = "mutation SessionUpdate($id: String!, $input: AgentSessionUpdateInput!) {

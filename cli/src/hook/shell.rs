@@ -222,7 +222,7 @@ pub fn commits(call: &Call) -> bool {
     shell_runs(call, &["committing"])
 }
 
-// The events a shell command's runs make that may end a plan step (linear::UNTILS),
+// The events a shell command's runs make that may end a plan step (UNTILS in linear/plan.rs),
 // in order: `commit` for `git commit`, and `review` then `pr` for `tolkster pr create` in
 // `session`, which posts the review's verdict, when there was a review, before it opens the PR.
 pub(super) fn events(command: &str, session: &str) -> Vec<&'static str> {
