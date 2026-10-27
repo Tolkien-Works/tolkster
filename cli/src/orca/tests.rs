@@ -3,7 +3,6 @@ use std::time::Instant;
 use serde_json::json;
 use crate::error::Unsent;
 use crate::health;
-use crate::onboard::reads_config;
 use crate::ports::fake::{primary, row};
 
 // A fake shell that records every command and answers Orca's with `answer`.
@@ -494,11 +493,11 @@ fn a_repo_is_ready_on_a_host_only_once_set_up_there() {
     {
         let mut run = exiting(&mut calls, 0);
         let mut orca = Cli::with_hosts(&mut run, &["mac"]);
-        assert!(orca.ready("mac", Some("github:acme/app"), reads_config).unwrap());
-        assert!(!orca.ready("mac", Some("github:acme/web"), reads_config).unwrap());
-        assert!(!orca.ready("mac", Some("github:acme/api"), reads_config).unwrap());
-        assert!(orca.ready("mac", None, reads_config).unwrap());
-        assert_eq!(orca.ready_projects("mac", reads_config).unwrap(), ["github:acme/app"]);
+        assert!(orca.ready("mac", Some("github:acme/app")).unwrap());
+        assert!(!orca.ready("mac", Some("github:acme/web")).unwrap());
+        assert!(!orca.ready("mac", Some("github:acme/api")).unwrap());
+        assert!(orca.ready("mac", None).unwrap());
+        assert_eq!(orca.ready_projects("mac").unwrap(), ["github:acme/app"]);
     }
     assert_eq!(calls[0], "orca project setups --project github:acme/app --host runtime:mac --json");
     // The host's `tolkster config` ran once, in the folder of the setup there, and its verdict was kept.
@@ -516,9 +515,9 @@ fn a_host_whose_tolkster_cannot_read_its_config_is_not_ready() {
     {
         let mut run = exiting(&mut calls, 2);
         let mut orca = Cli::sharing(&mut run, &["mac"], &health);
-        assert!(!orca.ready("mac", Some("github:acme/app"), reads_config).unwrap());
-        assert!(!orca.ready("mac", None, reads_config).unwrap());
-        assert!(orca.ready_projects("mac", reads_config).unwrap().is_empty());
+        assert!(!orca.ready("mac", Some("github:acme/app")).unwrap());
+        assert!(!orca.ready("mac", None).unwrap());
+        assert!(orca.ready_projects("mac").unwrap().is_empty());
         assert!(health.refused("mac", Instant::now()));
     }
     assert_eq!(calls.iter().filter(|c| c.contains("terminal create")).count(), 1, "{calls:?}");
@@ -567,7 +566,7 @@ fn a_silent_host_is_asked_by_nothing_until_it_answers_again() {
         later(orca.close_all(mac));
         later(orca.remove_worktree(mac));
         later(orca.create_worktree(Place::On { host: "mac", project: "github:acme/app" }, "tw-3", &[]).map(|_| ()));
-        later(orca.ready("mac", None, reads_config).map(|_| ()));
+        later(orca.ready("mac", None).map(|_| ()));
         later(orca.repos(Some("mac")).map(|_| ()));
     }
     later_wait(wait_exit(&mut two_hosts(&mut calls, false), &health, &"mac@term_1".into(), None));
@@ -622,7 +621,7 @@ fn a_host_this_machine_does_not_ask_is_never_reached() {
         assert!(orca.close(&"mac@term_2".into()).is_err());
         assert!(orca.remove_worktree("mac@r9::/Users/x/tw-3").is_err());
         assert!(orca.create_worktree(Place::On { host: "mac", project: "github:acme/app" }, "tw-3", &[]).is_err());
-        assert!(orca.ready("mac", Some("github:acme/app"), reads_config).is_err());
+        assert!(orca.ready("mac", Some("github:acme/app")).is_err());
     }
     assert!(calls.is_empty(), "{calls:?}");
 }

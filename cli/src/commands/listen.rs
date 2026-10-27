@@ -23,7 +23,6 @@ use crate::command::carry_out;
 use crate::runtime::{Shared, load, settings};
 use crate::timing::Timing;
 use crate::offline;
-use crate::onboard;
 use crate::state::{Records, State};
 use crate::hosts::{self, Fleet, cap, total};
 use crate::machine::config_line;
@@ -216,7 +215,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
             let mut answered: Vec<(Host, Vec<String>, i64)> = Vec::new();
             for h in answering {
                 let held = held(Some(&h.id));
-                match orca.ready_projects(&h.id, onboard::reads_config) {
+                match orca.ready_projects(&h.id) {
                     Ok(ready) => answered.push((h, ready, held)),
                     Err(_) => silent.push((h, held)),
                 }
