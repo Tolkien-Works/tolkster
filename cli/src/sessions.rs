@@ -18,7 +18,7 @@ use ureq::Agent;
 
 pub use issues::{ClosedIssue, ClosedRead, CommentRead, CommentSession, IssueNow, Neighbour, Tolksters, comment_on_issue, description_edits, identifiers, manual_merge, read_closed, read_comment, read_thread, thread_of, tolksters_issues};
 use began::{created_delegated_by, delegated, delegator, in_description, mentioning_comment, on_own_note, replies_before, undelegated_at};
-pub use triage::{HISTORIES_PER_READ, Other, StateHistory, TriageNode, read_other, read_triage_issues, read_triage_queue, read_triaged, state_histories, state_history};
+pub use triage::{HISTORIES_PER_READ, Other, StateHistory, TriageNode, read_other, read_triage_issues, read_triage_queue, read_triaged, state_histories};
 use crate::request::{Activity, Blocker, Issue, Mention, Parent, Session};
 use crate::error::Error;
 use crate::estimates::{Estimation, Scale, TEAM_FIELDS};

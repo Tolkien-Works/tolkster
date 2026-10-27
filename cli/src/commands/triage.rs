@@ -18,7 +18,7 @@ use crate::issues;
 use crate::post::comment_once;
 use crate::plain::{Commit, Id};
 use crate::state::{State, new_token};
-use crate::sessions::{read_other, read_triaged, state_history};
+use crate::sessions::{read_other, read_triaged, state_histories};
 use crate::triage::{filed_in_triage, may_relate, may_triage, merged, parse_candidate, verdict_claim};
 
 // Shape only (usage errors): what the verdict names is checked against Linear in `run`.
@@ -126,7 +126,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     let candidate = parse_candidate(issue)?;
     let identifier = candidate.identifier.clone();
     may_triage(&candidate, &owner, &viewer_id).map_err(|why| Error::Failed(format!("{identifier} {why}")))?;
-    if !filed_in_triage(&state_history(agent, &identifier)?) {
+    if !state_histories(agent, std::slice::from_ref(&identifier))?.pop().is_some_and(|history| filed_in_triage(&history)) {
         return Err(Error::Failed(format!("{identifier} was moved into Triage after it was created")));
     }
     // TRIAGED asks for the team's ID and states, which a queue's read leaves out.
