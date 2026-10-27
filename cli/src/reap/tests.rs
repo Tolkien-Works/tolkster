@@ -127,7 +127,7 @@ impl Fake {
         let mut gh = gh(self.prs.clone());
         let lines = {
             let mut run = |p: &str, a: &[&str], d: Option<&str>| self.answer(p, a, d);
-            let mut forget = |id: &str| {
+            let mut forget = |id: &WorktreeId| {
                 forgotten.push(id.to_string());
                 Ok(())
             };

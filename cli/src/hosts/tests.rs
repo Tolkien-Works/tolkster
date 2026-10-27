@@ -4,6 +4,7 @@ use super::*;
 use crate::config::Machine;
 use crate::config::ladder::Launch;
 use crate::orca::Pane;
+use crate::plain::WorktreeId;
 use crate::ports::fake;
 use crate::config::repo_map::{Entry, Land, RecipeMachines, RepoMap};
 use crate::state::RungFrom;
@@ -14,7 +15,7 @@ const NOW: i64 = 1_800_000_000_000;
 // Worker `n`'s worktree on `host` (None: this machine), its agent running or not, with its
 // record from `ago_ms` before NOW.
 fn worker(host: Option<&str>, n: u32, agent: bool, ago_ms: i64) -> (Worktree, WorkerRecord) {
-    let id = format!("{}r1::/wt/tw-{n}", host.map(|h| format!("{h}@")).unwrap_or_default());
+    let id = WorktreeId::from(format!("{}r1::/wt/tw-{n}", host.map(|h| format!("{h}@")).unwrap_or_default()).as_str());
     let agents = if agent { vec![Pane { key: "t:l".into(), state: "working".into(), since_ms: None }] } else { Vec::new() };
     let worktree = Worktree { id: id.clone(), repo_id: "r1".into(), path: format!("/wt/tw-{n}"), branch: None, linked_issue: Some(format!("TW-{n}")), is_main: false, is_local: host.is_none(), agents, origin: None };
     let record = WorkerRecord { issue: format!("TW-{n}"), worktree_id: id, session_id: format!("s-{n}"), at: iso(NOW - ago_ms), launch: Launch::new(crate::harnesses::DEFAULT, "claude-opus-5-5", "medium"), rung_from: RungFrom::Claim };

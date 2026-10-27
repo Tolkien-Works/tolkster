@@ -21,7 +21,7 @@ use crate::error::Error;
 use crate::gateway;
 use crate::orca;
 use crate::panel;
-use crate::plain::{Id, IssueKey, Sha};
+use crate::plain::{Id, IssueKey, Sha, WorktreeId};
 use crate::runtime::Shared;
 use crate::timing::Summary;
 use crate::machine::{BaseTip, Command, Snapshot, listing_line, observation_line, terminal_closed_line, turn_ended_line};
@@ -39,7 +39,7 @@ use lanes::{Acting, LANE, LANE_THREADS, Lane, Lanes, Outbox, Outgoing, Owned, Qu
 pub enum Job {
     // A repo's base tip, which the relay sends on connect and on each push: `after` is its SHA.
     Base { repo: String, reference: String, after: Sha },
-    Closed { worktree_id: String },
+    Closed { worktree_id: WorktreeId },
     Ended { terminal: String },
     Update,
     // From the Durable Object's machines (docs/state-machine.md, Commands): carried out and

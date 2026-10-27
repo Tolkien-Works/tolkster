@@ -44,7 +44,7 @@ fn the_origin_is_read_once_per_repo_and_carried_on_every_worktree() {
         };
         list_worktrees(&mut run).unwrap()
     };
-    let origins: Vec<(String, Option<String>)> = worktrees.iter().map(|w| (w.id.clone(), w.origin.clone())).collect();
+    let origins: Vec<(String, Option<String>)> = worktrees.iter().map(|w| (w.id.to_string(), w.origin.clone())).collect();
     assert_eq!(
         origins,
         [
@@ -109,7 +109,7 @@ fn an_agent_is_launched_on_its_command_and_nothing_is_typed() {
     let answer = |_: &[&str]| json!({ "result": { "terminal": { "handle": "term_new" } } });
     let mut calls = Vec::new();
     let line = CommandLine::new(&"tolkster worker s1 --issue TW-1 --continue --then message".into());
-    assert_eq!(Cli::alone(&mut shell(&mut calls, &answer)).start_agent("r1::/wt/tw-1", &line).unwrap(), "term_new");
+    assert_eq!(Cli::alone(&mut shell(&mut calls, &answer)).start_agent(&WorktreeId::from("r1::/wt/tw-1"), &line).unwrap(), "term_new");
     assert_eq!(calls, ["orca terminal create --worktree id:r1::/wt/tw-1 --command tolkster worker s1 --issue TW-1 --continue --then message --json"]);
 }
 
@@ -128,7 +128,7 @@ fn a_typed_line_counts_by_its_proof_and_a_launch_line_must_be_plain() {
         for (proof, expected) in [(Proof::Turn, turn), (Proof::Input, input)] {
             let answer = |_: &[&str]| said.clone();
             let mut calls = Vec::new();
-            assert_eq!(Cli::alone(&mut shell(&mut calls, &answer)).send("r1::/wt/tw-1", &"t1".into(), &"New message".into(), proof).unwrap(), expected);
+            assert_eq!(Cli::alone(&mut shell(&mut calls, &answer)).send(&WorktreeId::from("r1::/wt/tw-1"), &"t1".into(), &"New message".into(), proof).unwrap(), expected);
             assert_eq!(calls.len(), 1, "never typed twice: {calls:?}");
             // Only a send that needs the turn waits for it.
             assert_eq!(calls[0].contains("--wait-submit 30"), proof == Proof::Turn, "{calls:?}");
@@ -149,13 +149,13 @@ fn a_worktree_is_created_with_its_options_and_a_terminal_with_its_title() {
     {
         let mut run = shell(&mut calls, &answer);
         let mut orca = Cli::alone(&mut run);
-        assert_eq!(orca.create_worktree(Place::Here { repo_id: "r1" }, "tw-1", &["--no-parent", "--setup", "skip"]).unwrap(), ("r1::/wt/tw-1".to_string(), "/wt/tw-1".to_string()));
-        assert_eq!(orca.open("r1::/wt/tw-1", Some("TW-1 context"), &CommandLine::new(&"claude".into()).quoted(&"x".into())).unwrap(), "term_new");
-        assert_eq!(orca.open("r1::/wt/tw-1", None, &CommandLine::new(&"claude --continue".into())).unwrap(), "term_new");
-        orca.remove_worktree("r1::/wt/tw-1").unwrap();
-        orca.name_worktree("r1::/wt/tw-1", "tw-1").unwrap();
+        assert_eq!(orca.create_worktree(Place::Here { repo_id: "r1" }, "tw-1", &["--no-parent", "--setup", "skip"]).unwrap(), ("r1::/wt/tw-1".into(), "/wt/tw-1".to_string()));
+        assert_eq!(orca.open(&WorktreeId::from("r1::/wt/tw-1"), Some("TW-1 context"), &CommandLine::new(&"claude".into()).quoted(&"x".into())).unwrap(), "term_new");
+        assert_eq!(orca.open(&WorktreeId::from("r1::/wt/tw-1"), None, &CommandLine::new(&"claude --continue".into())).unwrap(), "term_new");
+        orca.remove_worktree(&WorktreeId::from("r1::/wt/tw-1")).unwrap();
+        orca.name_worktree(&WorktreeId::from("r1::/wt/tw-1"), "tw-1").unwrap();
         orca.close(&"term_new".into()).unwrap();
-        orca.close_all("r1::/wt/tw-1").unwrap();
+        orca.close_all(&WorktreeId::from("r1::/wt/tw-1")).unwrap();
     }
     assert_eq!(
         calls,
@@ -239,7 +239,7 @@ fn a_commands_listing_waits_on_an_absent_orca_until_its_first_write() {
     let mut run = ask;
     let mut orca = Cli::alone(&mut run).waiting();
     assert!(waits(orca.listing_on(None)));
-    assert!(orca.close_all("repo::/wt/tw-1").is_err());
+    assert!(orca.close_all(&WorktreeId::from("repo::/wt/tw-1")).is_err());
     assert!(matches!(orca.listing_on(None), Err(Error::Orca(_))));
     let mut absent = |_: &str, _: &[&str], _: Option<&str>| ask("orca", &["terminal", "list"], None);
     assert!(waits(Cli::with_hosts(&mut absent, &["mac"]).waiting().listing_on(Some("mac"))));
@@ -277,48 +277,48 @@ fn a_failed_send_is_tried_again_only_as_orcas_own_answer_allows() {
     // With a request ID: re-issued with it, which replays the first send rather than typing again.
     let replay = json!({ "ok": false, "error": { "code": "runtime_unavailable", "message": "lost", "data": { "orchestrationRequestId": "req-1" } } });
     let mut calls = Vec::new();
-    assert_eq!(quick(&mut failing_send(&mut calls, replay, false, 1)).send("r1::/wt/tw-1", &"t1".into(), &"New message".into(), Proof::Turn).unwrap(), Typed::Delivered);
+    assert_eq!(quick(&mut failing_send(&mut calls, replay, false, 1)).send(&WorktreeId::from("r1::/wt/tw-1"), &"t1".into(), &"New message".into(), Proof::Turn).unwrap(), Typed::Delivered);
     assert_eq!(calls, [send, "orca terminal send --terminal t1 --enter --text New message --wait-submit 30 --retry-request req-1 --json"]);
     // Refused before anything was written: sent again once no agent is read to wait at a prompt.
     let refused = json!({ "ok": true, "result": { "send": { "accepted": false } } });
     let mut calls = Vec::new();
-    assert_eq!(quick(&mut failing_send(&mut calls, refused.clone(), false, 1)).send("r1::/wt/tw-1", &"t1".into(), &"New message".into(), Proof::Turn).unwrap(), Typed::Delivered);
+    assert_eq!(quick(&mut failing_send(&mut calls, refused.clone(), false, 1)).send(&WorktreeId::from("r1::/wt/tw-1"), &"t1".into(), &"New message".into(), Proof::Turn).unwrap(), Typed::Delivered);
     assert_eq!(calls.len(), 4, "{calls:?}");
     assert_eq!(sends(&calls), [send, send]);
     // A refusal that outlasts the first retry is waited out, and gives up after REFUSED_RETRIES.
     let mut calls = Vec::new();
-    assert_eq!(quick(&mut failing_send(&mut calls, refused.clone(), false, 3)).send("r1::/wt/tw-1", &"t1".into(), &"New message".into(), Proof::Turn).unwrap(), Typed::Delivered);
+    assert_eq!(quick(&mut failing_send(&mut calls, refused.clone(), false, 3)).send(&WorktreeId::from("r1::/wt/tw-1"), &"t1".into(), &"New message".into(), Proof::Turn).unwrap(), Typed::Delivered);
     assert_eq!(sends(&calls), [send; 4]);
     let mut calls = Vec::new();
-    let error = quick(&mut failing_send(&mut calls, refused.clone(), false, 99)).send("r1::/wt/tw-1", &"t1".into(), &"New message".into(), Proof::Turn).unwrap_err();
+    let error = quick(&mut failing_send(&mut calls, refused.clone(), false, 99)).send(&WorktreeId::from("r1::/wt/tw-1"), &"t1".into(), &"New message".into(), Proof::Turn).unwrap_err();
     assert_eq!(error.to_string(), "orca terminal send failed: input refused");
     assert_eq!(sends(&calls).len(), 1 + REFUSED_RETRIES as usize);
     // ...but never typed into an agent that now waits at a prompt.
     let mut calls = Vec::new();
-    let error = quick(&mut failing_send(&mut calls, refused, true, 1)).send("r1::/wt/tw-1", &"t1".into(), &"New message".into(), Proof::Turn).unwrap_err();
+    let error = quick(&mut failing_send(&mut calls, refused, true, 1)).send(&WorktreeId::from("r1::/wt/tw-1"), &"t1".into(), &"New message".into(), Proof::Turn).unwrap_err();
     assert_eq!(error.to_string(), "orca terminal send failed: input refused");
     assert_eq!(sends(&calls), [send]);
     // A refusal waiting can't clear is not waited on.
     let mut calls = Vec::new();
     let no_agent = json!({ "ok": true, "result": { "send": { "accepted": false, "refusedReason": "no-agent" } } });
-    let error = quick(&mut failing_send(&mut calls, no_agent, false, 1)).send("r1::/wt/tw-1", &"t1".into(), &"New message".into(), Proof::Turn).unwrap_err();
+    let error = quick(&mut failing_send(&mut calls, no_agent, false, 1)).send(&WorktreeId::from("r1::/wt/tw-1"), &"t1".into(), &"New message".into(), Proof::Turn).unwrap_err();
     assert_eq!((error, calls.as_slice()), (Error::Unsent(Unsent::NoAgent, "orca terminal send failed: input refused: no-agent".into()), &[send.to_string()][..]));
     // ...as is a handle Orca no longer knows; any other failure is Orca's, which may have typed.
     let mut calls = Vec::new();
     let stale = json!({ "ok": false, "error": { "code": "terminal_handle_stale", "message": "gone" } });
-    let error = quick(&mut failing_send(&mut calls, stale, false, 1)).send("r1::/wt/tw-1", &"t1".into(), &"New message".into(), Proof::Turn).unwrap_err();
+    let error = quick(&mut failing_send(&mut calls, stale, false, 1)).send(&WorktreeId::from("r1::/wt/tw-1"), &"t1".into(), &"New message".into(), Proof::Turn).unwrap_err();
     assert!(matches!(error, Error::Unsent(Unsent::TerminalGone, _)), "{error}");
     let mut calls = Vec::new();
     let unsure = json!({ "ok": false, "error": { "code": "terminal_handle_stale", "message": "gone", "data": { "retrySafe": false } } });
-    assert!(matches!(quick(&mut failing_send(&mut calls, unsure, false, 1)).send("r1::/wt/tw-1", &"t1".into(), &"New message".into(), Proof::Turn), Err(Error::Orca(_))));
+    assert!(matches!(quick(&mut failing_send(&mut calls, unsure, false, 1)).send(&WorktreeId::from("r1::/wt/tw-1"), &"t1".into(), &"New message".into(), Proof::Turn), Err(Error::Orca(_))));
     let mut calls = Vec::new();
     let lost = json!({ "ok": false, "error": { "code": "runtime_error", "message": "lost" } });
-    assert!(matches!(quick(&mut failing_send(&mut calls, lost, false, 1)).send("r1::/wt/tw-1", &"t1".into(), &"New message".into(), Proof::Turn), Err(Error::Orca(_))));
+    assert!(matches!(quick(&mut failing_send(&mut calls, lost, false, 1)).send(&WorktreeId::from("r1::/wt/tw-1"), &"t1".into(), &"New message".into(), Proof::Turn), Err(Error::Orca(_))));
     // Delivery Orca can't prove, or a failure that printed no JSON: never sent again.
     let unknown = json!({ "ok": false, "error": { "code": "runtime_error", "message": "maybe", "data": { "deliveryOutcome": "unknown", "retrySafe": false } } });
     for first in [unknown, Value::Null, json!({ "ok": false, "error": { "code": "runtime_error", "message": "lost" } })] {
         let mut calls = Vec::new();
-        assert!(quick(&mut failing_send(&mut calls, first, false, 1)).send("r1::/wt/tw-1", &"t1".into(), &"New message".into(), Proof::Turn).is_err());
+        assert!(quick(&mut failing_send(&mut calls, first, false, 1)).send(&WorktreeId::from("r1::/wt/tw-1"), &"t1".into(), &"New message".into(), Proof::Turn).is_err());
         assert_eq!(calls, [send]);
     }
 }
@@ -337,9 +337,9 @@ fn an_answer_lacking_a_field_fails_naming_the_call() {
     let mut run = shell(&mut calls, &answer);
     let health = Health::default();
     let mut orca = Cli::new(&mut run, &health);
-    let failed = |result: Result<(String, String), Error>| result.unwrap_err().to_string();
+    let failed = |result: Result<(WorktreeId, String), Error>| result.unwrap_err().to_string();
     assert_eq!(failed(orca.create_worktree(Place::Here { repo_id: "r1" }, "tw-1", &[])), "Orca's answer to worktree create didn't decode: it had no `path`");
-    assert!(matches!(orca.open("r1::/wt/tw-1", None, &CommandLine::new(&"claude".into())), Err(Error::Orca(m)) if m == "Orca's answer to terminal create named no terminal"));
+    assert!(matches!(orca.open(&WorktreeId::from("r1::/wt/tw-1"), None, &CommandLine::new(&"claude".into())), Err(Error::Orca(m)) if m == "Orca's answer to terminal create named no terminal"));
     assert_eq!(orca.repos(None).unwrap_err().to_string(), "Orca's answer to repo list didn't decode: it had no `repos`");
 }
 
@@ -379,7 +379,7 @@ fn a_refused_send_is_not_typed_again_when_the_listing_fails() {
             _ => Err(Error::Failed("orca is gone".into())),
         }
     };
-    let error = quick(&mut run).send("r1::/wt/tw-1", &"t1".into(), &"New message".into(), Proof::Turn).unwrap_err();
+    let error = quick(&mut run).send(&WorktreeId::from("r1::/wt/tw-1"), &"t1".into(), &"New message".into(), Proof::Turn).unwrap_err();
     assert_eq!(error.to_string(), "orca terminal send failed: input refused");
     assert_eq!(calls.iter().filter(|c| c.starts_with("orca terminal send")).count(), 1, "{calls:?}");
 }
@@ -389,18 +389,18 @@ fn a_cards_comment_is_read_where_orca_shows_it_and_a_dash_never_reaches_it() {
     let shown = |comment: Value| json!({ "ok": true, "result": { "worktree": { "id": "r1::D:/wt/tw-1", "comment": comment } } });
     let (mut calls, said) = (Vec::new(), shown(json!("PR #7, auto-merge on.")));
     let answer = |_: &[&str]| said.clone();
-    assert_eq!(comment(&mut shell(&mut calls, &answer), "r1::D:/wt/tw-1").unwrap().as_deref(), Some("PR #7, auto-merge on."));
+    assert_eq!(comment(&mut shell(&mut calls, &answer), &WorktreeId::from("r1::D:/wt/tw-1")).unwrap().as_deref(), Some("PR #7, auto-merge on."));
     assert_eq!(calls, ["orca worktree show --worktree id:r1::D:/wt/tw-1 --json"]);
     let empty = shown(json!(""));
     let answer = |_: &[&str]| empty.clone();
-    assert_eq!(comment(&mut shell(&mut Vec::new(), &answer), "r1::D:/wt/tw-1").unwrap(), None);
+    assert_eq!(comment(&mut shell(&mut Vec::new(), &answer), &WorktreeId::from("r1::D:/wt/tw-1")).unwrap(), None);
     let mut calls = Vec::new();
     let answer = |_: &[&str]| json!({ "ok": true });
-    assert!(set_comment(&mut shell(&mut calls, &answer), "r1::D:/wt/tw-1", "--force").is_err() && calls.is_empty());
-    set_comment(&mut shell(&mut calls, &answer), "r1::D:/wt/tw-1", "Committed: x").unwrap();
+    assert!(set_comment(&mut shell(&mut calls, &answer), &WorktreeId::from("r1::D:/wt/tw-1"), "--force").is_err() && calls.is_empty());
+    set_comment(&mut shell(&mut calls, &answer), &WorktreeId::from("r1::D:/wt/tw-1"), "Committed: x").unwrap();
     assert_eq!(calls, ["orca worktree set --worktree id:r1::D:/wt/tw-1 --comment Committed: x --json"]);
     calls.clear();
-    set_status(&mut shell(&mut calls, &answer), "mac@r1::/wt/tw-1", Status::InProgress).unwrap();
+    set_status(&mut shell(&mut calls, &answer), &WorktreeId::from("mac@r1::/wt/tw-1"), Status::InProgress).unwrap();
     assert_eq!(calls, ["orca worktree set --worktree id:r1::/wt/tw-1 --workspace-status in-progress --environment mac --json"]);
 }
 
@@ -468,8 +468,8 @@ fn every_host_is_listed_and_merged_each_row_with_the_host_and_origin_of_the_call
     // Each host's call covers its own rows, whatever others it omits.
     assert_eq!(listed, Some(vec!["repo::D:/wt/tw-1".into(), "repo::D:/main".into(), "mac@r9::/Users/x/tw-2".into()]));
     // Two hosts may hand out the same handle: each goes back to its own.
-    assert_eq!(agent_terminal(&terminals, "repo::D:/wt/tw-1").as_deref(), Some("term_1"));
-    assert_eq!(agent_terminal(&terminals, "mac@r9::/Users/x/tw-2").as_deref(), Some("mac@term_1"));
+    assert_eq!(agent_terminal(&terminals, &WorktreeId::from("repo::D:/wt/tw-1")).as_deref(), Some("term_1"));
+    assert_eq!(agent_terminal(&terminals, &WorktreeId::from("mac@r9::/Users/x/tw-2")).as_deref(), Some("mac@term_1"));
     assert_eq!(terminals.len(), 2);
     assert_eq!(candidates(&worktrees).len(), 2);
     assert!(calls.contains(&"orca worktree ps --limit 1000 --environment mac --json".to_string()), "{calls:?}");
@@ -564,7 +564,7 @@ fn a_host_that_does_not_answer_is_left_out_of_every_listing() {
     assert_eq!(orca.terminals().unwrap().len(), 1);
     assert_eq!((orca.unanswered(), orca.answering()), (vec!["mac".to_string()], Vec::new()));
     // Nor is a worktree on a host no longer paired heard: neither is known gone.
-    assert!(orca.heard("repo::D:/wt/tw-1") && !orca.heard("mac@r9::/Users/x/tw-2") && !orca.heard("pi@r9::/Users/x/tw-2"));
+    assert!(orca.heard(&WorktreeId::from("repo::D:/wt/tw-1")) && !orca.heard(&WorktreeId::from("mac@r9::/Users/x/tw-2")) && !orca.heard(&WorktreeId::from("pi@r9::/Users/x/tw-2")));
 }
 
 // A host that didn't answer is asked by no later command or listing until `listen`'s
@@ -588,12 +588,12 @@ fn a_silent_host_is_asked_by_nothing_until_it_answers_again() {
         assert_eq!((orca.unanswered(), orca.answering()), (vec!["mac".to_string()], Vec::new()));
         let mac = "mac@r9::/Users/x/tw-2";
         let later = |result: Result<(), Error>| assert!(matches!(result, Err(Error::Waits(crate::error::Waits::Host(ref host), _)) if host == "mac"), "{result:?}");
-        later(orca.send(mac, &"mac@term_1".into(), &"New message".into(), Proof::Turn).map(|_| ()));
+        later(orca.send(&WorktreeId::from(mac), &"mac@term_1".into(), &"New message".into(), Proof::Turn).map(|_| ()));
         later(orca.type_line(&"mac@term_1".into(), &"go".into()));
-        later(orca.open(mac, None, &CommandLine::new(&"claude".into())).map(|_| ()));
+        later(orca.open(&WorktreeId::from(mac), None, &CommandLine::new(&"claude".into())).map(|_| ()));
         later(orca.close(&"mac@term_1".into()));
-        later(orca.close_all(mac));
-        later(orca.remove_worktree(mac));
+        later(orca.close_all(&WorktreeId::from(mac)));
+        later(orca.remove_worktree(&WorktreeId::from(mac)));
         later(orca.create_worktree(Place::On { host: "mac", project: "github:acme/app" }, "tw-3", &[]).map(|_| ()));
         later(orca.ready("mac", None, reads_config).map(|_| ()));
         later(orca.repos(Some("mac")).map(|_| ()));
@@ -648,7 +648,7 @@ fn a_host_this_machine_does_not_ask_is_never_reached() {
         let mut run = two_hosts(&mut calls, false);
         let mut orca = Cli::alone(&mut run);
         assert!(orca.close(&"mac@term_2".into()).is_err());
-        assert!(orca.remove_worktree("mac@r9::/Users/x/tw-3").is_err());
+        assert!(orca.remove_worktree(&WorktreeId::from("mac@r9::/Users/x/tw-3")).is_err());
         assert!(orca.create_worktree(Place::On { host: "mac", project: "github:acme/app" }, "tw-3", &[]).is_err());
         assert!(orca.ready("mac", Some("github:acme/app"), reads_config).is_err());
     }
@@ -662,22 +662,22 @@ fn each_call_reaches_the_host_its_worktree_or_handle_names() {
         let mut run = two_hosts(&mut calls, false);
         let mut orca = Cli::with_hosts(&mut run, &["mac"]);
         let mac = "mac@r9::/Users/x/tw-3";
-        assert_eq!(orca.create_worktree(Place::On { host: "mac", project: "github:acme/app" }, "tw-3", &["--no-parent"]).unwrap(), (mac.to_string(), "/Users/x/tw-3".to_string()));
-        let handle: Handle = orca.open(mac, None, &CommandLine::new(&"claude".into())).unwrap().as_str().into();
+        assert_eq!(orca.create_worktree(Place::On { host: "mac", project: "github:acme/app" }, "tw-3", &["--no-parent"]).unwrap(), (mac.into(), "/Users/x/tw-3".to_string()));
+        let handle: Handle = orca.open(&WorktreeId::from(mac), None, &CommandLine::new(&"claude".into())).unwrap().as_str().into();
         assert_eq!(handle, "mac@term_2");
-        assert_eq!(orca.send(mac, &handle, &"New message".into(), Proof::Turn).unwrap(), Typed::Delivered);
+        assert_eq!(orca.send(&WorktreeId::from(mac), &handle, &"New message".into(), Proof::Turn).unwrap(), Typed::Delivered);
         orca.type_line(&handle, &"go".into()).unwrap();
         orca.close(&handle).unwrap();
-        orca.close_all(mac).unwrap();
-        orca.name_worktree(mac, "tw-3").unwrap();
-        orca.remove_worktree(mac).unwrap();
-        assert_eq!(orca.run_to_exit(mac, &CommandLine::new(&"tolkster reap-here".into()).exiting()).unwrap(), Some(3));
+        orca.close_all(&WorktreeId::from(mac)).unwrap();
+        orca.name_worktree(&WorktreeId::from(mac), "tw-3").unwrap();
+        orca.remove_worktree(&WorktreeId::from(mac)).unwrap();
+        assert_eq!(orca.run_to_exit(&WorktreeId::from(mac), &CommandLine::new(&"tolkster reap-here".into()).exiting()).unwrap(), Some(3));
         assert_eq!(orca.repos(Some("mac")).unwrap()[0].id, "r9");
         // This machine's calls are as they are with one host.
         orca.close(&"term_1".into()).unwrap();
     }
     assert!(wait_exit(&mut two_hosts(&mut calls, false), &Health::default(), &"mac@term_2".into(), None).unwrap());
-    set_comment(&mut two_hosts(&mut calls, false), "mac@r9::/Users/x/tw-3", "Committed: x").unwrap();
+    set_comment(&mut two_hosts(&mut calls, false), &WorktreeId::from("mac@r9::/Users/x/tw-3"), "Committed: x").unwrap();
     assert_eq!(
         calls,
         [
@@ -708,12 +708,12 @@ fn a_listing_at_a_worktree_reads_its_host_alone_each_time() {
     {
         let mut run = two_hosts(&mut calls, false);
         let mut orca = Cli::with_hosts(&mut run, &["mac"]);
-        let listing = orca.listing_at("mac@r9::/Users/x/tw-2").unwrap();
-        assert_eq!(listing.worktree("mac@r9::/Users/x/tw-2").map(|w| w.host()), Some(Some("mac")));
-        assert_eq!((listing.terminals.len(), listing.lacks("mac@r9::/Users/x/tw-2"), listing.lacks("mac@r9::/Users/x/tw-3")), (1, false, true));
-        orca.listing_at("mac@r9::/Users/x/tw-2").unwrap();
-        assert_eq!(orca.listing_at("repo::D:/wt/tw-1").unwrap().worktrees.len(), 2);
-        assert!(orca.listing_at("pi@r9::/x").is_err());
+        let listing = orca.listing_at(&WorktreeId::from("mac@r9::/Users/x/tw-2")).unwrap();
+        assert_eq!(listing.worktree(&WorktreeId::from("mac@r9::/Users/x/tw-2")).map(|w| w.host()), Some(Some("mac")));
+        assert_eq!((listing.terminals.len(), listing.lacks(&WorktreeId::from("mac@r9::/Users/x/tw-2")), listing.lacks(&WorktreeId::from("mac@r9::/Users/x/tw-3"))), (1, false, true));
+        orca.listing_at(&WorktreeId::from("mac@r9::/Users/x/tw-2")).unwrap();
+        assert_eq!(orca.listing_at(&WorktreeId::from("repo::D:/wt/tw-1")).unwrap().worktrees.len(), 2);
+        assert!(orca.listing_at(&WorktreeId::from("pi@r9::/x")).is_err());
     }
     assert_eq!(
         calls,
@@ -728,8 +728,8 @@ fn a_listing_at_a_worktree_reads_its_host_alone_each_time() {
     );
     let mut run = two_hosts(&mut calls, true);
     let mut orca = Cli::with_hosts(&mut run, &["mac"]);
-    later(orca.listing_at("mac@r9::/Users/x/tw-2").map(|_| ()));
-    later(orca.listing_at("mac@r9::/Users/x/tw-2").map(|_| ()));
+    later(orca.listing_at(&WorktreeId::from("mac@r9::/Users/x/tw-2")).map(|_| ()));
+    later(orca.listing_at(&WorktreeId::from("mac@r9::/Users/x/tw-2")).map(|_| ()));
 }
 
 fn later(result: Result<(), Error>) {
@@ -765,7 +765,7 @@ fn a_listing_asks_every_host_at_once() {
             ask(program, args, dir)
         };
         let mut orca = Cli::with_hosts(&mut run, &["mac", "off", "pi"]).at_once(ask);
-        let ids: Vec<String> = orca.agents().unwrap().into_iter().map(|w| w.id).collect();
+        let ids: Vec<WorktreeId> = orca.agents().unwrap().into_iter().map(|w| w.id).collect();
         assert_eq!(ids, ["repo::/here/wt", "mac@repo::/mac/wt", "pi@repo::/pi/wt"]);
         assert_eq!(orca.terminals().unwrap().len(), 3);
         assert_eq!(orca.unanswered(), ["off"]);

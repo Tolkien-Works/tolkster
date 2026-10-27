@@ -2,7 +2,7 @@ use super::*;
 
 // The worktrees in `ids`, as the watcher's listing would name them, with none idle.
 fn running(ids: &[&str]) -> Agents {
-    Agents { running: ids.iter().map(|id| id.to_string()).collect(), open: HashSet::new(), terminals: HashSet::new(), agents: HashSet::new(), idle: HashSet::new(), waiting: HashSet::new(), listed: None, others: HashSet::new(), hosts: Vec::new(), paired: Vec::new(), fleet: Default::default(), config: String::new(), idle_hosts: Default::default(), dormant: None }
+    Agents { running: ids.iter().map(|id| WorktreeId::from(*id)).collect(), open: HashSet::new(), terminals: HashSet::new(), agents: HashSet::new(), idle: HashSet::new(), waiting: HashSet::new(), listed: None, others: HashSet::new(), hosts: Vec::new(), paired: Vec::new(), fleet: Default::default(), config: String::new(), idle_hosts: Default::default(), dormant: None }
 }
 
 // A host that didn't answer keeps what it showed last, so nothing there is seen to close, end
@@ -14,7 +14,7 @@ fn a_host_that_did_not_answer_keeps_what_it_showed_last() {
     before.terminals = HashSet::from(["mac@term_1".to_string(), "pi@term_1".into(), "term_1".into()]);
     before.agents = before.terminals.clone();
     let now = running(&[]).keeping(&before, &["mac".into()]);
-    assert_eq!(now.running, HashSet::from(["mac@r9::/a".to_string()]));
+    assert_eq!(now.running, HashSet::from(["mac@r9::/a".into()]));
     assert_eq!((now.terminals, now.agents), (HashSet::from(["mac@term_1".to_string()]), HashSet::new()));
 }
 
@@ -22,15 +22,15 @@ fn a_host_that_did_not_answer_keeps_what_it_showed_last() {
 fn the_watcher_sends_each_listing_whole() {
     // A failed listing is skipped; an agent gone is only missing from the next; a worktree
     // that isn't a worker's, such as the owner's primary checkout, is never named.
-    let with_main = Agents { running: ["c".to_string(), "main".to_string()].into(), listed: Some(["c".to_string(), "main".to_string()].into()), others: ["main".to_string()].into(), ..running(&["c"]) };
-    let mut listings = vec![Ok(running(&["b", "a"])), Err(Error::Failed("orca".into())), Ok(with_main), Ok(running(&[]))].into_iter();
+    let with_main = Agents { running: ["r::c".into(), "r::main".into()].into(), listed: Some(["r::c".into(), "r::main".into()].into()), others: ["r::main".into()].into(), ..running(&["r::c"]) };
+    let mut listings = vec![Ok(running(&["r::b", "r::a"])), Err(Error::Failed("orca".into())), Ok(with_main), Ok(running(&[]))].into_iter();
     let watcher = Watcher::spawn(move || listings.next().unwrap_or_else(|| Ok(running(&[]))), |_| Ok(Missed::default()), |_| Ok(false), Duration::from_millis(1));
     let snapshot = || watcher.snapshots.recv_timeout(Duration::from_secs(5)).unwrap();
     let (first, second, third) = (snapshot(), snapshot(), snapshot());
-    assert_eq!(first.agents, [("a".to_string(), Observed::AgentWorking), ("b".to_string(), Observed::AgentWorking)]);
+    assert_eq!(first.agents, [("r::a".into(), Observed::AgentWorking), ("r::b".into(), Observed::AgentWorking)]);
     assert_eq!(first.listed, None);
     assert!(first.at.len() == 24 && first.at.ends_with('Z') && first.at <= second.at, "{}", first.at);
-    assert_eq!((second.agents, second.listed), (vec![("c".to_string(), Observed::AgentWorking)], Some(vec!["c".to_string()])));
+    assert_eq!((second.agents, second.listed), (vec![("r::c".into(), Observed::AgentWorking)], Some(vec!["r::c".into()])));
     assert!(third.agents.is_empty());
     assert!(second.began <= third.began);
     // A worktree gone is the Durable Object's to find from the snapshots: nothing else says it.
@@ -40,16 +40,16 @@ fn the_watcher_sends_each_listing_whole() {
 #[test]
 fn the_first_listing_sends_what_missed_names_once_it_answers() {
     // A `missed` that fails is asked again of the next listing, and never again once it answers.
-    let mut listings = vec![Ok(running(&["a"])), Ok(running(&["b"])), Ok(running(&["b"])), Ok(running(&[]))].into_iter();
-    let answer = Missed { closed: vec!["k".into()] };
+    let mut listings = vec![Ok(running(&["r::a"])), Ok(running(&["r::b"])), Ok(running(&["r::b"])), Ok(running(&[]))].into_iter();
+    let answer = Missed { closed: vec!["r::k".into()] };
     let mut answers = vec![Err(Error::Failed("state".into())), Ok(answer)].into_iter();
     let (asked, asks) = mpsc::channel();
     let missed = move |now: &Agents| {
         asked.send(now.running.len()).unwrap();
-        answers.next().unwrap_or_else(|| Ok(Missed { closed: vec!["never".into()] }))
+        answers.next().unwrap_or_else(|| Ok(Missed { closed: vec!["r::never".into()] }))
     };
     let watcher = Watcher::spawn(move || listings.next().unwrap_or_else(|| Ok(running(&[]))), missed, |_| Ok(false), Duration::from_millis(1));
-    assert_eq!(watcher.seen.recv_timeout(Duration::from_secs(5)).unwrap(), Seen::Closed("k".into()));
+    assert_eq!(watcher.seen.recv_timeout(Duration::from_secs(5)).unwrap(), Seen::Closed("r::k".into()));
     assert!(watcher.seen.recv_timeout(Duration::from_millis(100)).is_err());
     assert_eq!(asks.try_iter().collect::<Vec<_>>(), [1, 1]);
 }
@@ -57,11 +57,11 @@ fn the_first_listing_sends_what_missed_names_once_it_answers() {
 #[test]
 fn the_watcher_sends_each_worktree_whose_last_terminal_closed() {
     // Open in the first listing is only compared against; a failed listing is skipped.
-    let open = |ids: &[&str]| Agents { open: ids.iter().map(|id| id.to_string()).collect(), ..running(&[]) };
-    let mut listings = vec![Ok(open(&["a", "b"])), Err(Error::Failed("orca".into())), Ok(open(&["b", "c"])), Ok(open(&["c"]))].into_iter();
-    let watcher = Watcher::spawn(move || listings.next().unwrap_or_else(|| Ok(open(&["c"]))), |_| Ok(Missed::default()), |_| Ok(false), Duration::from_millis(1));
+    let open = |ids: &[&str]| Agents { open: ids.iter().map(|id| WorktreeId::from(*id)).collect(), ..running(&[]) };
+    let mut listings = vec![Ok(open(&["r::a", "r::b"])), Err(Error::Failed("orca".into())), Ok(open(&["r::b", "r::c"])), Ok(open(&["r::c"]))].into_iter();
+    let watcher = Watcher::spawn(move || listings.next().unwrap_or_else(|| Ok(open(&["r::c"]))), |_| Ok(Missed::default()), |_| Ok(false), Duration::from_millis(1));
     let seen = || watcher.seen.recv_timeout(Duration::from_secs(5)).unwrap();
-    assert_eq!((seen(), seen()), (Seen::Closed("a".into()), Seen::Closed("b".into())));
+    assert_eq!((seen(), seen()), (Seen::Closed("r::a".into()), Seen::Closed("r::b".into())));
     assert!(watcher.seen.recv_timeout(Duration::from_millis(100)).is_err());
 }
 
@@ -69,7 +69,7 @@ fn the_watcher_sends_each_worktree_whose_last_terminal_closed() {
 fn the_watcher_sends_each_terminal_that_closed() {
     // Its worktree still has others open, as when the owner's own session runs beside a
     // triage session in the primary checkout.
-    let handles = |ids: &[&str]| Agents { open: ["main".to_string()].into(), terminals: ids.iter().map(|id| id.to_string()).collect(), ..running(&[]) };
+    let handles = |ids: &[&str]| Agents { open: ["r::main".into()].into(), terminals: ids.iter().map(|id| id.to_string()).collect(), ..running(&[]) };
     let mut listings = vec![Ok(handles(&["term_1", "term_2"])), Ok(handles(&["term_2"]))].into_iter();
     let watcher = Watcher::spawn(move || listings.next().unwrap_or_else(|| Ok(handles(&["term_2"]))), |_| Ok(Missed::default()), |_| Ok(false), Duration::from_millis(1));
     assert_eq!(watcher.seen.recv_timeout(Duration::from_secs(5)).unwrap(), Seen::Ended("term_1".into()));
@@ -78,13 +78,13 @@ fn the_watcher_sends_each_terminal_that_closed() {
 
 #[test]
 fn a_listing_states_each_agent_as_working_idle_or_waiting() {
-    let set = |ids: &[&str]| ids.iter().map(|i| i.to_string()).collect::<HashSet<String>>();
-    let mut now = Agents { running: set(&["a", "b", "c"]), waiting: set(&["b"]), ..Agents::default() };
-    now.idle.insert("c".into());
-    let named = |states: Vec<(String, Observed)>| states.into_iter().map(|(id, s)| format!("{id} {s:?}")).collect::<Vec<_>>();
-    assert_eq!(named(states_of(&now)), ["a AgentWorking", "b AgentWaiting", "c AgentIdle"]);
-    now.listed = Some(set(&["a", "b", "c", "d"]));
-    assert_eq!(named(states_of(&now)), ["a AgentWorking", "b AgentWaiting", "c AgentIdle"]);
+    let set = |ids: &[&str]| ids.iter().map(|i| WorktreeId::from(*i)).collect::<HashSet<WorktreeId>>();
+    let mut now = Agents { running: set(&["r::a", "r::b", "r::c"]), waiting: set(&["r::b"]), ..Agents::default() };
+    now.idle.insert("r::c".into());
+    let named = |states: Vec<(WorktreeId, Observed)>| states.into_iter().map(|(id, s)| format!("{id} {s:?}")).collect::<Vec<_>>();
+    assert_eq!(named(states_of(&now)), ["r::a AgentWorking", "r::b AgentWaiting", "r::c AgentIdle"]);
+    now.listed = Some(set(&["r::a", "r::b", "r::c", "r::d"]));
+    assert_eq!(named(states_of(&now)), ["r::a AgentWorking", "r::b AgentWaiting", "r::c AgentIdle"]);
 }
 
 #[test]

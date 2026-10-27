@@ -5,7 +5,7 @@ use crate::config::files;
 use crate::exec::{self, run_command};
 use crate::harness::continued;
 use crate::orca::{self, Status};
-use crate::plain::{IssueKey, inside, orca_worktree, split_worktree};
+use crate::plain::{IssueKey, WorktreeId, inside};
 use crate::state::{Records, State, WorkerRecord};
 
 // A worker's worktree card in Orca, whose comment the owner reads for where the worker is
@@ -21,7 +21,8 @@ use crate::state::{Records, State, WorkerRecord};
 pub fn worker<'w>(workers: &'w [WorkerRecord], host: Option<&str>, dir: &str) -> Option<(&'w WorkerRecord, &'w str)> {
     workers
         .iter()
-        .filter_map(|w| split_worktree(&w.worktree_id).filter(|(on, _, _)| *on == host).map(|(_, _, root)| (w, root)))
+        .filter(|w| w.worktree_id.host() == host)
+        .map(|w| (w, w.worktree_id.path()))
         .filter(|(w, root)| IssueKey::parse(&w.issue).is_some() && inside(dir, root))
         .max_by_key(|(_, root)| root.len())
 }
@@ -32,14 +33,14 @@ pub fn worker<'w>(workers: &'w [WorkerRecord], host: Option<&str>, dir: &str) ->
 // or the owner's checkout has none.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Launched {
-    pub worktree_id: String,
+    pub worktree_id: WorktreeId,
     pub root: String,
     pub issue: String,
 }
 
 // What `tolkster worker` puts in its agent's environment for `record`, the worker's.
 pub fn launch_env(record: &WorkerRecord) -> [(String, String); 2] {
-    [(WORKTREE_ENV.into(), record.worktree_id.clone()), (ISSUE_ENV.into(), record.issue.clone())]
+    [(WORKTREE_ENV.into(), record.worktree_id.to_string()), (ISSUE_ENV.into(), record.issue.clone())]
 }
 
 pub fn launched() -> Option<Launched> {
@@ -48,8 +49,8 @@ pub fn launched() -> Option<Launched> {
 
 // None unless both are there and in shape.
 pub fn launched_of(worktree_id: Option<String>, issue: Option<String>) -> Option<Launched> {
-    let (worktree_id, issue) = (worktree_id?, issue.filter(|issue| IssueKey::parse(issue).is_some())?);
-    let root = split_worktree(&worktree_id)?.2.to_string();
+    let (worktree_id, issue) = (WorktreeId::parse(&worktree_id?)?, issue.filter(|issue| IssueKey::parse(issue).is_some())?);
+    let root = worktree_id.path().to_string();
     Some(Launched { worktree_id, root, issue })
 }
 
@@ -78,7 +79,7 @@ pub fn checkpoint_pr(agent: &Agent, pr: u64, what: &str) {
 // it prints one fixed line.
 fn moved(run: &mut exec::Run, worker: &Launched, status: Status) {
     // The card is this host's, so its Orca's own ID names it.
-    let Some(card) = orca_worktree(&worker.worktree_id) else { return };
+    let card = worker.worktree_id.own();
     if orca::set_status(run, &card, status).is_err() {
         eprintln!("tolkster: the worktree card's status wasn't set");
     }
@@ -86,7 +87,7 @@ fn moved(run: &mut exec::Run, worker: &Launched, status: Status) {
 
 fn set(worker: &Launched, kind: Kind, comment: &str) {
     // The card is this host's, so its Orca's own ID names it.
-    let Some(card) = orca_worktree(&worker.worktree_id) else { return };
+    let card = worker.worktree_id.own();
     let run = &mut run_command;
     let set = match kind {
         Kind::Action => orca::comment(run, &card).map(|now| !holds_pr(now.as_deref())),

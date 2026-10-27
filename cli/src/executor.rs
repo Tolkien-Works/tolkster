@@ -17,8 +17,8 @@ use crate::config::ladder::{Ladder, Launch};
 use crate::linear::{ActivityInput, ActivityType};
 use crate::machine::{Command, Finished, Resume};
 use crate::onboard;
-use crate::orca::{Host, Listing, Orca, Place, Proof, Status, host_of, Typed, Worktree, agent_in, agent_terminal, find_repo, project_id, repo_name, waits_in};
-use crate::plain::{BranchName, Id, IssueKey, RepoName, split_worktree};
+use crate::orca::{Host, Listing, Orca, Place, Proof, Status, Typed, Worktree, agent_in, agent_terminal, find_repo, project_id, repo_name, waits_in};
+use crate::plain::{BranchName, Id, IssueKey, RepoName, WorktreeId};
 use crate::ports::Ports;
 use crate::prebuilt;
 use crate::request::{Issue, MANUAL_MERGE_LABEL, PLAN_FIRST_LABEL, Session};
@@ -47,7 +47,7 @@ pub fn plans_first(issue: &Issue) -> bool {
 // the issue's size as read now, the estimate its worker set, recorded as the worker's so
 // later launches keep it, unless that rung is on another harness, which can't continue this
 // one's session. Any other record's launch stands (config/ladder.rs, "Chosen once").
-pub fn relaunch(record: Option<&WorkerRecord>, worktree_id: &str, issue: &Issue, ladder: &Ladder) -> (Option<Launch>, Option<WorkerRecord>) {
+pub fn relaunch(record: Option<&WorkerRecord>, worktree_id: &WorktreeId, issue: &Issue, ladder: &Ladder) -> (Option<Launch>, Option<WorkerRecord>) {
     let launch = record.map(|r| r.launch.clone());
     let (Some(record), Some(size)) = (record.filter(|r| r.rung_from == RungFrom::NoEstimate), issue.size()) else {
         return (launch, None);
@@ -56,7 +56,7 @@ pub fn relaunch(record: Option<&WorkerRecord>, worktree_id: &str, issue: &Issue,
     if rung.launch.harness != record.launch.harness {
         return (launch, None);
     }
-    let chosen = WorkerRecord { worktree_id: worktree_id.into(), launch: rung.launch.clone(), rung_from: RungFrom::Worker, ..record.clone() };
+    let chosen = WorkerRecord { worktree_id: worktree_id.clone(), launch: rung.launch.clone(), rung_from: RungFrom::Worker, ..record.clone() };
     (Some(chosen.launch.clone()), Some(chosen))
 }
 
@@ -101,7 +101,7 @@ pub fn linked_worktree(ports: &mut Ports, identifier: &str) -> Result<Option<Wor
 // that can't be read may, so nothing is decided.
 pub(super) fn held_unheard(ports: &Ports, identifier: &str) -> Result<Option<String>, Error> {
     let records = ports.records.workers().map_err(|error| Error::Later(format!("the worker records couldn't be read: {error}")))?;
-    Ok(records.iter().filter(|r| r.issue.eq_ignore_ascii_case(identifier) && !ports.orca.heard(&r.worktree_id)).find_map(|r| host_of(&r.worktree_id).map(String::from)))
+    Ok(records.iter().filter(|r| r.issue.eq_ignore_ascii_case(identifier) && !ports.orca.heard(&r.worktree_id)).find_map(|r| r.worktree_id.host().map(String::from)))
 }
 
 // The same, in a listing already read.
@@ -196,7 +196,7 @@ fn said_if_failed(ports: &Ports, command: &Command, session_id: &str, what: &str
 // made by hand, is answered with as it is. A failed start's
 // result says whether a worktree may be there, which keeps the machine from counting one
 // gone that isn't.
-pub fn start(config: &Config, ports: &mut Ports, command: &Command, session_id: &Id, orchestrate: bool, named: Option<&str>, host: Option<&str>) -> Result<Finished, Error> {
+pub fn start(config: &Config, ports: &mut Ports, command: &Command, session_id: &Id, orchestrate: bool, named: Option<&WorktreeId>, host: Option<&str>) -> Result<Finished, Error> {
     let session = session_on_issue(ports, command, session_id, false)?;
     let issue = issue_of(&session)?;
     // Listed once, with the origins: the worktree already linked, the repo's primary checkout and
@@ -210,7 +210,7 @@ pub fn start(config: &Config, ports: &mut Ports, command: &Command, session_id: 
     // A worktree the machine named, or a worker's record holds, on a host not heard, isn't
     // made again: a start resent after its result was lost names none.
     if existing.is_none() {
-        let named = named.filter(|id| !ports.orca.heard(id)).and_then(host_of).map(String::from);
+        let named = named.filter(|id| !ports.orca.heard(id)).and_then(WorktreeId::host).map(String::from);
         if let Some(host) = named.map_or_else(|| held_unheard(ports, &issue.identifier), |host| Ok(Some(host)))? {
             return Err(Error::unheard(Some(&host)));
         }
@@ -221,13 +221,13 @@ pub fn start(config: &Config, ports: &mut Ports, command: &Command, session_id: 
     said_if_failed(ports, command, session_id, voice::COULDNT_START, json!({ "madeWorktree": there }), done)
 }
 
-fn start_in(call: &mut Call, orchestrate: bool, named: Option<&str>, granted_on: Option<&str>, existing: Option<Worktree>, worktrees: &[Worktree]) -> Result<Finished, Error> {
+fn start_in(call: &mut Call, orchestrate: bool, named: Option<&WorktreeId>, granted_on: Option<&str>, existing: Option<Worktree>, worktrees: &[Worktree]) -> Result<Finished, Error> {
     let Call { config, command, session_id, issue, .. } = *call;
     let identifier = issue.identifier.as_str();
     // Orca's repos are listed only once a worktree there may be relaunched, so a start run
     // again beside its working agent is answered without them.
     let may_start = match &existing {
-        Some(worktree) => named == Some(worktree.id.as_str()) && worktree.agents.is_empty() && record_of(call.ports.records, &worktree.id)?.is_some_and(|r| r.issue.eq_ignore_ascii_case(identifier)),
+        Some(worktree) => named == Some(&worktree.id) && worktree.agents.is_empty() && record_of(call.ports.records, &worktree.id)?.is_some_and(|r| r.issue.eq_ignore_ascii_case(identifier)),
         None => true,
     };
     let resolved = if may_start { find_repo(&call.ports.orca.repos(None)?, config.repos.repo_for(&issue.place)) } else { None };
@@ -268,7 +268,7 @@ fn start_in(call: &mut Call, orchestrate: bool, named: Option<&str>, granted_on:
     pick_up(call.ports, command, session_id, None, &wording)?;
     let made = matches!(at, Where::New(_));
     let host = match &at {
-        Where::Existing(worktree_id) => host_of(worktree_id).map(String::from),
+        Where::Existing(worktree_id) => worktree_id.host().map(String::from),
         Where::New(Place::On { host, .. }) => Some(host.to_string()),
         Where::New(Place::Here { .. }) => None,
     };
@@ -340,14 +340,14 @@ fn host_name(at: &Where, answering: &[Host]) -> Option<String> {
     let id = match at {
         Where::New(Place::Here { .. }) => return None,
         Where::New(Place::On { host, .. }) => *host,
-        Where::Existing(worktree) => split_worktree(worktree)?.0?,
+        Where::Existing(worktree) => worktree.host()?,
     };
     Some(answering.iter().find(|host| host.id == id).map_or_else(|| id.to_string(), |host| host.name.trim().to_string()))
 }
 
 // Where a worker starts: the worktree of a start that never began, or a new one at its place.
 enum Where<'a> {
-    Existing(String),
+    Existing(WorktreeId),
     New(Place<'a>),
 }
 
@@ -355,7 +355,7 @@ enum Where<'a> {
 // began, on the line that sets it up on its own host (setup.rs). Any error after a worktree
 // made here exists removes it first, so no worker is left on an issue whose start failed; an
 // existing one stays as it was.
-fn create_worktree(ports: &mut Ports, worker: &Worker, launch: &Launch, rung_from: RungFrom, at: Where) -> Result<String, Error> {
+fn create_worktree(ports: &mut Ports, worker: &Worker, launch: &Launch, rung_from: RungFrom, at: Where) -> Result<WorktreeId, Error> {
     let identifier = &worker.identifier;
     let command = worker.command()?;
     let made = matches!(at, Where::New(_));
@@ -388,7 +388,7 @@ fn create_worktree(ports: &mut Ports, worker: &Worker, launch: &Launch, rung_fro
 // Should the removal fail too, the worktree stays, with no worker in it, as one made by hand.
 // Its record goes with it, as one launched lately takes a slot listed or not; one that can't
 // be forgotten holds it only until SETTING_UP_MS ends.
-fn removed_after(ports: &mut Ports, worktree_id: &str, error: Error) -> Error {
+fn removed_after(ports: &mut Ports, worktree_id: &WorktreeId, error: Error) -> Error {
     match ports.orca.remove_worktree(worktree_id) {
         Ok(()) => {
             let _ = ports.records.forget_worker(worktree_id);
@@ -405,18 +405,18 @@ fn repo_of(orca: &mut dyn Orca, worktree: &Worktree) -> Option<RepoName> {
 }
 
 // The worker's record of the worktree, for its launch.
-fn record_of(records: &dyn Records, worktree_id: &str) -> Result<Option<WorkerRecord>, Error> {
-    Ok(records.workers()?.into_iter().find(|r| r.worktree_id == worktree_id))
+fn record_of(records: &dyn Records, worktree_id: &WorktreeId) -> Result<Option<WorkerRecord>, Error> {
+    Ok(records.workers()?.into_iter().find(|r| &r.worktree_id == worktree_id))
 }
 
 // The worker's record of the worktree, when it is for this issue.
-fn recorded(records: &dyn Records, worktree_id: &str, identifier: &str) -> Result<Option<WorkerRecord>, Error> {
+fn recorded(records: &dyn Records, worktree_id: &WorktreeId, identifier: &str) -> Result<Option<WorkerRecord>, Error> {
     Ok(record_of(records, worktree_id)?.filter(|r| r.issue.eq_ignore_ascii_case(identifier)))
 }
 
 // The record of a worktree whose agent is gone on a fresh listing of its host. None when one
 // runs, when the listing or the record can't be read, or when the record isn't for this issue.
-fn exited_since(ports: &mut Ports, worktree_id: &str, identifier: &str) -> Option<WorkerRecord> {
+fn exited_since(ports: &mut Ports, worktree_id: &WorktreeId, identifier: &str) -> Option<WorkerRecord> {
     let listed = ports.orca.listing_at(worktree_id).ok()?.terminals;
     if agent_in(&listed, worktree_id) {
         return None;
@@ -488,7 +488,7 @@ fn relaunched(call: &mut Call, worktree: &Worktree, record: &WorkerRecord, ident
 
 // A round's worker's card goes back to in progress with its issue. Should it not, the worker
 // runs all the same.
-fn in_progress(ports: &mut Ports, worktree_id: &str) {
+fn in_progress(ports: &mut Ports, worktree_id: &WorktreeId) {
     if let Err(error) = ports.orca.set_status(worktree_id, Status::InProgress) {
         trace::event(Work::NotDone { what: Undone::CardStatus, error });
     }

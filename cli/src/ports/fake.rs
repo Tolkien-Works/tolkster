@@ -24,7 +24,7 @@ use crate::error::Error;
 use crate::estimates::Size;
 use crate::github::Reader;
 use crate::config::ladder::Ladder;
-use crate::plain::{CommandId, Id, IssueKey, Sha};
+use crate::plain::{CommandId, Id, IssueKey, Sha, WorktreeId};
 use crate::ports::{Candidate, CommentFacts, IssueFacts, Linear as LinearPort, TriageQueue};
 use crate::config::repo_map::RepoMap;
 use crate::request::tests::{APP, OWNER};
@@ -236,7 +236,7 @@ impl LinearPort for Linear {
 // worktree.
 #[derive(Default)]
 pub struct Records {
-    pub workers: RefCell<HashMap<String, WorkerRecord>>,
+    pub workers: RefCell<HashMap<WorktreeId, WorkerRecord>>,
     // The hosts whose credential is gone since `listen` last listed: every other is admitted.
     pub revoked: RefCell<Vec<String>>,
     pub conversations: RefCell<HashMap<String, Conversation>>,
@@ -295,7 +295,7 @@ impl RecordsPort for Records {
         checkouts.push(checkout.clone());
         Ok(())
     }
-    fn forget_worker(&self, worktree_id: &str) -> Result<(), Error> {
+    fn forget_worker(&self, worktree_id: &WorktreeId) -> Result<(), Error> {
         self.workers.borrow_mut().remove(worktree_id);
         Ok(())
     }

@@ -21,17 +21,17 @@ fn a_rung_picked_with_no_estimate_is_picked_again_once_the_issue_has_one() {
     assert_ne!(default, small);
     let record = |rung_from| WorkerRecord { issue: "TW-1".into(), worktree_id: "r::D:/wt/tw-0".into(), session_id: "s1".into(), at: at(0), launch: default.clone(), rung_from };
     let sized = Issue { estimate: Some(2.0), ..issue() };
-    let (launch, rerecord) = relaunch(Some(&record(RungFrom::NoEstimate)), "r::D:/wt/tw-1", &sized, &ladder);
+    let (launch, rerecord) = relaunch(Some(&record(RungFrom::NoEstimate)), &WorktreeId::from("r::D:/wt/tw-1"), &sized, &ladder);
     assert_eq!(launch, Some(small.clone()));
     let rerecord = rerecord.unwrap();
-    assert_eq!((rerecord.worktree_id, rerecord.launch, rerecord.rung_from, rerecord.session_id), ("r::D:/wt/tw-1".to_string(), small, RungFrom::Worker, "s1".to_string()));
+    assert_eq!((rerecord.worktree_id, rerecord.launch, rerecord.rung_from, rerecord.session_id), ("r::D:/wt/tw-1".into(), small, RungFrom::Worker, "s1".to_string()));
     // Still no estimate, one at the start, or the worker's already taken: the launch stands,
     // and nothing is recorded.
-    assert_eq!(relaunch(Some(&record(RungFrom::NoEstimate)), "w", &issue(), &ladder), (Some(default.clone()), None));
+    assert_eq!(relaunch(Some(&record(RungFrom::NoEstimate)), &WorktreeId::from("r::w"), &issue(), &ladder), (Some(default.clone()), None));
     for rung_from in [RungFrom::Claim, RungFrom::Worker] {
-        assert_eq!(relaunch(Some(&record(rung_from)), "w", &sized, &ladder), (Some(default.clone()), None));
+        assert_eq!(relaunch(Some(&record(rung_from)), &WorktreeId::from("r::w"), &sized, &ladder), (Some(default.clone()), None));
     }
-    assert_eq!(relaunch(None, "w", &sized, &ladder), (None, None));
+    assert_eq!(relaunch(None, &WorktreeId::from("r::w"), &sized, &ladder), (None, None));
     // A rung on another harness can't continue the session: the launch stands.
     let stub = serde_json::json!({ "rungs": [
         { "name": "Stub", "harness": "stub", "model": "stub-large", "effort": "deep", "upTo": "S" },
@@ -40,7 +40,7 @@ fn a_rung_picked_with_no_estimate_is_picked_again_once_the_issue_has_one() {
     let ladder = Ladder::from_config(Some(&stub)).unwrap();
     let default = ladder.choose(None, &[]).0.launch.clone();
     let record = WorkerRecord { launch: default.clone(), ..record(RungFrom::NoEstimate) };
-    assert_eq!(relaunch(Some(&record), "w", &sized, &ladder), (Some(default), None));
+    assert_eq!(relaunch(Some(&record), &WorktreeId::from("r::w"), &sized, &ladder), (Some(default), None));
 }
 
 // The pre-push review's size is the issue's against `deepReviewEstimate`, and unsized

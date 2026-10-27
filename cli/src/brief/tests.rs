@@ -366,7 +366,7 @@ fn a_session_opens_in_the_primary_checkout_on_one_plain_line() {
         written.push((p.display().to_string(), text.to_string()));
         Ok(())
     };
-    let terminal = open_session(&mut orca, &mut write, "r1::/src/tolkster", "TW-10 context", &path, &prompt, "the brief").unwrap();
+    let terminal = open_session(&mut orca, &mut write, &WorktreeId::from("r1::/src/tolkster"), "TW-10 context", &path, &prompt, "the brief").unwrap();
     assert_eq!(terminal, "term_1");
     assert_eq!(written.len(), 1);
     assert_eq!(written[0].1, "the brief");
@@ -376,7 +376,7 @@ fn a_session_opens_in_the_primary_checkout_on_one_plain_line() {
     assert!(reading_prompt(Path::new("/briefs/$x/TW-10-context.md"), true, &[]).is_err());
     // A brief that can't be written opens nothing, where a terminal would open.
     let mut orca = FakeOrca::on(&World::two_repos(true));
-    assert!(open_session(&mut orca, &mut |_, _| Err(Error::Failed("disk".into())), "r1::/src/tolkster", "t", &path, &prompt, "x").is_err());
+    assert!(open_session(&mut orca, &mut |_, _| Err(Error::Failed("disk".into())), &WorktreeId::from("r1::/src/tolkster"), "t", &path, &prompt, "x").is_err());
     assert!(orca.world.borrow().opened.is_empty());
 }
 

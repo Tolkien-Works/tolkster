@@ -16,7 +16,7 @@ use serde_json::{Value, json};
 
 use crate::error::Error;
 use crate::estimates::Size;
-use crate::plain::{Id, Sha, Time, split_worktree};
+use crate::plain::{Id, Sha, Time, WorktreeId};
 use crate::state::derived_uuid;
 use crate::sync::lock;
 use crate::time::{instant, iso, now_ms};
@@ -149,9 +149,9 @@ pub fn launch_of(text: &str) -> Option<(Kind, i64, Option<Sha>)> {
 }
 
 // The worker's report of its session in the worktree `worktree_id`, which the relay forwards
-// to `listen` without it. None for one of the wrong shape, which is never sent.
-pub fn report(worktree_id: &str, summary: &Summary) -> Option<Value> {
-    (split_worktree(worktree_id).is_some() && summary.plain()).then(|| json!({ "op": "report", "report": "sessionTiming", "worktreeId": worktree_id, "timing": summary }))
+// to `listen` without it. None for a summary of the wrong shape, which is never sent.
+pub fn report(worktree_id: &WorktreeId, summary: &Summary) -> Option<Value> {
+    summary.plain().then(|| json!({ "op": "report", "report": "sessionTiming", "worktreeId": worktree_id, "timing": summary }))
 }
 
 // A session's timing as the relay forwards it, with its issue (src/worker/timing.ts). None for

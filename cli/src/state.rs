@@ -14,7 +14,7 @@ use crate::config::{self, Files, WorkerUrl};
 use crate::error::{Context, Error};
 use crate::config::ladder::Launch;
 use crate::http::{post_json, retried};
-use crate::plain::{Id, Time};
+use crate::plain::{Id, Time, WorktreeId};
 use crate::trace::{self, Call, Undone, Work};
 
 // Tolkster's record of a session: each PR's feedback a round has read, and its
@@ -76,7 +76,7 @@ pub struct Reading {
 #[serde(rename_all = "camelCase")]
 pub struct WorkerRecord {
     pub issue: String,
-    pub worktree_id: String,
+    pub worktree_id: WorktreeId,
     pub session_id: String,
     pub at: String,
     pub launch: Launch,
@@ -110,7 +110,7 @@ pub struct Delegation {
 #[serde(rename_all = "camelCase")]
 pub struct CheckoutRecord {
     pub repo_id: String,
-    pub worktree_id: String,
+    pub worktree_id: WorktreeId,
     pub at: String,
 }
 
@@ -150,7 +150,7 @@ pub trait Records: Store {
     fn checkouts(&self) -> Result<Vec<CheckoutRecord>, Error>;
     fn set_checkout(&self, checkout: &CheckoutRecord) -> Result<(), Error>;
     // Once reap has removed its worktree.
-    fn forget_worker(&self, worktree_id: &str) -> Result<(), Error>;
+    fn forget_worker(&self, worktree_id: &WorktreeId) -> Result<(), Error>;
     fn context_comment(&self, issue_id: &str) -> Result<Option<ContextComment>, Error>;
     // A replacement overwrites the record of the comment it replaces.
     fn set_context_comment(&self, comment: &ContextComment) -> Result<(), Error>;
@@ -454,7 +454,7 @@ impl Records for State<'_> {
         self.call(json!({ "op": "setCheckout", "checkout": checkout })).map(|_| ())
     }
     // Deletes a worktree's record.
-    fn forget_worker(&self, worktree_id: &str) -> Result<(), Error> {
+    fn forget_worker(&self, worktree_id: &WorktreeId) -> Result<(), Error> {
         self.call(json!({ "op": "forgetWorker", "worktreeId": worktree_id })).map(|_| ())
     }
     fn context_comment(&self, issue_id: &str) -> Result<Option<ContextComment>, Error> {

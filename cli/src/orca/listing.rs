@@ -10,31 +10,31 @@ use super::routing::hosted;
 use super::{Answer, same_path};
 use crate::error::Error;
 use crate::json::decode;
-use crate::plain::{split_identifier, Terminal as Handle};
+use crate::plain::{split_identifier, Terminal as Handle, WorktreeId};
 
 // What one host lists (`Orca::listing_at`): its worktrees with their agents, without their
 // origins, every one's ID when its listing is complete (`Ps::complete`), and its terminals.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Listing {
     pub worktrees: Vec<Worktree>,
-    pub listed: Option<Vec<String>>,
+    pub listed: Option<Vec<WorktreeId>>,
     pub terminals: Vec<Terminal>,
 }
 
 impl Listing {
-    pub fn worktree(&self, worktree_id: &str) -> Option<&Worktree> {
-        self.worktrees.iter().find(|w| w.id == worktree_id)
+    pub fn worktree(&self, worktree_id: &WorktreeId) -> Option<&Worktree> {
+        self.worktrees.iter().find(|w| &w.id == worktree_id)
     }
 
     // Whether the host's complete listing lacks `worktree_id`.
-    pub fn lacks(&self, worktree_id: &str) -> bool {
+    pub fn lacks(&self, worktree_id: &WorktreeId) -> bool {
         self.listed.as_ref().is_some_and(|ids| !ids.iter().any(|id| id == worktree_id))
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Worktree {
-    pub id: String,
+    pub id: WorktreeId,
     pub repo_id: String,
     pub path: String,
     pub branch: Option<String>,
@@ -50,7 +50,7 @@ pub struct Worktree {
 impl Worktree {
     // The host it runs on, from its ID: None on this machine.
     pub fn host(&self) -> Option<&str> {
-        super::host_of(&self.id)
+        self.id.host()
     }
 
     pub fn origin(&self) -> Result<&str, Error> {
@@ -107,12 +107,13 @@ impl Ps {
     }
 
     // The rows of `host`'s listing, each named with the host whose call listed it, since a
-    // routed reply calls every row `local`.
+    // routed reply calls every row `local`. A row whose ID isn't plain is left out: no record
+    // or command can name it.
     pub fn worktrees(&self, host: Option<&str>) -> Vec<Worktree> {
         let some = |text: &Option<String>| text.clone().filter(|text| !text.is_empty());
         self.own_rows()
-            .map(|row| Worktree {
-                id: hosted(host, &row.worktree_id),
+            .filter_map(|row| Some(Worktree {
+                id: WorktreeId::hosted(host, &row.worktree_id)?,
                 repo_id: row.repo_id.clone(),
                 path: row.path.clone(),
                 branch: some(&row.branch).map(|b| b.strip_prefix("refs/heads/").unwrap_or(&b).to_string()),
@@ -123,15 +124,15 @@ impl Ps {
                 // One with no key or state names no agent a terminal could match.
                 agents: row.agents.iter().filter(|a| !a.pane_key.is_empty() && !a.state.is_empty()).map(|a| Pane { key: a.pane_key.clone(), state: a.state.clone(), since_ms: a.state_started_at }).collect(),
                 origin: None,
-            })
+            }))
             .collect()
     }
 
     // Every worktree on `host`, None when its listing is cut off at its limit: only a complete
     // listing may say a worktree is gone. A call answers for its own host alone, whatever others
     // it names as omitted: their own calls cover them.
-    pub fn complete(&self, host: Option<&str>) -> Option<Vec<String>> {
-        (self.result.truncated == Some(false)).then(|| self.own_rows().map(|row| hosted(host, &row.worktree_id)).collect())
+    pub fn complete(&self, host: Option<&str>) -> Option<Vec<WorktreeId>> {
+        (self.result.truncated == Some(false)).then(|| self.own_rows().filter_map(|row| WorktreeId::hosted(host, &row.worktree_id)).collect())
     }
 
     // A row another host owns isn't the call's to answer for.
@@ -141,12 +142,12 @@ impl Ps {
 }
 
 // An open terminal as Orca lists it. `handle` and `worktree_id` are None when Orca printed
-// none; `agent` when its `agentIdentity` names one, which a shell's doesn't; `pane` is
-// `<tabId>:<leafId>`, its agent's key, None without both.
+// none, and `worktree_id` too for one not plain; `agent` when its `agentIdentity` names one,
+// which a shell's doesn't; `pane` is `<tabId>:<leafId>`, its agent's key, None without both.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Terminal {
     pub handle: Option<String>,
-    pub worktree_id: Option<String>,
+    pub worktree_id: Option<WorktreeId>,
     pub agent: bool,
     pub pane: Option<String>,
 }
@@ -183,7 +184,7 @@ pub fn parse_terminals(listed: Value, host: Option<&str>) -> Result<Vec<Terminal
         .filter(|t| !t.orphaned)
         .map(|t| Terminal {
             handle: t.handle.map(|h| if h.is_empty() { h } else { hosted(host, &h) }),
-            worktree_id: t.worktree_id.map(|w| hosted(host, &w)),
+            worktree_id: t.worktree_id.and_then(|w| WorktreeId::hosted(host, &w)),
             agent: t.agent_identity.is_some_and(|a| !a.is_empty()),
             pane: match (some(t.tab_id), some(t.leaf_id)) {
                 (Some(tab), Some(leaf)) => Some(format!("{tab}:{leaf}")),
@@ -194,8 +195,8 @@ pub fn parse_terminals(listed: Value, host: Option<&str>) -> Result<Vec<Terminal
 }
 
 impl Terminal {
-    fn in_worktree(&self, worktree_id: &str) -> bool {
-        self.worktree_id.as_deref() == Some(worktree_id)
+    fn in_worktree(&self, worktree_id: &WorktreeId) -> bool {
+        self.worktree_id.as_ref() == Some(worktree_id)
     }
 
     fn plain_handle(&self) -> Option<Handle> {
@@ -205,19 +206,19 @@ impl Terminal {
 
 // Whether an agent runs in the worktree, whatever handle Orca lists it with. A shell isn't
 // an agent's.
-pub fn agent_in(terminals: &[Terminal], worktree_id: &str) -> bool {
+pub fn agent_in(terminals: &[Terminal], worktree_id: &WorktreeId) -> bool {
     agents(terminals).any(|t| t.in_worktree(worktree_id))
 }
 
 // The handle to type to or close the worktree's agent by. None when no agent runs there, or
 // when Orca lists it with an empty or unplain handle, which would name the active terminal:
 // whether one runs is `agent_in`'s.
-pub fn agent_terminal(terminals: &[Terminal], worktree_id: &str) -> Option<Handle> {
+pub fn agent_terminal(terminals: &[Terminal], worktree_id: &WorktreeId) -> Option<Handle> {
     agents(terminals).filter(|t| t.in_worktree(worktree_id)).find_map(Terminal::plain_handle)
 }
 
 // A terminal without a tab and a leaf names no pane, so matches no agent.
-pub fn agent_panes(terminals: &[Terminal], worktree_id: &str) -> Vec<String> {
+pub fn agent_panes(terminals: &[Terminal], worktree_id: &WorktreeId) -> Vec<String> {
     agents(terminals).filter(|t| t.in_worktree(worktree_id)).map(|t| t.pane.clone().unwrap_or_default()).collect()
 }
 
@@ -230,11 +231,11 @@ pub fn waits_in(worktree: &Worktree, terminals: &[Terminal]) -> bool {
 
 // The agents' terminals in `worktrees`, by their plain handles: an empty one would name the
 // active terminal.
-pub fn agent_handles(terminals: &[Terminal], worktrees: &HashSet<String>) -> HashSet<Handle> {
+pub fn agent_handles(terminals: &[Terminal], worktrees: &HashSet<WorktreeId>) -> HashSet<Handle> {
     agents(terminals).filter(|t| t.worktree_id.as_ref().is_some_and(|id| worktrees.contains(id))).filter_map(Terminal::plain_handle).collect()
 }
 
-pub fn agent_worktrees(terminals: &[Terminal]) -> HashSet<String> {
+pub fn agent_worktrees(terminals: &[Terminal]) -> HashSet<WorktreeId> {
     agents(terminals).filter_map(|t| t.worktree_id.clone()).collect()
 }
 
@@ -242,13 +243,13 @@ fn agents(terminals: &[Terminal]) -> impl Iterator<Item = &Terminal> {
     terminals.iter().filter(|t| t.agent)
 }
 
-pub fn terminal_worktrees(terminals: &[Terminal]) -> HashSet<String> {
+pub fn terminal_worktrees(terminals: &[Terminal]) -> HashSet<WorktreeId> {
     terminals.iter().filter_map(|t| t.worktree_id.clone()).collect()
 }
 
 // The open terminals' plain handles, to find one by. Whether any is open in a worktree is
 // `terminal_worktrees`', as one may be listed with no handle to name it by.
-pub fn open_terminals(terminals: &[Terminal], worktree_id: Option<&str>) -> HashSet<Handle> {
+pub fn open_terminals(terminals: &[Terminal], worktree_id: Option<&WorktreeId>) -> HashSet<Handle> {
     terminals.iter().filter(|t| worktree_id.is_none_or(|id| t.in_worktree(id))).filter_map(Terminal::plain_handle).collect()
 }
 

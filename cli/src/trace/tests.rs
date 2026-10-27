@@ -85,7 +85,7 @@ fn an_opaque_id_and_an_errors_text_show_only_with_verbose() {
         Call::Wrote { site: "linear commentCreate".into(), detail: format!("agentSessionId={opaque}"), failed: Some(Error::Failed("x".into())) }.into(),
         Call::Git { site: "git push".into(), detail: format!("origin {opaque}"), ok: false }.into(),
         Refresh::Failed { repo_id: opaque.into(), error: Error::Failed("x".into()) }.into(),
-        Reap { issue: "TW-1".into(), what: Reaping::GoneRecordStays { worktree_id: opaque.into(), error: Error::Failed("x".into()) } }.into(),
+        Reap { issue: "TW-1".into(), what: Reaping::GoneRecordStays { worktree_id: format!("r::{opaque}").as_str().into(), error: Error::Failed("x".into()) } }.into(),
         Host::NotAnswering { name: None, id: opaque.into(), error: Error::Failed("x".into()) }.into(),
         Update::Restart(Restart::Stuck { what: Stuck::Job(opaque.into()), minutes: 10 }).into(),
         Update::LeftForResend { command: opaque.into() }.into(),

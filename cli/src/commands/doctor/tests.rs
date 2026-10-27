@@ -2,6 +2,7 @@ use serde_json::{Value, json};
 
 use super::*;
 use crate::exec::Output;
+use crate::plain::WorktreeId;
 use crate::ports::fake::FakeReader;
 
 fn read(data: &Value) -> TeamRead {
@@ -66,7 +67,7 @@ fn orca() -> Value {
 }
 
 fn primary(repo_id: &str, origin: Option<&str>) -> Worktree {
-    Worktree { id: format!("{repo_id}::main"), repo_id: repo_id.into(), path: format!("D:/src/{repo_id}"), branch: Some("main".into()), linked_issue: None, is_main: true, is_local: true, agents: Vec::new(), origin: origin.map(String::from) }
+    Worktree { id: WorktreeId::from(format!("{repo_id}::main").as_str()), repo_id: repo_id.into(), path: format!("D:/src/{repo_id}"), branch: Some("main".into()), linked_issue: None, is_main: true, is_local: true, agents: Vec::new(), origin: origin.map(String::from) }
 }
 
 // GitHub as the app reads a repo: `repository` for the GraphQL query, `rules` for the

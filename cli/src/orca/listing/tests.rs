@@ -13,12 +13,12 @@ fn only_a_live_agent_counts_as_running_in_a_worktree() {
         { "handle": "t3", "worktreeId": "repo::c", "agentIdentity": "claude", "orphaned": true },
         { "handle": "t4", "worktreeId": "repo::d" },
     ] } }), None).unwrap();
-    assert_eq!(agent_worktrees(&terminals), HashSet::from(["repo::a".to_string()]));
-    assert_eq!(agent_terminal(&terminals, "repo::a").as_deref(), Some("t1"));
-    assert!(["repo::b", "repo::c", "repo::d"].iter().all(|w| agent_terminal(&terminals, w).is_none()));
+    assert_eq!(agent_worktrees(&terminals), HashSet::from(["repo::a".into()]));
+    assert_eq!(agent_terminal(&terminals, &WorktreeId::from("repo::a")).as_deref(), Some("t1"));
+    assert!(["repo::b", "repo::c", "repo::d"].iter().all(|w| agent_terminal(&terminals, &WorktreeId::from(*w)).is_none()));
     // Open terminals are any whose process is there, agent or not.
     assert_eq!(open_terminals(&terminals, None), HashSet::from(["t1".into(), "t2".into(), "t4".into()]));
-    assert_eq!(open_terminals(&terminals, Some("repo::b")), HashSet::from(["t2".into()]));
+    assert_eq!(open_terminals(&terminals, Some(&WorktreeId::from("repo::b"))), HashSet::from(["t2".into()]));
 }
 
 // An empty handle names Orca's active terminal: no terminal is found by one, but its agent
@@ -31,13 +31,13 @@ fn an_agent_listed_with_an_empty_handle_runs_but_has_no_handle() {
         { "handle": "", "worktreeId": "repo::c" },
         { "handle": "t4", "worktreeId": "repo::d", "agentIdentity": "claude" },
     ] } }), None).unwrap();
-    assert!(["repo::a", "repo::b", "repo::d"].iter().all(|w| agent_in(&terminals, w)));
-    assert!(!agent_in(&terminals, "repo::c"));
-    assert!(["repo::a", "repo::b", "repo::c"].iter().all(|w| agent_terminal(&terminals, w).is_none()));
-    assert_eq!(agent_terminal(&terminals, "repo::d").as_deref(), Some("t4"));
+    assert!(["repo::a", "repo::b", "repo::d"].iter().all(|w| agent_in(&terminals, &WorktreeId::from(*w))));
+    assert!(!agent_in(&terminals, &WorktreeId::from("repo::c")));
+    assert!(["repo::a", "repo::b", "repo::c"].iter().all(|w| agent_terminal(&terminals, &WorktreeId::from(*w)).is_none()));
+    assert_eq!(agent_terminal(&terminals, &WorktreeId::from("repo::d")).as_deref(), Some("t4"));
     assert_eq!(open_terminals(&terminals, None), HashSet::from(["t4".into()]));
-    assert!(open_terminals(&terminals, Some("repo::a")).is_empty());
-    let all = HashSet::from(["repo::a".to_string(), "repo::b".into(), "repo::d".into()]);
+    assert!(open_terminals(&terminals, Some(&WorktreeId::from("repo::a"))).is_empty());
+    let all = HashSet::from(["repo::a".into(), "repo::b".into(), "repo::d".into()]);
     assert_eq!(agent_handles(&terminals, &all), HashSet::from(["t4".into()]));
     assert!(["repo::a", "repo::c"].iter().all(|w| terminal_worktrees(&terminals).contains(*w)));
 }
@@ -74,7 +74,7 @@ fn only_a_complete_listing_says_which_worktrees_exist() {
         json!({ "result": { "truncated": truncated, "hostScope": { "omittedHostIds": omitted }, "worktrees": [row(Some("TW-1"), "D:/wt/tw-1"), primary()] } })
     };
     let complete = |ps: Value, host: Option<&str>| Ps::read(ps).unwrap().complete(host);
-    assert_eq!(complete(listing(json!(false), json!([])), None), Some(vec!["repo::D:/wt/tw-1".to_string(), "repo::D:/main".into()]));
+    assert_eq!(complete(listing(json!(false), json!([])), None), Some(vec!["repo::D:/wt/tw-1".into(), "repo::D:/main".into()]));
     // Another host it omits is that host's own call's to list.
     assert_eq!(complete(listing(json!(false), json!(["runtime:1"])), None).map(|ids| ids.len()), Some(2));
     assert_eq!(complete(listing(json!(false), json!([])), Some("mac")).unwrap()[0], "mac@repo::D:/wt/tw-1");
@@ -107,7 +107,7 @@ fn a_recorded_listing_decodes_into_its_worktrees_and_terminals() {
     } });
     let ps = Ps::read(ps).unwrap();
     let worktree = Worktree { id: "r1::D:/wt/tw-9".into(), repo_id: "r1".into(), path: "D:/wt/tw-9".into(), branch: Some("someone/tw-9".into()), linked_issue: Some("TW-9".into()), is_main: false, is_local: true, agents: vec![Pane { key: "tab1:leaf1".into(), state: "waiting".into(), since_ms: Some(1792710982042) }], origin: None };
-    assert_eq!((ps.worktrees(None), ps.complete(None)), (vec![worktree], Some(vec!["r1::D:/wt/tw-9".to_string()])));
+    assert_eq!((ps.worktrees(None), ps.complete(None)), (vec![worktree], Some(vec!["r1::D:/wt/tw-9".into()])));
     let terminals = parse_terminals(json!({ "ok": true, "result": {
         "terminals": [
             { "handle": "term_1", "ptyId": "r1::D:/wt/tw-9@@cfa5", "incarnationId": "i1", "orphaned": false, "worktreeId": "r1::D:/wt/tw-9", "worktreePath": "D:/wt/tw-9", "branch": "refs/heads/someone/tw-9", "tabId": "tab1", "leafId": "leaf1", "connected": true, "writable": true, "lastOutputAt": 1792715418969_i64, "executionHostId": "local", "agentIdentity": "claude" },
@@ -123,7 +123,7 @@ fn a_recorded_listing_decodes_into_its_worktrees_and_terminals() {
 
 #[test]
 fn a_checkout_is_placed_by_its_path_and_origin() {
-    let at = |path: &str, origin: Option<&str>| Worktree { id: format!("r1::{path}"), repo_id: "r1".into(), path: path.into(), branch: None, linked_issue: None, is_main: false, is_local: true, agents: Vec::new(), origin: origin.map(String::from) };
+    let at = |path: &str, origin: Option<&str>| Worktree { id: WorktreeId::from(format!("r1::{path}").as_str()), repo_id: "r1".into(), path: path.into(), branch: None, linked_issue: None, is_main: false, is_local: true, agents: Vec::new(), origin: origin.map(String::from) };
     let worktrees = [at("D:/wt/tw-1", Some("Tolkien-Works/tolkster")), at("D:/wt/tw-2", None)];
     let found = |top: &str, repo: &str| checkout_of(&worktrees, top, repo).map(|w| w.path.as_str());
     assert_eq!(found("D:/wt/tw-1\n", "tolkien-works/Tolkster"), Some("D:/wt/tw-1"));
@@ -150,5 +150,5 @@ fn only_a_workers_agent_terminals_are_waited_on() {
         {"handle": "", "worktreeId": "r::w", "agentIdentity": "claude"},
         {"handle": "term_4", "worktreeId": "r::w", "agentIdentity": "claude", "orphaned": true}
     ]}}), None).unwrap();
-    assert_eq!(agent_handles(&terminals, &["r::w".to_string()].into()), ["term_1".into()].into());
+    assert_eq!(agent_handles(&terminals, &["r::w".into()].into()), ["term_1".into()].into());
 }
