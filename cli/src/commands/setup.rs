@@ -26,7 +26,7 @@ use ureq::Agent;
 use ureq::http::Method;
 
 use crate::args::{Kind, Parsed, parse};
-use crate::cli::{self, config_file, credentials_file, home, merge_json_file, open_browser, print_json};
+use crate::cli::{self, config_file, credentials_file, home, merge_json_file, open_browser, print_exit};
 use crate::commands::init::shown;
 use crate::commands::members;
 use crate::commands::repo::refuse_own_agent;
@@ -102,8 +102,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     refuse_own_agent()?;
     let mut steps = Steps::default();
     let ok = setup(agent, &parsed, &mut steps).is_ok();
-    print_json(&json!({ "ok": ok, "steps": steps.taken, "next": steps.next }))?;
-    Ok(if ok { 0 } else { 1 })
+    print_exit(&json!({ "ok": ok, "steps": steps.taken, "next": steps.next }), if ok { 0 } else { 1 })
 }
 
 fn setup(agent: &Agent, parsed: &Parsed, steps: &mut Steps) -> Result<(), Error> {

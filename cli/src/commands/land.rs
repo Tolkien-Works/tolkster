@@ -5,7 +5,7 @@ use serde_json::json;
 use ureq::Agent;
 
 use crate::args::{self, Kind, parse};
-use crate::cli::{NOTHING_TO_DO, print_json, read_body};
+use crate::cli::{logged, nothing_to_do, print_exit, read_body};
 use crate::commands::asker::trusted_session;
 use crate::config::{Config, files, owner};
 use crate::runtime::settings;
@@ -61,34 +61,18 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     // still printed.
     let stop = issue.state_type.is_finished().then(|| format!("{} is finished: nothing more lands for it", key.upper()));
     let (sha, pushed) = match land_branch(run, ".", &branch, &key, &format!("{title} ({})", key.upper()), &body, stop.as_deref())? {
-        Landing::Nothing => {
-            eprintln!("nothing to land: HEAD changes nothing origin's default branch lacks");
-            return Ok(NOTHING_TO_DO);
-        }
+        Landing::Nothing => return nothing_to_do("nothing to land: HEAD changes nothing origin's default branch lacks"),
         Landing::Conflicts(paths) => {
-            print_json(&json!({ "conflicts": paths }))?;
-            return Ok(CONFLICTS);
+            return print_exit(&json!({ "conflicts": paths }), CONFLICTS);
         }
         Landing::Landed { sha, pushed } => (sha, pushed),
     };
     let url = format!("https://github.com/{repo}/commit/{sha}");
-    let done = with_token(agent, |token| complete_issue(agent, token, &issue.id)).map_or_else(
-        |error| {
-            eprintln!("the issue wasn't moved to Done: {error}");
-            "failed"
-        },
-        |moved| if moved { "moved" } else { "unchanged" },
-    );
+    let done = logged(with_token(agent, |token| complete_issue(agent, token, &issue.id)), "the issue wasn't moved to Done").map_or("failed", |moved| if moved { "moved" } else { "unchanged" });
     let label = format!("Commit {}", crate::plain::short_sha(&sha));
-    let linked = with_token(agent, |token| add_session_link(agent, token, session_id, &label, &url)).map_err(|error| eprintln!("the commit wasn't linked on the session: {error}")).is_ok();
+    let linked = logged(with_token(agent, |token| add_session_link(agent, token, session_id, &label, &url)), "the commit wasn't linked on the session").is_some();
     // Every branch of the issue's: a worker continued on `<key>-2` was reset onto `<key>`'s.
-    let (mut branches, listed) = match git::issue_branches(run, ".", &key) {
-        Ok(branches) => (branches, true),
-        Err(error) => {
-            eprintln!("origin's branches of the issue weren't listed: {error}");
-            (Vec::new(), false)
-        }
-    };
+    let (mut branches, listed) = logged(git::issue_branches(run, ".", &key), "origin's branches of the issue weren't listed").map_or((Vec::new(), false), |branches| (branches, true));
     if !branches.contains(&branch) {
         branches.push(branch);
     }
@@ -98,10 +82,9 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     // Done failed, which a reap on another host waits for: a run again makes both.
     let reported = done != "failed" && {
         let report = machine::landed(&issue.id, session_id, &sha).ok_or_else(|| Error::Failed("a landing's report of the wrong shape".into()));
-        report.and_then(|report| State::open(agent, &files)?.reported(Some(report))).map_err(|error| eprintln!("the landing wasn't reported: {error}")).is_ok()
+        logged(report.and_then(|report| State::open(agent, &files)?.reported(Some(report))), "the landing wasn't reported").is_some()
     };
-    print_json(&json!({ "sha": sha, "url": url, "pushed": pushed, "done": done, "linked": linked, "branchDeleted": branch_deleted, "reported": reported }))?;
-    Ok(0)
+    print_exit(&json!({ "sha": sha, "url": url, "pushed": pushed, "done": done, "linked": linked, "branchDeleted": branch_deleted, "reported": reported }), 0)
 }
 
 // What `refusal` reads of this checkout in Orca: how its repo lands, and whether it is a

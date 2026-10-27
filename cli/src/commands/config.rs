@@ -4,7 +4,7 @@
 use ureq::Agent;
 
 use crate::args::parse;
-use crate::cli::{print, print_json};
+use crate::cli::{print, print_exit};
 use crate::config::{self, files};
 use crate::error::Error;
 use crate::runtime::settings;
@@ -20,6 +20,5 @@ pub fn run(_agent: &Agent, argv: &[String]) -> Result<u8, Error> {
         _ => return Err(Error::Usage("config takes no argument but schema".into())),
     }
     let files = files()?;
-    print_json(&settings(&files)?)?;
-    Ok(0)
+    print_exit(&settings(&files)?, 0)
 }

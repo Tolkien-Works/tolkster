@@ -77,6 +77,24 @@ pub fn print_json(value: &impl Serialize) -> Result<(), Error> {
     Ok(())
 }
 
+// A command's last step: `value` printed, then `code` as its exit.
+pub fn print_exit(value: &impl Serialize, code: u8) -> Result<u8, Error> {
+    print_json(value)?;
+    Ok(code)
+}
+
+// Exit 3, with `why` on stderr.
+pub fn nothing_to_do(why: &str) -> Result<u8, Error> {
+    eprintln!("{why}");
+    Ok(NOTHING_TO_DO)
+}
+
+// A failure that doesn't stop the command: on stderr as "<what>: <error>", then None. Only
+// where its error may be printed: the hook's `missed` prints none.
+pub fn logged<T, E: std::fmt::Display>(result: Result<T, E>, what: &str) -> Option<T> {
+    result.map_err(|error| eprintln!("{what}: {error}")).ok()
+}
+
 // Set to a conversation turn's own session: `tolkster` then runs only the allowlist's table.
 pub const CONVERSATION_ENV: &str = "TOLKSTER_CONVERSATION";
 

@@ -4,7 +4,7 @@ use serde::Serialize;
 use ureq::Agent;
 
 use crate::args::{Kind, parse};
-use crate::cli::print_json;
+use crate::cli::print_exit;
 use crate::error::Error;
 use crate::sessions::lookup::agent_sessions;
 use crate::linear::with_token;
@@ -34,6 +34,5 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
         rows.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
         Ok(rows)
     })?;
-    print_json(&rows)?;
-    Ok(0)
+    print_exit(&rows, 0)
 }

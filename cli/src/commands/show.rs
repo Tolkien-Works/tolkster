@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use ureq::Agent;
 
 use crate::args::{Kind, parse};
-use crate::cli::print_json;
+use crate::cli::print_exit;
 use crate::error::Error;
 use crate::issues::{RELATIONS, Relations};
 use crate::json::{decode_ref, nodes};
@@ -43,8 +43,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     // One ID prints its object, as it always has, or fails; several print an array, even
     // when they name one issue.
     if given.len() == 1 {
-        print_json(&reads.remove(0)?)?;
-        return Ok(0);
+        return print_exit(&reads.remove(0)?, 0);
     }
     let mut code = 0;
     let shown: Vec<Value> = ids.iter().zip(reads).map(|(id, read)| read.unwrap_or_else(|error| {
@@ -52,8 +51,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
         code = 1;
         failed(id)
     })).collect();
-    print_json(&shown)?;
-    Ok(code)
+    print_exit(&shown, code)
 }
 
 // A failed read's place in the array. Fixed text: the error, on stderr, may hold Linear's.

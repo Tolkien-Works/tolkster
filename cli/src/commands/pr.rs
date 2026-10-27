@@ -9,7 +9,7 @@ use serde_json::json;
 use ureq::Agent;
 
 use crate::args::{self, Kind, Parsed, parse};
-use crate::cli::{print_json, read_body};
+use crate::cli::{logged, print_exit, print_json, read_body};
 use crate::time::{instant, iso, now_secs};
 use crate::commands::asker::session_issue;
 use crate::commands::link::pr_opened;
@@ -181,9 +181,7 @@ pub fn feedback(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     print_json(&read)?;
     if let (Some((session_id, state, _)), Some(through)) = (session, through) {
         let change = Change { read: Some(ReadRecord { pr, at: iso(through) }), ..Change::default() };
-        if let Err(error) = state.record(session_id, &change) {
-            eprintln!("couldn't record the read on session {session_id}: {error}");
-        }
+        logged(state.record(session_id, &change), &format!("couldn't record the read on session {session_id}"));
     }
     Ok(0)
 }
@@ -225,8 +223,7 @@ pub fn checks(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     };
     let mut gh = AppReader::new(agent, &|| {});
     let seen = github::checks(&mut gh, &repo, pr, pushed.as_ref())?;
-    print_json(&seen)?;
-    Ok(seen.state.exit_code())
+    print_exit(&seen, seen.state.exit_code())
 }
 
 pub fn reply(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
@@ -235,16 +232,14 @@ pub fn reply(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     let (repo, pr, thread) = thread(&parsed)?;
     let body = args::file_body(body_file, "reply", read_body)?;
     let app = github::app()?;
-    print_json(&github::reply(agent, &app, &github::ThreadRef { repo: &repo, pr, thread }, &body, now_secs())?)?;
-    Ok(0)
+    print_exit(&github::reply(agent, &app, &github::ThreadRef { repo: &repo, pr, thread }, &body, now_secs())?, 0)
 }
 
 pub fn resolve(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     let parsed = parse(argv, RESOLVE, false)?;
     let (repo, pr, thread) = thread(&parsed)?;
     let app = github::app()?;
-    print_json(&github::resolve(agent, &app, &github::ThreadRef { repo: &repo, pr, thread }, now_secs())?)?;
-    Ok(0)
+    print_exit(&github::resolve(agent, &app, &github::ThreadRef { repo: &repo, pr, thread }, now_secs())?, 0)
 }
 
 pub fn auto_merge(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
@@ -256,8 +251,7 @@ pub fn auto_merge(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     if !on.auto_merge {
         return Err(Error::Failed(format!("GitHub refused auto-merge on {repo}#{pr} as it is mergeable already")));
     }
-    print_json(&on)?;
-    Ok(0)
+    print_exit(&on, 0)
 }
 
 // Exit of `pr auto-merge` when the budget is still spent, or GitHub still unavailable, after
@@ -283,8 +277,7 @@ pub fn describe(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     let (repo, pr) = pr_ref(&parsed)?;
     let body = args::file_body(body_file, "description", read_body)?;
     let app = github::app()?;
-    print_json(&github::describe(agent, &app, &github::PrRef { repo: &repo, pr }, &body, now_secs())?)?;
-    Ok(0)
+    print_exit(&github::describe(agent, &app, &github::PrRef { repo: &repo, pr }, &body, now_secs())?, 0)
 }
 
 // Prints the decision before posting anything: a failed post is only logged, since the
@@ -307,12 +300,9 @@ pub fn review_pass(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     let names = git::changed_files(run, ".", &tip)?;
     let diff = review_pass::diff(&git::diff_lines(run, ".", &tip)?);
     let (size, sized) = match (size, &session) {
-        (ReviewSize::Unsized, Some(session)) => match deep_review_estimate() {
-            Ok(threshold) => review_pass::sized(size, sized_now(agent, session), threshold),
-            Err(error) => {
-                eprintln!("couldn't read the configuration, so the review goes by the claim's size: {error}");
-                (size, None)
-            }
+        (ReviewSize::Unsized, Some(session)) => match logged(deep_review_estimate(), "couldn't read the configuration, so the review goes by the claim's size") {
+            Some(threshold) => review_pass::sized(size, sized_now(agent, session), threshold),
+            None => (size, None),
         },
         _ => (size, None),
     };
@@ -322,9 +312,7 @@ pub fn review_pass(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     let Some(session) = session else { return Ok(0) };
     // The decision is printed: nothing after it fails the command.
     for note in [decision.sized_note(), decision.note()].into_iter().flatten() {
-        if let Err(error) = send(agent, &ActivityInput::text(&session, ActivityType::Thought, &note, false)) {
-            eprintln!("couldn't post how the review was decided: {error}");
-        }
+        logged(send(agent, &ActivityInput::text(&session, ActivityType::Thought, &note, false)), "couldn't post how the review was decided");
     }
     Ok(0)
 }
@@ -337,13 +325,8 @@ fn deep_review_estimate() -> Result<Size, Error> {
 // The size of the session's issue as Linear has it now. None when it has none, or the read
 // failed: the review then goes by the claim's, the no-estimate row.
 fn sized_now(agent: &Agent, session_id: &str) -> Option<Size> {
-    match with_token(agent, |token| sessions::read(agent, token, None, session_id, sessions::Read::Owner)) {
-        Ok(session) => session.issue.and_then(|issue| issue.size()),
-        Err(error) => {
-            eprintln!("couldn't read the issue's estimate, so the review goes by the claim's: {error}");
-            None
-        }
-    }
+    let session = with_token(agent, |token| sessions::read(agent, token, None, session_id, sessions::Read::Owner));
+    logged(session, "couldn't read the issue's estimate, so the review goes by the claim's")?.issue.and_then(|issue| issue.size())
 }
 
 // The review list at `commit`, and the file that holds it.

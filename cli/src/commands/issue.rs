@@ -5,13 +5,13 @@ use serde_json::{Value, json};
 use ureq::Agent;
 
 use crate::args::{self, Kind, js_trim, parse};
-use crate::cli::{NOTHING_TO_DO, print_json, read_body};
+use crate::cli::{NOTHING_TO_DO, nothing_to_do, print_exit, print_json, read_body};
 use crate::commands::asker::{Asker, SESSION_OPTION, THREAD_OPTION};
 use crate::config::{files, owner};
 use crate::request::{Issue, Session, natural_dedup};
 use crate::error::Error;
 use crate::issue_state::{filing_target, in_order};
-use crate::issues;
+use crate::issues::{self, put};
 use crate::linear::{IssueRef, Ref, Relation, StateType, create_issue, delete_relation, relate, update_issue, with_token};
 use crate::sessions::lookup::{ByDelegate, ChainTarget, FilingContext, MyWork, UpdateTarget};
 use crate::sessions::{lookup, workspace};
@@ -168,18 +168,10 @@ fn plain_fields(parsed: &args::Parsed, owner: &str) -> Result<serde_json::Map<St
         }
         input.insert("title".into(), json!(title));
     }
-    if let Some(source) = parsed.string("description-file") {
-        input.insert("description".into(), json!(args::file_body(source, "description", read_body)?));
-    }
-    if let Some(priority) = parsed.string("priority") {
-        input.insert("priority".into(), json!(issues::priority(priority)?));
-    }
-    if let Some(estimate) = parsed.string("estimate") {
-        input.insert("estimate".into(), issues::estimate(estimate)?);
-    }
-    if let Some(assignee) = parsed.string("assignee") {
-        input.insert("assigneeId".into(), issues::assignee(assignee, owner)?);
-    }
+    put(&mut input, "description", parsed.string("description-file").map(|source| args::file_body(source, "description", read_body)).transpose()?);
+    put(&mut input, "priority", parsed.string("priority").map(issues::priority).transpose()?);
+    put(&mut input, "estimate", parsed.string("estimate").map(issues::estimate).transpose()?);
+    put(&mut input, "assigneeId", parsed.string("assignee").map(|assignee| issues::assignee(assignee, owner)).transpose()?);
     Ok(input)
 }
 
@@ -239,21 +231,11 @@ pub fn issue_update(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
             None
         };
         let mut input = fields.clone();
-        if let Some(state_id) = state_id {
-            input.insert("stateId".into(), json!(state_id));
-        }
-        if let Some(project_id) = project_id {
-            input.insert("projectId".into(), project_id);
-        }
-        if !labels[0].is_empty() {
-            input.insert("addedLabelIds".into(), json!(labels[0]));
-        }
-        if !labels[1].is_empty() {
-            input.insert("removedLabelIds".into(), json!(labels[1]));
-        }
-        if let Some(viewer) = delegated_to {
-            input.insert("delegateId".into(), json!(viewer));
-        }
+        put(&mut input, "stateId", state_id);
+        put(&mut input, "projectId", project_id);
+        put(&mut input, "addedLabelIds", Some(&labels[0]).filter(|ids| !ids.is_empty()));
+        put(&mut input, "removedLabelIds", Some(&labels[1]).filter(|ids| !ids.is_empty()));
+        put(&mut input, "delegateId", delegated_to);
         update_issue(agent, token, &data.issue.id, Value::Object(input))
     })?;
     Ok(0)
@@ -337,15 +319,9 @@ pub fn issue_create(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
         if parent.is_some() {
             input.insert("parentId".into(), json!(data.as_ref().ok_or_else(no_context)?.issue.id));
         }
-        if let Some(project_id) = project_id {
-            input.insert("projectId".into(), json!(project_id));
-        }
-        if let Some(state_id) = state_id {
-            input.insert("stateId".into(), json!(state_id));
-        }
-        if !label_ids[0].is_empty() {
-            input.insert("labelIds".into(), json!(label_ids[0]));
-        }
+        put(&mut input, "projectId", project_id);
+        put(&mut input, "stateId", state_id);
+        put(&mut input, "labelIds", Some(&label_ids[0]).filter(|ids| !ids.is_empty()));
         let created = create_issue(agent, token, Value::Object(input))?;
         Ok((created, relations))
     })?;
@@ -495,8 +471,7 @@ pub fn issue_relate(agent: &Agent, argv: &[String], add: bool) -> Result<u8, Err
         Ok(!ids.is_empty())
     })?;
     if !found {
-        eprintln!("{id} has no such relation to {other}");
-        return Ok(NOTHING_TO_DO);
+        return nothing_to_do(&format!("{id} has no such relation to {other}"));
     }
     Ok(0)
 }
@@ -690,8 +665,7 @@ pub fn issue_chain(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     })?;
     let added: Vec<Value> = chain.blocks.iter().map(|((_, sub), (_, blocker))| json!({ "issue": sub, "blockedBy": blocker })).collect();
     let delegated: Vec<&str> = chain.delegate.iter().map(|(_, identifier)| identifier.as_str()).collect();
-    print_json(&json!({ "added": added, "delegated": delegated, "skipped": chain.skipped }))?;
-    Ok(if delegated.is_empty() { NOTHING_TO_DO } else { 0 })
+    print_exit(&json!({ "added": added, "delegated": delegated, "skipped": chain.skipped }), if delegated.is_empty() { NOTHING_TO_DO } else { 0 })
 }
 
 #[cfg(test)]

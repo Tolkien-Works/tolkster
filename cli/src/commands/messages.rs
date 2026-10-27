@@ -10,7 +10,7 @@ use crate::args::{Kind, parse};
 use crate::config::{files, owner};
 use crate::exec::run_command;
 use crate::plain::Time;
-use crate::cli::{conversation_session, thread_turn};
+use crate::cli::{conversation_session, logged, thread_turn};
 use crate::coauthor::{self, marked};
 use crate::request::{Message, Session, Thread};
 use crate::error::Error;
@@ -124,10 +124,7 @@ pub fn read(agent: &Agent, session_id: &str, after: Option<&str>, reader: Option
     // Another issue's session is printed to a worker but reported as read by no one.
     let reader = reader.filter(|reader| *reader != Reader::Worker || works_on(agent, &session));
     // A reading that couldn't be had bounds nothing: the messages are all printed.
-    let reading = state.reading(session_id).unwrap_or_else(|error| {
-        eprintln!("messages: what was read couldn't be asked, so every message is shown: {error}");
-        Reading::default()
-    });
+    let reading = logged(state.reading(session_id), "messages: what was read couldn't be asked, so every message is shown").unwrap_or_default();
     let messages = session.messages_after(&owner, bound(after, reader, &reading).as_deref());
     if let Some(reader) = reader
         && let Some((activity_id, at)) = session.newest_request(&owner)

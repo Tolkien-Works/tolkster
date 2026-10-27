@@ -6,7 +6,7 @@ use serde_json::json;
 use ureq::Agent;
 
 use crate::args::{Kind, parse};
-use crate::cli::print_json;
+use crate::cli::print_exit;
 use crate::config::files;
 use crate::error::Error;
 use crate::exec::run_command;
@@ -42,8 +42,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
 
 pub(super) fn report(host: &str, steps: Vec<Step>) -> Result<u8, Error> {
     let ok = passed(&steps);
-    print_json(&json!({ "host": host, "ok": ok, "steps": steps }))?;
-    Ok(if ok { 0 } else { 1 })
+    print_exit(&json!({ "host": host, "ok": ok, "steps": steps }), if ok { 0 } else { 1 })
 }
 
 #[cfg(test)]

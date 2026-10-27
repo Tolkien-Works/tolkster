@@ -6,7 +6,7 @@
 use ureq::Agent;
 
 use crate::args::parse;
-use crate::cli::print_json;
+use crate::cli::print_exit;
 use crate::config::{Config, files};
 use crate::error::Error;
 use crate::exec::run_command;
@@ -26,6 +26,5 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     let health = Health::default();
     let mut orca = Cli::paired(&mut run, &health).at_once(run_command);
     orca.listed()?;
-    print_json(&report(&config, &orca.answering(), &orca.silent(), &records))?;
-    Ok(0)
+    print_exit(&report(&config, &orca.answering(), &orca.silent(), &records), 0)
 }

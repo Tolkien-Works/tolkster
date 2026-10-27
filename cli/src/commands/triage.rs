@@ -8,13 +8,13 @@ use ureq::Agent;
 
 use crate::linear::{Relation, StateType, relate, with_token};
 use crate::args::{self, Kind, Parsed, parse};
-use crate::cli::{NOTHING_TO_DO, print_json, read_body};
+use crate::cli::{nothing_to_do, print_exit, read_body};
 use crate::config::{files, owner};
 use crate::exec::run_command;
 use crate::error::Error;
 use crate::estimates::{Estimation, Scale};
 use crate::issue_state::{Verdict, guarded_update, in_order, verdict_target};
-use crate::issues;
+use crate::issues::{self, put};
 use crate::post::comment_once;
 use crate::plain::{Commit, Id};
 use crate::state::{State, new_token};
@@ -164,8 +164,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
         // Refused while a start probed the verdict claim too, which it does only once the
         // triage machine no longer holds this session as running: that is no verdict.
         holds(&state, &identifier, &session)?;
-        eprintln!("{identifier}: has my verdict already");
-        return Ok(NOTHING_TO_DO);
+        return nothing_to_do(&format!("{identifier}: has my verdict already"));
     }
 
     // Then what follows from it. The comment stands whatever happens here.
@@ -176,13 +175,9 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
         }
     }
     let mut input = serde_json::Map::new();
-    if let Some(target) = target {
-        input.insert("stateId".into(), json!(target.id));
-    }
+    put(&mut input, "stateId", target.as_ref().map(|target| &target.id));
     if let Verdict::Accept { estimate, priority, .. } = &verdict {
-        if let Some(estimate) = estimate {
-            input.insert("estimate".into(), json!(estimate));
-        }
+        put(&mut input, "estimate", estimate.as_ref());
         input.insert("priority".into(), json!(priority));
     }
     if !input.is_empty() {
@@ -201,8 +196,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     if !failures.is_empty() {
         return Err(Error::Failed(format!("commented on {identifier}, but {}", failures.join("; "))));
     }
-    print_json(&json!({ "issue": identifier, "verdict": verdict.name(), "state": target.map(|t| json!(t.name)).unwrap_or(Value::Null) }))?;
-    Ok(0)
+    print_exit(&json!({ "issue": identifier, "verdict": verdict.name(), "state": target.map(|t| json!(t.name)).unwrap_or(Value::Null) }), 0)
 }
 
 // This session's to triage: the one the triage machine holds as running, given the issue

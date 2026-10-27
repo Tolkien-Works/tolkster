@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 use ureq::Agent;
 
 use crate::args::{Kind, js_trim, parse};
-use crate::cli::print_json;
+use crate::cli::print_exit;
 use crate::error::Error;
 use crate::linear::Nodes;
 use crate::sessions::shown;
@@ -52,8 +52,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     }
     let query_text = parsed.non_empty("query").map(js_trim);
     let filter = filter(parsed.non_empty("team"), parsed.non_empty("project"), parsed.non_empty("state"), parsed.non_empty("parent"))?;
-    print_json(&render(&shown::list(agent, filter, limit, query_text)?))?;
-    Ok(0)
+    print_exit(&render(&shown::list(agent, filter, limit, query_text)?), 0)
 }
 
 // The issues as listed, each with the fields Linear read, and whether another page exists.

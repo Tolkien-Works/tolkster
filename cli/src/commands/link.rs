@@ -5,7 +5,7 @@ use serde_json::json;
 use ureq::Agent;
 
 use crate::args::parse;
-use crate::cli::print_json;
+use crate::cli::{logged, print_exit};
 use crate::commands::asker::session_issue;
 use crate::config::{files, owner};
 use crate::error::Error;
@@ -23,8 +23,7 @@ pub fn run_in_review(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
         let issue_id = session_issue(agent, token, session_id, &owner)?;
         in_review(agent, token, &issue_id)
     })?;
-    print_json(&json!({ "review": review.as_str() }))?;
-    Ok(0)
+    print_exit(&json!({ "review": review.as_str() }), 0)
 }
 
 // What `tolkster pr create --session` adds to its JSON once the PR is open: whether the
@@ -32,13 +31,7 @@ pub fn run_in_review(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
 // PR, so a failure is reported, on stderr and as `false` or "failed", not raised.
 pub fn pr_opened(agent: &Agent, session_id: &str, issue_id: &str, number: u64, url: &str) -> (bool, &'static str) {
     let linked = with_token(agent, |token| add_session_link(agent, token, session_id, &format!("PR #{number}"), url));
-    let linked = linked.map_err(|error| eprintln!("the PR wasn't linked on the session: {error}")).is_ok();
-    let review = with_token(agent, |token| in_review(agent, token, issue_id)).map_or_else(
-        |error| {
-            eprintln!("the issue wasn't moved to review: {error}");
-            "failed"
-        },
-        Review::as_str,
-    );
+    let linked = logged(linked, "the PR wasn't linked on the session").is_some();
+    let review = logged(with_token(agent, |token| in_review(agent, token, issue_id)), "the issue wasn't moved to review").map_or("failed", Review::as_str);
     (linked, review)
 }

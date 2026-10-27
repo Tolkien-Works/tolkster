@@ -11,7 +11,7 @@ use serde_json::{Map, Value, json};
 use ureq::Agent;
 
 use crate::args::{Kind, parse};
-use crate::cli::{NOTHING_TO_DO, config_file, conversation_session, merge_json_file, print_json};
+use crate::cli::{NOTHING_TO_DO, config_file, conversation_session, merge_json_file, print_exit};
 use crate::coauthor;
 use crate::config::files;
 use crate::runtime::settings;
@@ -58,8 +58,7 @@ pub fn list(rest: &[String]) -> Result<u8, Error> {
         row["inOrca"] = json!(find_repo(&orca, Some(&entry.repo)).is_some());
         row
     });
-    print_json(&entries.collect::<Vec<_>>())?;
-    Ok(0)
+    print_exit(&entries.collect::<Vec<_>>(), 0)
 }
 
 pub fn map(agent: &Agent, rest: &[String]) -> Result<u8, Error> {
@@ -154,8 +153,7 @@ pub(crate) fn checked(teams: &[KeyedTeam], change: &Change) -> Result<(Vec<Strin
 // The edit, merged into the file: exit 0 when it changed, 3 when it didn't.
 pub(crate) fn write(file: &Path, repo: &str, edit: Edit, change: &Change) -> Result<u8, Error> {
     let changed = merge(file, |repos| edited(repos, repo, edit, change))?;
-    print_json(&json!({ "repo": repo, "changed": changed }))?;
-    Ok(if changed { 0 } else { NOTHING_TO_DO })
+    print_exit(&json!({ "repo": repo, "changed": changed }), if changed { 0 } else { NOTHING_TO_DO })
 }
 
 // `repos` as `edit` makes it from `repos` as the file has it then, in one write; whether it

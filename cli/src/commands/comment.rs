@@ -3,7 +3,7 @@ use std::time::Duration;
 use ureq::Agent;
 
 use crate::args::{self, Kind, parse};
-use crate::cli::{NOTHING_TO_DO, read_body, thread_turn};
+use crate::cli::{nothing_to_do, read_body, thread_turn};
 use crate::config::{Files, files, owner};
 use crate::commands::asker::{Asker, SESSION_OPTION};
 use crate::context::{COMMENT_HOLD, Comments, Wrote, may_comment, parse_closed, write_comment};
@@ -79,10 +79,7 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
             Some(Wrote::Created) => "posted",
             Some(Wrote::Updated) => "updated",
             Some(Wrote::Replaced) => "posted anew, the last one gone,",
-            Some(Wrote::Changed(at)) => {
-                eprintln!("{target}: my context comment was written at {at}, after --seen: read it again, fold it in, then write with --seen {at}");
-                return Ok(NOTHING_TO_DO);
-            }
+            Some(Wrote::Changed(at)) => return nothing_to_do(&format!("{target}: my context comment was written at {at}, after --seen: read it again, fold it in, then write with --seen {at}")),
             None if waited > COMMENT_HOLD => return Err(Error::Failed(format!("{target}: another run is still writing my context comment"))),
             None => {
                 std::thread::sleep(BUSY_WAIT);
@@ -142,8 +139,7 @@ fn reply(agent: &Agent, id: &str, root: &str, parsed: &args::Parsed, body: &str,
     }
     let request = thread_request(agent, files, root, request)?;
     let Some(posted) = reply_once(agent, &thread.issue_id, root, body, &answer_key(&thread.root, &request))? else {
-        eprintln!("{}: this turn has already answered in the thread of {root}", thread.identifier);
-        return Ok(NOTHING_TO_DO);
+        return nothing_to_do(&format!("{}: this turn has already answered in the thread of {root}", thread.identifier));
     };
     let state = State::open(agent, files)?;
     // The thread's request is keyed by its root, which stands for the session's ID.

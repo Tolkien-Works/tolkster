@@ -56,9 +56,7 @@ pub fn run(agent: &Agent, kind: &str, argv: &[String]) -> Result<u8, Error> {
             return Ok(0);
         }
         "start" => {
-            if report_start(agent, &text).is_err() {
-                eprintln!("tolkster hook: no start posted");
-            }
+            missed(report_start(agent, &text), "no start posted");
             // Last, so the trail and narration, which must land before the call's end, have
             // the hook's time first.
             if let Some(call) = parse_call(&text).filter(closes_terminal) {
@@ -68,14 +66,9 @@ pub fn run(agent: &Agent, kind: &str, argv: &[String]) -> Result<u8, Error> {
         }
         "after" => {
             let traced = parse_call(&text).is_some_and(|call| traced(&call));
-            let committed = report_commit(agent, &text, traced).unwrap_or_else(|_| {
-                eprintln!("tolkster hook: no Committed action");
-                None
-            });
+            let committed = missed(report_commit(agent, &text, traced), "no Committed action").flatten();
             let reported = if traced { report_trace(agent, &text, committed.as_deref()) } else { report_outcome(agent, &text, started) };
-            if reported.is_err() {
-                eprintln!("tolkster hook: no outcome posted");
-            }
+            missed(reported, "no outcome posted");
             return Ok(0);
         }
         _ => {}
@@ -92,9 +85,7 @@ pub fn run(agent: &Agent, kind: &str, argv: &[String]) -> Result<u8, Error> {
         return Ok(0);
     }
     let at = whereabouts(&tail, whole, &call, &newest.session);
-    if post(agent, &call, &doing, &at, &newest, started, (&tail, whole)).is_err() {
-        eprintln!("tolkster hook: no post for tool call {}", Id::parse(&call.id).as_deref().unwrap_or("?"));
-    }
+    missed(post(agent, &call, &doing, &at, &newest, started, (&tail, whole)), &format!("no post for tool call {}", Id::parse(&call.id).as_deref().unwrap_or("?")));
     Ok(0)
 }
 
@@ -145,9 +136,7 @@ fn report_state(agent: &Agent, text: &str, started: i64, began: Instant) {
         State::open(agent, &files)?.report_since(began, |elapsed| agent_state(observed, &worker.worktree_id, &iso(started), elapsed));
         Ok(())
     });
-    if reported.is_err() {
-        eprintln!("tolkster hook: no state reported");
-    }
+    missed(reported, "no state reported");
 }
 
 // The session's timing (hook::timing), from its whole transcript and its sub-agents', sent as
@@ -162,9 +151,7 @@ fn report_timing(agent: &Agent, transcript: &Path) {
     let sub_agents = sub_agents(transcript).iter().filter(since_launch).filter_map(|path| std::fs::read_to_string(path).ok()).map(|text| moments(&text)).collect();
     let Some(summary) = timing::summary(&session, launch, moments(&main), sub_agents) else { return };
     let reported = files().and_then(|files| State::open(agent, &files)?.reported(crate::timing::report(&worker.worktree_id, &summary)));
-    if reported.is_err() {
-        eprintln!("tolkster hook: no timing reported");
-    }
+    missed(reported, "no timing reported");
 }
 
 // How many of HEAD's newest moves are read for the commits a call or a trail line made: those
@@ -260,9 +247,7 @@ fn report_start(agent: &Agent, text: &str) -> Result<(), Error> {
     let Some(worker) = card::launched() else { return Ok(()) };
     let Some((tail, whole)) = call.transcript.as_deref().and_then(|path| read_tail(path).ok()) else { return Ok(()) };
     trail(agent, &call, &tail, &worker);
-    if narrate_post(agent, &call, &tail, &worker).is_err() {
-        eprintln!("tolkster hook: no narration posted for tool call {}", Id::parse(&call.id).as_deref().unwrap_or("?"));
-    }
+    missed(narrate_post(agent, &call, &tail, &worker), &format!("no narration posted for tool call {}", Id::parse(&call.id).as_deref().unwrap_or("?")));
     let Some(kind) = pairing(&call) else { return Ok(()) };
     let Some(newest) = last_report(&tail).filter(may_post_after) else { return Ok(()) };
     let Some(session) = Id::parse(&newest.session) else { return Ok(()) };
@@ -430,9 +415,7 @@ fn tick_call(agent: &Agent, call: &Call, kind: &str) {
             Tick::Minutes(_) => Ok(()),
             Tick::Ended(failed) => post_outcome(agent, &session, kind, &at, known(call.tool, command).then_some(failed)),
         };
-        if posted.is_err() {
-            eprintln!("tolkster hook: no tick for tool call {}", Id::parse(&call.id).as_deref().unwrap_or("?"));
-        }
+        missed(posted, &format!("no tick for tool call {}", Id::parse(&call.id).as_deref().unwrap_or("?")));
         true
     });
 }
@@ -471,6 +454,11 @@ fn post_outcome(agent: &Agent, session: &Id, kind: &str, at: &At, failed: Option
         Some(input) => send(agent, &input).map(|_| ()),
         None => Ok(()),
     }
+}
+
+// A step that failed never fails the hook, and only `what` is printed, never the error.
+fn missed<T, E>(result: Result<T, E>, what: &str) -> Option<T> {
+    result.map_err(|_| eprintln!("tolkster hook: {what}")).ok()
 }
 
 #[cfg(test)]

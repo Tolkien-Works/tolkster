@@ -10,7 +10,7 @@ use std::time::{Duration, Instant};
 use ureq::Agent;
 
 use crate::args::{Kind, parse};
-use crate::cli::{CONVERSATION_ENV, THREAD_ENV, env};
+use crate::cli::{CONVERSATION_ENV, THREAD_ENV, env, logged};
 use crate::commands::messages;
 use crate::exec::run_command;
 use crate::machine::{Reader, turn_idle};
@@ -46,13 +46,9 @@ pub fn run(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
 // forgetting, should that have failed too.
 fn end_turn(agent: &Agent, session_id: &str) {
     let Some(handle) = env("ORCA_TERMINAL_HANDLE") else { return };
-    if let Err(error) = forget_turn(agent, session_id, &handle) {
-        eprintln!("converse: {error}");
-    }
-    if !close(&handle)
-        && let Err(error) = forget_turn(agent, session_id, &handle)
-    {
-        eprintln!("converse: the terminal wasn't closed, and the record still names it: {error}");
+    logged(forget_turn(agent, session_id, &handle), "converse");
+    if !close(&handle) {
+        logged(forget_turn(agent, session_id, &handle), "converse: the terminal wasn't closed, and the record still names it");
     }
 }
 
@@ -126,7 +122,7 @@ fn run_turn(agent: &Agent, asked: Request, agent_session: &Id, request: Option<T
         (false, Request::Thread(_)) => None,
     };
     let text = if resume { None } else { Some(std::fs::read_to_string(brief).context(brief.display())?) };
-    let said = read(agent, asked, after, request.as_deref()).inspect_err(|error| eprintln!("converse: reading the owner's words failed, so the turn reads them itself: {error}")).ok();
+    let said = logged(read(agent, asked, after, request.as_deref()), "converse: reading the owner's words failed, so the turn reads them itself");
     let prompt = converse::prompt(asked, held_or_text(text.as_deref(), brief), said.as_deref(), after, stale);
     let (set, unset): (_, &[&str]) = match (asked, &request) {
         (Request::Session(id), _) => ([(CONVERSATION_ENV, id.to_string())], &[]),
