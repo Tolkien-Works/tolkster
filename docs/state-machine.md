@@ -626,7 +626,7 @@ Read as the request transitions are.
 - At most one command is in flight per issue, besides a class 1 event's, and none for longer than three timeouts while `listen` is connected.
 - A waiting command is sent early only when what it names clears, and each early send after its first is spent, so it still ends.
 - A command result's transition runs in the state its machine is in when it lands, so it never acts past a stop, undelegation, cancel or halt that came first.
-- A fact is replaced only by a newer value from its own clock, and an event carrying nothing newer moves no machine; a GitHub SHA is matched, never ordered. A landing has no clock: the first is kept. At one clock, a `delegateChanged` beats a read's `unknown` and the owner a `created` read was taken for. The owner's delegation webhook over the owner's is newer: Linear sends one only on a change.
+- A fact is replaced only by a newer value from its own clock, and an event carrying nothing newer moves no machine; a GitHub SHA is matched, never ordered. A landing has no clock: the first is kept. At one clock, a `delegateChanged` beats a read's `unknown` and the owner a `created` read was taken for. The owner's delegation webhook over the owner's, at a later clock, is newer: Linear sends one only on a change.
 - A deadline is named by the version that armed it, and dropped once its state is left or it is armed again; `takeBack` only once none is owed.
 - A slot is granted only by the coordinator's ledger, on a host with room, and reaches `claimed` only through a decision on a read landing after the grant, or in the step that asked.
 - A waiting place keeps its age and takes the issue's priority as last asked, its own else its parent's.
