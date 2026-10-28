@@ -17,7 +17,7 @@ const cases: Case[] = [
   { row: "launching stopRequested", when: "—", given: { work: "running" }, event: ev("stopRequested", { session: S, at: T1 }), expect: { work: "halted", commands: ["stopWorker"], out: ["slotReleased"], workOwn: 2 * MIN } },
   { row: "exited stopRequested", when: "No agent runs", given: { work: "exited" }, event: ev("stopRequested", { session: S, at: T1 }), expect: { work: "exited", commands: [] } },
   { row: "launching delegateChanged", when: "Taken from Tolkster", given: { work: "held" }, event: ev("delegateChanged", { by: null, at: T1 }), expect: { work: "halted", commands: ["stopWorker"], workOwn: 2 * MIN } },
-  { row: "launching delegateChanged", when: "Otherwise", given: { work: "launching" }, event: ev("delegateChanged", { by: "owner", at: T1 }), expect: { work: "launching", commands: [] } },
+  { row: "launching delegateChanged", when: "Otherwise", given: { work: "launching" }, event: ev("delegateChanged", { by: "chain", at: T1 }), expect: { work: "launching", commands: [] } },
   { row: "exited delegateChanged", when: "No agent runs", given: { work: "rest" }, event: ev("delegateChanged", { by: null, at: T1 }), expect: { work: "rest", commands: [] } },
   { row: "launching parentHalted", when: "Its `chain` held", given: { work: "running", kind: "chain", sess: { byOwner: false }, facts: { chain: { parent: P, run: "r1" }, delegate: { value: "chain", at: T0 } } }, event: ev("parentHalted", { parent: P, at: T1 }), expect: { work: "halted", commands: ["stopWorker"], workOwn: 2 * MIN } },
   { row: "launching parentHalted", when: "Otherwise", given: { work: "running", sess: {}, facts: { chain: { parent: P, run: "r1" } } }, event: ev("parentHalted", { parent: P, at: T1 }), expect: { work: "running", commands: [] } },

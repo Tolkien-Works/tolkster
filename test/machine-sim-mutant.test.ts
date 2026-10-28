@@ -4,13 +4,14 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { generate, LENGTH, SEEDS } from "./machine-sim-steps.ts";
+import { generate, LENGTH, SEEDS, TRACE_SEEDS } from "./machine-sim-steps.ts";
 import { run, shrink, type Mutant } from "./machine-sim.ts";
 import { spread } from "./machine-sim-seeds.ts";
 
-// The lowest seed that catches the mutant, each share having stopped at its own first.
+// The lowest seed that catches the mutant, of those the seeded runs hold to every invariant,
+// each share having stopped at its own first.
 async function caught(mutant: Mutant): Promise<{ seed: number; check: string }> {
-  const found = (await spread(Array.from({ length: SEEDS }, (_, i) => i + 1), mutant)).flatMap((s) => (s.caught === null ? [] : [s.caught]));
+  const found = (await spread([...Array.from({ length: SEEDS }, (_, i) => i + 1), ...TRACE_SEEDS.filter((s) => s > SEEDS)], mutant)).flatMap((s) => (s.caught === null ? [] : [s.caught]));
   assert.ok(found.length > 0, `no seed caught ${mutant}`);
   return found.reduce((a, b) => (b.seed < a.seed ? b : a));
 }

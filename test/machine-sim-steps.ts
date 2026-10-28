@@ -29,13 +29,13 @@ export type Outcome = "ok" | "failed" | "retryable" | "lost" | "held" | "gone" |
 export type Meets = { to: "startRound" | "deliverMessage"; as: "typed" | "exiting" } | { to: "deliverMessage"; as: "gone" } | { to: "startRound" | "stopWorker"; as: "unnamed" };
 
 export type Step =
-  // The owner, in Linear: a delegation with its session (`again`: on an issue with one, which
-  // Linear opens none for; `created`: the issue created delegated, which no history entry
-  // names, and moved on after; `lagging`: one the next read doesn't show), a mention with its own, a prompt or a stop in the newest
+  // The owner, in Linear: a delegation with its session, or on an issue with one none, as
+  // Linear opens (`created`: the issue created delegated, which no history entry names, and
+  // moved on after; `lagging`: one the next read doesn't show), a mention with its own, a prompt or a stop in the newest
   // delegation's session, or with `mention` a stop in the newest mention's, an undelegation,
   // the issue's state, a comment, a reply to a note of Tolkster's or with `root` a comment
   // rooting one, and the blocker's state.
-  | { k: "delegate"; i: number; again?: true; as?: "created" | "lagging" }
+  | { k: "delegate"; i: number; as?: "created" | "lagging" }
   | { k: "mention"; i: number }
   | { k: "prompt"; i: number }
   | { k: "stop"; i: number; mention?: true }
@@ -150,15 +150,16 @@ export const LENGTH = 150;
 // (`closeAgent` in 2293, `stopWorker` in 1072), each result the model gives listen's own (ok,
 // failed (1722) and held (87)), turns (1931), a reap that removes for a merged PR and one that
 // keeps for an agent running (1614) and one of a completion with no PR (2293), and a start that
-// made its worktree (87), one that found it with its agent there and one that named it and
+// made its worktree (87), one that found it with its agent there (18) and one that named it and
 // launched on the brief there (1722), one with none that it didn't name (3132), an orchestrating one (2293), a
 // resume (81), a read of a sub-issue's parent and of a parent's sub-issues (2293), and of a
 // reply to a note and of a comment rooting one (87). Past them the seeds reach what the first
 // don't: a push from a PR's read (2755), a PR's round past its cap for a reviewer and its notice
 // otherwise (1722), a branch update refused past the cap, moved or failed (1931) and one whose
 // head moved before it ended (3318), and a resume that failed, a round's line typed or unnamed
-// and a PR opened at rest (3132).
-export const TRACE_SEEDS = [81, 87, 1072, 1614, 1722, 1931, 2293, 2755, 3132, 3318];
+// and a PR opened at rest (3132); and what machine-sim-mutant.test.ts's mutants need, a round
+// typed into an agent that exits (472) and an observation while launching (832).
+export const TRACE_SEEDS = [18, 81, 87, 472, 832, 1072, 1614, 1722, 1931, 2293, 2755, 3132, 3318];
 
 // The world's steps likewise: a base pushed, an agent at work, and what a line or a branch
 // update meets.

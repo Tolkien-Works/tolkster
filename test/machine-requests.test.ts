@@ -45,6 +45,7 @@ export const cases: Case[] = [
   { row: "done delegateChanged", when: "Delegated to Tolkster", given: { req: "done", facts: { delegate: { value: null, at: T0 } } }, event: ev("delegateChanged", { by: "owner", at: T1 }), expect: { req: "requested", commands: ["readIssue"], reqOwn: 15 * MIN } },
   { row: "done delegateChanged", when: "Otherwise", given: { req: "done" }, event: ev("delegateChanged", { by: null, at: T1 }), expect: { req: "done", commands: [] } },
   { row: "claimed delegateChanged", when: "Delegated to Tolkster, newer, mid-turn", given: { req: "claimed", kind: "mention", sess: { turn }, facts: { delegate: { value: null, at: T0 } } }, event: ev("delegateChanged", { by: "owner", at: T1 }), expect: { req: "claimed", commands: [] } },
+  { row: "claimed delegateChanged", when: "Delegated to Tolkster, newer, a worker's", given: { req: "claimed", work: "running", facts: { delegate: { value: "owner", at: T0 } } }, event: ev("delegateChanged", { by: "owner", at: T1 }), expect: { req: "requested", commands: ["readIssue"], reqOwn: 15 * MIN } },
   { row: "claimed delegateChanged", when: "The work machine halts", given: { req: "claimed" }, event: ev("delegateChanged", { by: null, at: T1 }), expect: { req: "claimed", commands: [] } },
   { row: "queued issueStateChanged", when: "Completed or cancelled", given: { req: "queued", sess: { waiting: "blockers" } }, event: ev("issueStateChanged", { state: "completed", parent: null, at: T1 }), expect: { req: "done", commands: ["postNotice:alreadyDone"], reqOwn: null } },
   { row: "requested issueStateChanged", when: "Otherwise", given: { req: "requested" }, event: ev("issueStateChanged", { state: "completed", parent: null, at: T1 }), expect: { req: "requested", commands: [] } },
@@ -134,6 +135,8 @@ for (const c of stops) test(`request: ${c.row}, ${c.when}`, () => check(c));
 test("request: claimed commandResult, `startTurn` failed and `listen` said so: no notice", () => check({ row: "claimed commandResult", when: "`startTurn` failed, said", given: { req: "claimed", kind: "mention", sess: { turn }, queue: [{ kind: "startTurn", machine: S }] }, event: result(`${ISSUE}.1`, "failed", { said: true }), expect: { req: "done", commands: [] } }));
 
 test("request: a queued request on an issue that moves to a duplicate state ends with the cancelled notice", () => check({ row: "queued issueStateChanged", when: "Completed or cancelled", given: { req: "queued", sess: { waiting: "blockers" } }, event: ev("issueStateChanged", { state: stateType("duplicate"), parent: null, at: T1 }), expect: { req: "done", commands: ["postNotice:cancelled"], reqOwn: null } }));
+
+test("request: a delegation that waited behind a newer stop resumes no one", () => check({ row: "done delegateChanged", when: "Under a newer stop", given: { req: "done", sess: { request: { kind: "stop", at: T2 } }, facts: { delegate: { value: "owner", at: T0 } } }, event: ev("delegateChanged", { by: "owner", at: T1 }), expect: { req: "done", commands: [] } }));
 
 test("every request transition in the doc has its case, in order", () => {
   const rows = rowsOf("## Request transitions");
@@ -308,6 +311,22 @@ test("a turn that ends outside claimed is forgotten, so the next request starts 
     assert.equal(o.req, req);
     assert.equal(o.store.sessions[S].facts.turn, null, req);
   }
+});
+
+// Linear opens no new session for it, and sends it only on a change: the owner's delegation
+// over the owner's, its take-away late, is the worker's session's request again, as the
+// seeds found it, and a read's only moves the clock.
+test("the owner's newer delegation on a worker's claim is decided again as its request, and a read's is not", () => {
+  const claim = { req: "claimed", work: "running", sess: { answeredThrough: T1 }, facts: { delegate: { value: "owner", at: T0 } } } as const;
+  const again = apply(given(claim), ev("delegateChanged", { by: "owner", at: T2 }));
+  assert.deepEqual([again.req, again.commands, again.store.sessions[S].facts.request], ["requested", ["readIssue"], { kind: "delegation", at: T2 }]);
+  const late = apply(again.store, ev("delegateChanged", { by: null, at: T1 }));
+  assert.deepEqual([late.req, late.commands], ["requested", []]);
+  const viaRead = apply(given({ ...claim, queue: [{ kind: "readIssue", machine: "issue" }] }), result(`${ISSUE}.1`, "ok", read({ updatedAt: T2 })));
+  assert.deepEqual([viaRead.req, viaRead.commands], ["claimed", []]);
+  // A create's late webhook at the clock of the `created` delegation rule 6 took as the owner's.
+  const created = apply(given({ ...claim, facts: { delegate: { value: "owner", at: T0, created: true } } }), ev("delegateChanged", { by: "owner", at: T0 }));
+  assert.deepEqual([created.req, created.commands], ["claimed", []]);
 });
 
 test("a claimed turn whose start was lost and never opened is told at its deadline's observe, which reports it ended", () => {
@@ -631,6 +650,15 @@ test("a read while the work is merged leaves the request waiting, and the reap t
   assert.equal(read.req, "queued");
   const reaped = apply(read.store, ev("workChanged", { from: "merged", to: "reaped", version: 2, noticed: null }));
   assert.deepEqual([reaped.req, reaped.commands], ["requested", ["readIssue"]]);
+});
+
+// The stopped worker shown idle again, as the seeds found it: its read of the delegation
+// after the stop claims nothing, which would wait on an answer no worker owes.
+test("a worker's read while its work is halted or exited leaves the request requested", () => {
+  for (const work of ["halted", "exited"] as const) {
+    const read = apply(given({ req: "requested", work }), ev("workerRead", { session: S, reader: "worker", through: T1 }));
+    assert.deepEqual([read.req, read.commands], ["requested", []], work);
+  }
 });
 
 test("each reader's read mark is its own, so a turn's read leaves a fresh worker's unread", () => {
