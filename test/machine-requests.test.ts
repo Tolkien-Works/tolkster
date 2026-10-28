@@ -322,6 +322,9 @@ test("the owner's newer delegation on a worker's claim is decided again as its r
   assert.deepEqual([late.req, late.commands], ["requested", []]);
   const viaRead = apply(given({ ...claim, queue: [{ kind: "readIssue", machine: "issue" }] }), result(`${ISSUE}.1`, "ok", read({ updatedAt: T2 })));
   assert.deepEqual([viaRead.req, viaRead.commands], ["claimed", []]);
+  // A create's late webhook at the clock of the `created` delegation rule 6 took as the owner's.
+  const created = apply(given({ ...claim, facts: { delegate: { value: "owner", at: T0, created: true } } }), ev("delegateChanged", { by: "owner", at: T0 }));
+  assert.deepEqual([created.req, created.commands], ["claimed", []]);
 });
 
 test("a claimed turn whose start was lost and never opened is told at its deadline's observe, which reports it ended", () => {
