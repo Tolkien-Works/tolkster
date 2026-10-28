@@ -184,18 +184,15 @@ function step(ctx: Ctx, id: string, e: Event): void {
           requestAgain(ctx, id);
         }
       } else if (state === "done" && mine) {
-        recordDelegation(sess, e.at);
-        requestAgain(ctx, id);
+        // Only as the session's newest request: a stop or prompt after it was decided already.
+        if (recordDelegation(sess, e.at)) requestAgain(ctx, id);
       } else if (state === "claimed" && mine && kindOf(ctx.s, id) !== "note") {
         // Linear opens no new session for a delegation on an issue that already has one. Kept
         // for a turn's end, whose newer request is decided again as work (a queued `startTurn`
         // holds this event back, and the turn is set before it is queued); a worker's claim on
         // the session rule 3 asks is decided again at once, as a prompt is.
         if (sess.facts.turn !== null) recordDelegation(sess, e.at);
-        else if (askedSession(ctx) === id) {
-          recordDelegation(sess, e.at);
-          requestAgain(ctx, id);
-        }
+        else if (askedSession(ctx) === id && recordDelegation(sess, e.at)) requestAgain(ctx, id);
       }
       return;
     }
@@ -256,8 +253,11 @@ function isConversationBefore(ctx: Ctx, id: string): boolean {
   return kind === "note" || ((kind === "mention" || kind === "reply") && !ctx.s.facts.everDelegated);
 }
 
-function recordDelegation(sess: Session, at: string): void {
-  if (sess.facts.request === null || sess.facts.request.at < at) sess.facts.request = { kind: "delegation", at };
+// Whether the delegation is the session's newest request.
+function recordDelegation(sess: Session, at: string): boolean {
+  if (sess.facts.request !== null && sess.facts.request.at >= at) return false;
+  sess.facts.request = { kind: "delegation", at };
+  return true;
 }
 
 // The reader has this request: its own read reached it.

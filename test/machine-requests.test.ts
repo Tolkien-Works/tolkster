@@ -136,6 +136,8 @@ test("request: claimed commandResult, `startTurn` failed and `listen` said so: n
 
 test("request: a queued request on an issue that moves to a duplicate state ends with the cancelled notice", () => check({ row: "queued issueStateChanged", when: "Completed or cancelled", given: { req: "queued", sess: { waiting: "blockers" } }, event: ev("issueStateChanged", { state: stateType("duplicate"), parent: null, at: T1 }), expect: { req: "done", commands: ["postNotice:cancelled"], reqOwn: null } }));
 
+test("request: a delegation that waited behind a newer stop resumes no one", () => check({ row: "done delegateChanged", when: "Under a newer stop", given: { req: "done", sess: { request: { kind: "stop", at: T2 } }, facts: { delegate: { value: "owner", at: T0 } } }, event: ev("delegateChanged", { by: "owner", at: T1 }), expect: { req: "done", commands: [] } }));
+
 test("every request transition in the doc has its case, in order", () => {
   const rows = rowsOf("## Request transitions");
   assert.equal(cases.length, rows.length, "one case per row");
