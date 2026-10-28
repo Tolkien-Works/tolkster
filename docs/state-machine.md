@@ -371,6 +371,7 @@ names any it arms, and otherwise keeps what is set.
 | `done` | `delegateChanged` | Delegated to Tolkster | `requested` | `readIssue` |
 | `done` | `delegateChanged` | Otherwise | unchanged | none |
 | `claimed` | `delegateChanged` | Delegated to Tolkster, newer, mid-turn, not a note's: kept as the request | unchanged | none |
+| `claimed` | `delegateChanged` | Delegated to Tolkster, newer, a worker's on the session rule 3 asks: kept as the request | `requested`; 15 min | `readIssue` |
 | `claimed`, `stopping` | `delegateChanged` | The work machine halts the worker | unchanged | none |
 | `queued` | `issueStateChanged` | Completed or cancelled, and the request is work | `done` | `postNotice` (`alreadyDone` or `cancelled`) |
 | `requested`, `queued` | `issueStateChanged` | Otherwise | unchanged | none |
@@ -393,7 +394,7 @@ names any it arms, and otherwise keeps what is set.
 | `requested`, `queued`, `claimed`, `done`, `stopping` | `turnIdle` | A working turn stopped short of answering | unchanged; warm, 2 min | `stopTurn`, idle |
 | `requested`, `queued`, `claimed`, `done`, `stopping` | `turnIdle` | Otherwise: no turn, one warm or closing, or from another terminal (a turn whose lost start named none takes it) | unchanged | none |
 | `queued` | `workerRead` | Waiting on blockers or the merge: the read is a fact | unchanged | none |
-| `requested`, `queued` | `workerRead` | By the issue's worker or this session's turn, reaching this request | `claimed` | none |
+| `requested`, `queued` | `workerRead` | By the issue's worker while one runs, or this session's turn, reaching this request | `claimed` | none |
 | `requested`, `queued` | `workerRead` | Otherwise | unchanged | none |
 | `claimed`, `done`, `stopping` | `workerRead` | The read is a fact | unchanged | none |
 | `claimed` | `workerAnswered` | After the request, by a reader whose read reached it | `done` | none |
@@ -625,7 +626,7 @@ Read as the request transitions are.
 - At most one command is in flight per issue, besides a class 1 event's, and none for longer than three timeouts while `listen` is connected.
 - A waiting command is sent early only when what it names clears, and each early send after its first is spent, so it still ends.
 - A command result's transition runs in the state its machine is in when it lands, so it never acts past a stop, undelegation, cancel or halt that came first.
-- A fact is replaced only by a newer value from its own clock, and an event carrying nothing newer moves no machine; a GitHub SHA is matched, never ordered. A landing has no clock: the first is kept. At one clock, a `delegateChanged` beats a read's `unknown` and the owner a `created` read was taken for.
+- A fact is replaced only by a newer value from its own clock, and an event carrying nothing newer moves no machine; a GitHub SHA is matched, never ordered. A landing has no clock: the first is kept. At one clock, a `delegateChanged` beats a read's `unknown` and the owner a `created` read was taken for. The owner's delegation webhook over the owner's is newer: Linear sends one only on a change.
 - A deadline is named by the version that armed it, and dropped once its state is left or it is armed again; `takeBack` only once none is owed.
 - A slot is granted only by the coordinator's ledger, on a host with room, and reaches `claimed` only through a decision on a read landing after the grant, or in the step that asked.
 - A waiting place keeps its age and takes the issue's priority as last asked, its own else its parent's.

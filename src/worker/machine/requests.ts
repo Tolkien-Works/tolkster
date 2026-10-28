@@ -186,11 +186,16 @@ function step(ctx: Ctx, id: string, e: Event): void {
       } else if (state === "done" && mine) {
         recordDelegation(sess, e.at);
         requestAgain(ctx, id);
-      } else if (state === "claimed" && mine && sess.facts.turn !== null && kindOf(ctx.s, id) !== "note") {
-        // Kept for the turn's end, whose newer request is decided again as work: Linear opens
-        // no new session for a delegation on an issue that already has one. A queued
-        // `startTurn` holds this event back, and the turn is set before it is queued.
-        recordDelegation(sess, e.at);
+      } else if (state === "claimed" && mine && kindOf(ctx.s, id) !== "note") {
+        // Linear opens no new session for a delegation on an issue that already has one. Kept
+        // for a turn's end, whose newer request is decided again as work (a queued `startTurn`
+        // holds this event back, and the turn is set before it is queued); a worker's claim on
+        // the session rule 3 asks is decided again at once, as a prompt is.
+        if (sess.facts.turn !== null) recordDelegation(sess, e.at);
+        else if (askedSession(ctx) === id) {
+          recordDelegation(sess, e.at);
+          requestAgain(ctx, id);
+        }
       }
       return;
     }
@@ -219,6 +224,8 @@ function step(ctx: Ctx, id: string, e: Event): void {
     case "workerRead":
       // The sub-issues' end or added is no activity a reader reads: only its decision claims it.
       // Nor is a wait on blockers or the merge: only the blocker re-check, or the reap, ends it.
+      // Nor a worker's read once its work has left the agent states: it was stopped.
+      if (e.reader === "worker" && !AGENT_STATES.includes(ctx.s.work?.state ?? "reaped")) return;
       if ((state === "requested" || (state === "queued" && (sess.facts.waiting === "slot" || sess.facts.waiting === "held"))) && reached(sess, e.reader) && !fromChildren(sess)) enterRequest(ctx, id, "claimed");
       return;
     case "workerAnswered":

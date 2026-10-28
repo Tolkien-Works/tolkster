@@ -56,7 +56,9 @@ export function mergeEvent(s: Store, e: Event, nowMs: number, sentMs: number | n
       if (f.delegate !== null && f.delegate.value === e.by) {
         f.delegate.at = e.at;
         delete f.delegate.created;
-        return "stale";
+        // Linear sends one only on a change: the owner's newer one is a delegation again, its
+        // take-away still to come or lost.
+        return sentMs === null && e.by === "owner" ? "fresh" : "stale";
       }
       f.delegate = { value: e.by, at: e.at };
       if (e.by === "owner" || e.by === "chain") f.everDelegated = true;

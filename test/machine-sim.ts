@@ -234,11 +234,11 @@ class Sim {
   }
 
   // The session an event lands for is one the machine has heard of, unless the event is a
-  // stop, which carries no request. A note's thread's request is heard once its issue's store
+  // stop or a merge's ask, which carry no request. A note's thread's request is heard once its issue's store
   // holds it, never when its reply was too old to answer or told to a running worker instead.
   heard(event: Event): void {
     const session = (event as { session?: unknown }).session;
-    if (typeof session === "string" && event.kind !== "ownerStopped" && this.world.requests.get(session)?.kind !== "note") this.world.heard.add(session);
+    if (typeof session === "string" && event.kind !== "ownerStopped" && event.kind !== "mergeAsked" && this.world.requests.get(session)?.kind !== "note") this.world.heard.add(session);
     const s = this.storage.data.get(`machine:issue:${event.issue}`) as Store | undefined;
     for (const [root, r] of this.world.requests) if (r.kind === "note" && ISSUES[r.i] === event.issue && s?.sessions[root]?.facts.request?.at === r.at) this.world.heard.add(root);
   }
@@ -352,9 +352,10 @@ class Sim {
     switch (st.k) {
       case "delegate": {
         const w = this.world.issues[st.i];
-        // The session rule 3 asks, as the store would find it with none trusted.
+        // Linear opens no new session on an issue that has one: the delegation comes alone, on
+        // the session rule 3 asks, as the store would find it with none trusted.
         const asked = w.sessions.findLast((x) => x.kind === "delegation") ?? (w.sessions.every((x) => x.kind === "mention") ? w.sessions.at(-1) : undefined);
-        if (st.again && asked !== undefined) {
+        if (asked !== undefined) {
           if (w.delegate === "owner") break;
           const at = this.time();
           w.delegate = "owner";
@@ -518,7 +519,10 @@ class Sim {
         if (!w.worktree || w.agent === null || w.agent === "exited" || session === null) break;
         const at = this.time();
         if (st.act === "read") this.post({ kind: "workerRead", id: this.id("read"), issue: ISSUES[st.i], session, reader: "worker", through: at }, false);
-        else this.post({ kind: "workerAnswered", id: this.id("answer"), issue: ISSUES[st.i], session, reader: "worker", at });
+        else {
+          this.post({ kind: "workerAnswered", id: this.id("answer"), issue: ISSUES[st.i], session, reader: "worker", at });
+          this.world.answered(session);
+        }
         break;
       }
       case "listen":

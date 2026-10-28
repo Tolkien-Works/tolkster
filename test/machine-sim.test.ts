@@ -350,7 +350,7 @@ async function delegatedAgain(retires: boolean): Promise<void> {
   const before: Step[] = [...SETTLED, ...(retires ? [{ k: "time", ms: 8 * DAY + 60_000 } as Step] : [])];
   let retired = false;
   const at: Record<string, number[]> = {};
-  const failure = await run([...before, { k: "delegate", i: 0, again: true }, { k: "deliver", n: 0 }], null, (i, _, seen) => {
+  const failure = await run([...before, { k: "delegate", i: 0 }, { k: "deliver", n: 0 }], null, (i, _, seen) => {
     retired ||= seen.retired.includes(ISSUES[0]);
     for (const s of seen.sent) (at[s.command.kind] ??= []).push(i);
   });
