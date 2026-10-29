@@ -26,7 +26,7 @@ test("the result names its provider, beside serve's JSON", () => {
   });
 });
 
-test("the git token never appears in the script's text", () => {
+test("the git token never appears in the script in plain text", () => {
   const script = withGitToken("ghs_secret", "git clone x");
   assert.ok(!script.includes("ghs_secret"));
   assert.ok(script.endsWith("\ngit clone x"));
