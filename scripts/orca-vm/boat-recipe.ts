@@ -103,8 +103,9 @@ async function prepare() {
     mergeState({ building: undefined });
   }
   await deleteRetired();
+  // One boat no longer has is built again, or every create would miss it.
   const state = readState();
-  if (state.snapshot && state.inputs === wanted) {
+  if (state.snapshot && state.inputs === wanted && (await settled(state.snapshot))?.status === "ready") {
     process.exitCode = 3;
     return { revision: state.snapshot };
   }
@@ -121,7 +122,7 @@ async function prepare() {
     await api("POST", "/saved-snapshots", { sandboxId: id, name }).catch((error: unknown) => {
       if (!(error instanceof BoatError && error.code === "save_in_progress")) throw error;
     });
-    const done = await settled(name);
+    const done = await settled(name, true);
     if (done?.status !== "ready") throw new Error(`saving ${name} from ${id} failed: ${done?.error ?? "no snapshot"}`);
   } finally {
     await deleteSandbox(id).then(
@@ -137,8 +138,9 @@ async function prepare() {
   return { snapshot: name, revision: name };
 }
 
-// The saved snapshot `name` once no save of it is running, or undefined without one.
-async function settled(name: string): Promise<any> {
+// The saved snapshot `name` once no save of it is running, or undefined without one; when it was
+// just `posted`, boat may not list it yet, so none is waited for too.
+async function settled(name: string, posted = false): Promise<any> {
   for (let i = 0; i < 360; i++) {
     const saved = await api("GET", `/saved-snapshots/${name}`).then(
       (found) => found.snapshot,
@@ -146,7 +148,7 @@ async function settled(name: string): Promise<any> {
         if (!missing(error)) throw error;
       },
     );
-    if (saved?.status !== "saving") return saved;
+    if (saved ? saved.status !== "saving" : !posted) return saved;
     await sleep(5000);
   }
   throw new Error(`saved snapshot ${name} is still saving after 30 minutes`);

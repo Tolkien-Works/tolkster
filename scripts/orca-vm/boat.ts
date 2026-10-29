@@ -166,20 +166,24 @@ export async function pairingAddress(id: string): Promise<string> {
 export const boat: Provider = { name: "boat", home: HOME, exec, pairingAddress };
 
 // Fails unless the sandbox holds none of the owner's credentials: a Claude, Anthropic or GitHub
-// token or an AI proxy in a login shell's environment, a git credential or key, a signed-in `gh`
-// or Claude, or Claude settings that bring a key. `noEnv` should keep them all out; this checks it
-// did, before anything of Tolkster's runs there. Only names are printed.
+// token or an AI proxy in a login shell's environment or set in a shell's startup files, a git
+// credential, auth header or key, a signed-in `gh` or Claude, or Claude settings that bring a key.
+// `noEnv` should keep them all out; this checks it did, before anything of Tolkster's runs there.
+// Only names are printed, each marked, so what a profile prints counts for nothing.
 export async function assertNoCredentials(id: string): Promise<void> {
+  const tokens = "CLAUDE_CODE_OAUTH_TOKEN|ANTHROPIC_API_KEY|ANTHROPIC_AUTH_TOKEN|ANTHROPIC_BASE_URL|GH_TOKEN|GITHUB_TOKEN";
   const check = [
-    "for v in CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL GH_TOKEN GITHUB_TOKEN GIT_ASKPASS SSH_AUTH_SOCK; do printenv $v > /dev/null && echo $v; done",
-    `for f in ${HOME}/.git-credentials ${HOME}/.config/git/credentials ${HOME}/.netrc ${HOME}/.config/gh/hosts.yml ${HOME}/.claude/.credentials.json ${HOME}/.ssh/id_*; do test -e "$f" && echo "$f"; done`,
-    `grep -l -E 'apiKeyHelper|ANTHROPIC_|CLAUDE_CODE_OAUTH' ${HOME}/.claude/settings.json /etc/claude-code/managed-settings.json 2> /dev/null`,
-    "git config --name-only --get-regexp '^credential' 2> /dev/null",
+    `for v in ${tokens.replaceAll("|", " ")} GIT_ASKPASS SSH_AUTH_SOCK; do printenv $v > /dev/null && echo "found: $v"; done`,
+    `for f in ${HOME}/.git-credentials ${HOME}/.config/git/credentials ${HOME}/.netrc ${HOME}/.config/gh/hosts.yml ${HOME}/.claude/.credentials.json ${HOME}/.ssh/id_*; do test -e "$f" && echo "found: $f"; done`,
+    `grep -l -E 'apiKeyHelper|primaryApiKey|${tokens}' ${HOME}/.claude.json ${HOME}/.claude/settings.json /etc/claude-code/managed-settings.json 2> /dev/null | sed 's/^/found: /'`,
+    `grep -l -E '(${tokens})=' ${HOME}/.bashrc ${HOME}/.profile ${HOME}/.bash_profile /etc/environment /etc/bash.bashrc /etc/profile.d/* 2> /dev/null | sed 's/^/found: /'`,
+    "git config --name-only --get-regexp '^(credential|http\\..*extraheader|url\\.)' 2> /dev/null | sed 's/^/found: /'",
     "true",
   ].join("\n");
   const encoded = Buffer.from(check).toString("base64");
-  const found = await sh(boat, id, `echo ${encoded} | base64 -d | bash -l`, "checking the sandbox for credentials");
-  if (found.trim()) throw new Error(`sandbox ${id} holds credentials it should not: ${found.trim().split("\n").join(", ")}`);
+  const out = await sh(boat, id, `echo ${encoded} | base64 -d | bash -l`, "checking the sandbox for credentials");
+  const found = out.split("\n").filter((line) => line.startsWith("found: ")).map((line) => line.slice(7));
+  if (found.length > 0) throw new Error(`sandbox ${id} holds credentials it should not: ${found.join(", ")}`);
 }
 
 // The size on the recipe's `create` line (`--size <size>`), `default` without one; any other
@@ -199,7 +203,7 @@ export function snapshotName(setup: string, orcaVersion: string): string {
 }
 
 // The saved snapshots left to delete once `wanted` replaces the current one: never `wanted`
-// itself, which a revert of the inputs can bring back while it is still listed.
+// itself, listed while it was saved.
 export function retire(state: State, wanted: string): string[] {
   const old = state.snapshot && state.snapshot !== wanted ? [state.snapshot] : [];
   return [...new Set([...(state.retired ?? []), ...old])].filter((name) => name !== wanted);

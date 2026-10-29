@@ -53,8 +53,8 @@ keeps its own credentials and the realtime secret.
   and after a pull that restarts nothing, brings its image and base up to the repo, so a
   merge is the rollout. The `agent37` recipe's rebuilds the template when `agent37/` changes
   and updates the stopped base to it in place, keeping its disk, or builds a new base when
-  `agent37-base.ts` changes. The `boat` recipe's saves a new snapshot, named by
-  `boat-base.ts` and `agent37/Dockerfile`'s Orca pin. A machine's `userData` holds its
+  `agent37-base.ts` changes. The `boat` recipe's saves a new snapshot when
+  `boat-base.ts` or `agent37/Dockerfile`'s Orca pin changes. A machine's `userData` holds its
   revision (template or snapshot) and `prepare` prints the recipe's, which `listen` reports to the fleet. One asleep on another
   gets `updateHost`, and `listen` runs the recipe's `update` as orca.yaml has it now: the
   `agent37` one moves the stopped instance in place, keeping its disk, worktrees and pairing, and
