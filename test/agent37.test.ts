@@ -6,7 +6,8 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { baseStep, inputs } from "../scripts/orca-vm/agent37.ts";
+import { baseStep } from "../scripts/orca-vm/agent37.ts";
+import { inputs } from "../scripts/orca-vm/recipe.ts";
 
 test("an input's digest follows its files' names and text, not their line endings", () => {
   const dir = mkdtempSync(join(tmpdir(), "agent37-inputs-"));
