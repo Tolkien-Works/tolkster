@@ -213,7 +213,8 @@ export async function prepareLock(provider: string, dir = HERE): Promise<void> {
     try {
       writeFileSync(lock, String(process.pid), { flag: "wx" });
       break;
-    } catch {
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       if (!held(lock)) {
         rmSync(lock, { force: true });
         continue;

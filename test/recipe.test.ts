@@ -41,6 +41,10 @@ test("a prepare lock whose holder has gone is taken over", async () => {
   assert.equal(readFileSync(lock, "utf8"), String(process.pid));
 });
 
+test("a prepare lock it can't write fails, rather than waiting on it", async () => {
+  await assert.rejects(prepareLock("p", join(tmpdir(), "recipe-lock-missing", "nowhere")), { code: "ENOENT" });
+});
+
 test("boot starts serve at the provider's pairing address and home, and returns its JSON", async () => {
   const commands: string[] = [];
   const provider: Provider = {
