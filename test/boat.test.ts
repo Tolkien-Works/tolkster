@@ -68,9 +68,11 @@ test("a delete is polled until boat completes it, and one already gone is done",
 });
 
 test("a sandbox holding any of the owner's credentials is refused, naming only what it found", async () => {
-  serve([[200, { exitCode: 0, stdout: "a profile's greeting\n", stderr: "" }]]);
+  serve([[200, { exitCode: 0, stdout: "a profile's greeting\nchecked\n", stderr: "" }]]);
   await assertNoCredentials("bx_a");
-  serve([[200, { exitCode: 0, stdout: "found: CLAUDE_CODE_OAUTH_TOKEN\nfound: /home/user/.git-credentials\n", stderr: "" }]]);
+  serve([[200, { exitCode: 0, stdout: "", stderr: "" }]]);
+  await assert.rejects(assertNoCredentials("bx_a"), /didn't finish/);
+  serve([[200, { exitCode: 0, stdout: "found: CLAUDE_CODE_OAUTH_TOKEN\nfound: /home/user/.git-credentials\nchecked\n", stderr: "" }]]);
   await assert.rejects(assertNoCredentials("bx_a"), /CLAUDE_CODE_OAUTH_TOKEN, \/home\/user\/\.git-credentials/);
 });
 

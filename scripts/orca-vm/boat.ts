@@ -175,14 +175,19 @@ export async function assertNoCredentials(id: string): Promise<void> {
   const check = [
     `for v in ${tokens.replaceAll("|", " ")} GIT_ASKPASS SSH_AUTH_SOCK; do printenv $v > /dev/null && echo "found: $v"; done`,
     `for f in ${HOME}/.git-credentials ${HOME}/.config/git/credentials ${HOME}/.netrc ${HOME}/.config/gh/hosts.yml ${HOME}/.claude/.credentials.json ${HOME}/.ssh/id_*; do test -e "$f" && echo "found: $f"; done`,
-    `grep -l -E 'apiKeyHelper|primaryApiKey|${tokens}' ${HOME}/.claude.json ${HOME}/.claude/settings.json /etc/claude-code/managed-settings.json 2> /dev/null | sed 's/^/found: /'`,
+    `grep -l -E 'primaryApiKey|${tokens}' ${HOME}/.claude.json 2> /dev/null | sed 's/^/found: /'`,
+    `grep -l -E 'apiKeyHelper|ANTHROPIC_|CLAUDE_CODE_OAUTH' ${HOME}/.claude/settings.json /etc/claude-code/managed-settings.json 2> /dev/null | sed 's/^/found: /'`,
     `grep -l -E '(${tokens})=' ${HOME}/.bashrc ${HOME}/.profile ${HOME}/.bash_profile /etc/environment /etc/bash.bashrc /etc/profile.d/* 2> /dev/null | sed 's/^/found: /'`,
-    "git config --name-only --get-regexp '^(credential|http\\..*extraheader|url\\.)' 2> /dev/null | sed 's/^/found: /'",
-    "true",
+    // A key's name can hold a URL, and a URL a token: only its kind is printed.
+    "git config --name-only --get-regexp '^(credential|http\\..*extraheader|url\\.)' 2> /dev/null | sed -E 's/^([a-z]+)\\..*$/found: git config \\1.*/'",
+    // A profile that stops the script before here would otherwise pass it.
+    "echo checked",
   ].join("\n");
   const encoded = Buffer.from(check).toString("base64");
   const out = await sh(boat, id, `echo ${encoded} | base64 -d | bash -l`, "checking the sandbox for credentials");
-  const found = out.split("\n").filter((line) => line.startsWith("found: ")).map((line) => line.slice(7));
+  const lines = out.split("\n");
+  if (!lines.includes("checked")) throw new Error(`the credential check didn't finish on sandbox ${id}`);
+  const found = lines.filter((line) => line.startsWith("found: ")).map((line) => line.slice(7));
   if (found.length > 0) throw new Error(`sandbox ${id} holds credentials it should not: ${found.join(", ")}`);
 }
 

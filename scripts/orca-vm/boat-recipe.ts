@@ -89,7 +89,7 @@ async function destroy() {
 // The saved snapshot brought up to the repo's inputs, as `listen` runs it after each pull: when
 // they changed, a new base built and saved under a new name, which `create` then uses, and the
 // old snapshot deleted. Dropping `inputs` from boat-state.json rebuilds it, with `create` on the
-// old one meanwhile. Exit 3 when nothing changed. Either way it prints the snapshot's name, the
+// old one meanwhile. Exit 3 when nothing changed and boat still holds it. Either way it prints the snapshot's name, the
 // revision `listen` reports.
 async function prepare() {
   // Read before any wait: a pull meanwhile must not be recorded as built by this run's code.
