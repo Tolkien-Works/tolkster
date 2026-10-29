@@ -4,11 +4,8 @@
 // old as the base: `tolkster host add --recipe` fetches it through the host's own credential
 // once it joins, so no git token is handed to the instance here.
 
-import { readFileSync, rmSync, statSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import {
-  api, baseStep, boot, exec, inputs, log, mergeState, pairingAddress, payloadInstance, readState, result, revision, run, sleep, waitRunning,
-} from "./agent37.ts";
+import { boot, inputs, log, payloadInstance, prepareLock, result, run, sleep } from "./recipe.ts";
+import { agent37, api, baseStep, exec, mergeState, readState, revision, waitRunning } from "./agent37.ts";
 import { BASE_SETUP, IMAGE_DIR, buildImage, newBase } from "./agent37-base.ts";
 
 // One fixed line in the instance's logs (GET /instances/{id}/logs is its PID 1 stdout), so the
@@ -43,7 +40,7 @@ async function create() {
   try {
     const instance = await waitRunning(id);
     await note(id, "create");
-    return result(await boot(id, await pairingAddress(id)), id, revision(instance));
+    return result(agent37, await boot(agent37, id), id, revision(instance));
   } catch (error) {
     await api("DELETE", `/instances/${id}`).catch((e: unknown) => log(`could not delete ${id}; delete it by hand: ${e}`));
     throw error;
@@ -61,7 +58,7 @@ async function resume() {
   await api("POST", `/instances/${id}/start`);
   const instance = await waitRunning(id);
   await note(id, "resume");
-  return result(await boot(id, await pairingAddress(id)), id, revision(instance));
+  return result(agent37, await boot(agent37, id), id, revision(instance));
 }
 
 // The stopped instance moved onto the template's revision `listen` asks for (TOLKSTER_REVISION)
@@ -97,7 +94,7 @@ async function update() {
     if (i === 120) throw new Error(`instance ${id} is ${status} after its update`);
     await sleep(5000);
   }
-  return { schemaVersion: 1, userData: { provider: "agent37", resourceId: id, revision: revision(updated) } };
+  return result(agent37, {}, id, revision(updated));
 }
 
 async function destroy() {
@@ -116,7 +113,7 @@ async function destroy() {
 async function prepare() {
   // Read before any wait: a pull meanwhile must not be recorded as built by this run's code.
   const [image, setup] = [inputs([IMAGE_DIR]), inputs([BASE_SETUP])];
-  await lock();
+  await prepareLock("agent37");
   let state = readState();
   const left = [...(state.retired ?? []), ...(state.buildingBase ? [state.buildingBase] : [])];
   state = mergeState({ buildingBase: undefined, retired: left });
@@ -179,59 +176,6 @@ async function deleteRetired() {
     } catch (error) {
       log(`could not delete ${id}; the next prepare tries again: ${error}`);
     }
-  }
-}
-
-// One `prepare` at a time per checkout, waited for: a `listen` that restarts leaves its run
-// going, and the next start's runs once it ends, so the pull it was asked for is prepared. The
-// holder touches the lock each minute; one whose process has gone, or untouched for five
-// minutes, as a reused process ID could pass for alive, is taken over.
-const LOCK = fileURLToPath(new URL("agent37-prepare.lock", import.meta.url));
-
-async function lock(): Promise<void> {
-  for (let said = false; ; ) {
-    try {
-      writeFileSync(LOCK, String(process.pid), { flag: "wx" });
-      break;
-    } catch {
-      if (!held()) {
-        rmSync(LOCK, { force: true });
-        continue;
-      }
-      if (!said) log("waiting for another prepare to end");
-      said = true;
-      await sleep(10_000);
-    }
-  }
-  setInterval(() => {
-    try {
-      utimesSync(LOCK, new Date(), new Date());
-    } catch {}
-  }, 60_000).unref();
-  process.on("exit", () => {
-    try {
-      if (readFileSync(LOCK, "utf8") === String(process.pid)) unlinkSync(LOCK);
-    } catch {}
-  });
-}
-
-// An empty lock is one being written.
-function held(): boolean {
-  try {
-    const pid = Number(readFileSync(LOCK, "utf8"));
-    return Date.now() - statSync(LOCK).mtimeMs < 5 * 60_000 && (pid === 0 || alive(pid));
-  } catch {
-    return false;
-  }
-}
-
-function alive(pid: number): boolean {
-  if (!Number.isInteger(pid) || pid <= 0) return false;
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
   }
 }
 
