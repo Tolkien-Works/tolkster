@@ -195,7 +195,7 @@ git login or Claude sign-in for Tolkster's sake.
 
 A new worktree's setup seeds `cli/target/debug` from the primary checkout's when their `Cargo.lock` and
 `Cargo.toml` match, else builds cold. After a dependency or `[profile]` change, drop `baseInputs` from
-`scripts/orca-vm/agent37-state.json` and rerun `agent37-recipe.ts prepare` in the primary checkout, or a recipe's seed stops helping.
+`scripts/orca-vm/agent37-state.json`, or `snapshot` from `boat-state.json`, then rerun `prepare` in the primary checkout: seeds go stale.
 
 A host keeps itself on `listen`'s build. A private repo's push to `main` builds Linux x64
 alone: for a macOS or Windows host there, run the `Build` workflow with "Build all targets"

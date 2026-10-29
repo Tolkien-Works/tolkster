@@ -29,7 +29,7 @@ keeps its own credentials and the realtime secret.
   answered `waking` and the fleet sends `wakeHost`, as for its repo's next worker no host takes
   or a resume of one on it: `resume`, awake once Orca hears it, asked every 10 s. One marked
   awake but silent is woken likewise, once in 30 minutes. A machine its platform wakes by itself starts Orca's server as it boots;
-  a wake that hears it skips `resume`.
+  a wake that hears it skips `resume`. boat wakes none by itself, so its `resume` always runs.
   The `agent37` recipe logs a fixed line on `create`, `suspend` and `resume`; it survives a sleep.
   The panel lists an asleep machine as `asleep`, never as needing the owner.
 - **Destroying.** The fleet sends `destroyHost` for a machine asleep its repo's `destroyAfter`
@@ -42,9 +42,10 @@ keeps its own credentials and the realtime secret.
   one line on the host: fetch `tolkster` from the Worker, then `tolkster host join <code>`,
   which trades it at `POST /enrol` for the credential, kept with `host`, its environment ID,
   in `credentials.json`, and the owner's `config.json`. Joining again replaces the credential.
-- **A recipe machine's layers.** It boots from the public `tolkster-worker-base` image (git and
-  Orca's Linux app, rebuilt on its releases), under the repo's layer (toolchains and
-  caches, warmed on the recipe's base). `create` and `resume` rewrite its boot script from
+- **A recipe machine's layers.** An Agent37 machine boots from the public `tolkster-worker-base`
+  image (git and Orca's Linux app, rebuilt on its releases), under the repo's layer (toolchains
+  and caches, warmed on the recipe's base). boat runs no image of ours: its `prepare` lays the
+  same on boat's own and saves it as a snapshot. `create` and `resume` rewrite its boot script from
   the repo; the image only runs it. Claude Code's terms keep it out of the image; the base
   installs it unless the platform ships one. `tolkster` and every credential arrive
   after the machine starts, so no layer holds one for a fork or pulled image to hand on.
@@ -52,11 +53,13 @@ keeps its own credentials and the realtime secret.
   and after a pull that restarts nothing, brings its image and base up to the repo, so a
   merge is the rollout. The `agent37` recipe's rebuilds the template when `agent37/` changes
   and updates the stopped base to it in place, keeping its disk, or builds a new base when
-  `agent37-base.ts` changes. A machine's `userData` holds its template revision and
-  `prepare` prints the template's, which `listen` reports to the fleet. One asleep on another
+  `agent37-base.ts` changes. The `boat` recipe's saves a new snapshot, named by
+  `boat-base.ts` and `agent37/Dockerfile`'s Orca pin. A machine's `userData` holds its
+  revision (template or snapshot) and `prepare` prints the recipe's, which `listen` reports to the fleet. One asleep on another
   gets `updateHost`, and `listen` runs the recipe's `update` as orca.yaml has it now: the
   `agent37` one moves the stopped instance in place, keeping its disk, worktrees and pairing, and
-  its next wake boots the new image.
+  its next wake boots the new image. The `boat` one exits 3: a boat machine keeps its
+  revision until destroyed.
 - **Builds.** `GET /build/<target>/<commit>` serves a host the `tolkster` CI kept for that
   commit ([Set it up](setup.md#2-the-cli)), a new host's first by its untraded enrolment
   code. It serves no "newest". The Worker reads the artifact as
@@ -102,9 +105,11 @@ keeps its own credentials and the realtime secret.
   but its checkouts and no worker being set up; one asleep and unpaired, once no record names
   it; a mark, with no make running in `listen` and an hour at least, past any `host add`.
 - A sleep, wake or update never pairs or unpairs a machine: only `create` and `destroy` do.
-- A rollout always leaves a base to fork: the old one goes only once its replacement is ready,
-  and a `create` whose fork finds it gone forks the new one.
-- An Agent37 machine runs one Orca server: a boot and a `resume` start it one at a time,
+- A rollout always leaves a base to start from: the old one goes only once its replacement is
+  ready, and a `create` that finds it gone uses the new one.
+- A boat sandbox is made and resumed with `noEnv`, and refused while it holds a Claude or git
+  credential.
+- A recipe machine runs one Orca server: a boot and a `resume` start it one at a time,
   each once the last has exited, and a boot script replaced since its run began starts none.
 - The Durable Object stores no credential, only its digest, and a storage reset keeps the
   digests.

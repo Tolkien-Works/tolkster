@@ -61,3 +61,8 @@ test("boot starts serve at the provider's pairing address and home, and returns 
   assert.match(commands[0], /> \/home\/u\/\.orca-serve\.sh\.new && mv /);
   assert.match(script, /cd \/home\/u\/tolkster && .*--pairing-address 'wss:\/\/m1\.example'/);
 });
+
+test("boot refuses a pairing address that would reach past its quotes in the boot script", async () => {
+  const provider: Provider = { name: "p", home: "/home/u", pairingAddress: async () => "wss://x'; rm -rf ~; '", exec: async () => ok() };
+  await assert.rejects(boot(provider, "m1"), /unexpected pairing address/);
+});

@@ -78,9 +78,11 @@ async function destroy() {
 }
 
 // The saved snapshot brought up to the repo's inputs, as `listen` runs it after each pull: a new
-// base built and saved under the name its inputs give when no ready snapshot has it, then the
-// old one deleted. `create` uses the old one until the new one is ready. Exit 3 when nothing
-// changed. Either way it prints the snapshot's name, the revision `listen` reports.
+// base built and saved under the name its inputs give, then the old snapshot deleted. `create`
+// uses the old one until the new one is ready. A name already saved is saved again, which
+// replaces it once the new save is ready: dropping `snapshot` from boat-state.json rebuilds the
+// base. Exit 3 when nothing changed. Either way it prints the snapshot's name, the revision
+// `listen` reports.
 async function prepare() {
   // Read before any wait: a pull meanwhile must not be recorded as built by this run's code.
   const version = orcaVersion();
@@ -94,21 +96,22 @@ async function prepare() {
     );
   }
   await deleteRetired();
-  // A run cut off as it saved leaves the save going, or done under the name it would record.
-  let saved = await settled(wanted);
+  // A save a cut-off run left going is waited out: boat refuses a second under its name.
+  const saved = await settled(wanted);
   if (saved?.status === "ready" && readState().snapshot === wanted) {
     process.exitCode = 3;
     return { revision: wanted };
   }
-  if (saved?.status !== "ready") {
-    const id = await newBase(readState(), version).catch(async (error: unknown) => {
-      const left = readState().building;
-      if (left) await deleteSandbox(left).then(() => mergeState({ building: undefined }), () => {});
-      throw error;
-    });
+  const id = await newBase(readState(), version).catch(async (error: unknown) => {
+    const left = readState().building;
+    if (left) await deleteSandbox(left).then(() => mergeState({ building: undefined }), () => {});
+    throw error;
+  });
+  try {
     await api("POST", "/saved-snapshots", { sandboxId: id, name: wanted });
-    saved = await settled(wanted);
-    if (saved?.status !== "ready") throw new Error(`saving ${wanted} from ${id} failed: ${saved?.error ?? "no snapshot"}`);
+    const done = await settled(wanted, id);
+    if (done?.status !== "ready") throw new Error(`saving ${wanted} from ${id} failed: ${done?.error ?? "no snapshot"}`);
+  } finally {
     await deleteSandbox(id).then(
       () => mergeState({ building: undefined }),
       (e: unknown) => log(`could not delete ${id}; the next prepare tries again: ${e}`),
@@ -119,8 +122,10 @@ async function prepare() {
   return { snapshot: wanted, revision: wanted };
 }
 
-// The saved snapshot `name` once no save of it is running, or undefined without one.
-async function settled(name: string): Promise<any> {
+// The saved snapshot `name` once no save of it is running, or undefined without one; with
+// `from`, once it is the save from that sandbox, as a name saved again shows its old one until
+// the new one replaces it.
+async function settled(name: string, from?: string): Promise<any> {
   for (let i = 0; i < 360; i++) {
     const saved = await api("GET", `/saved-snapshots/${name}`).then(
       (found) => found.snapshot,
@@ -128,7 +133,7 @@ async function settled(name: string): Promise<any> {
         if (!missing(error)) throw error;
       },
     );
-    if (saved?.status !== "saving") return saved;
+    if (saved?.status !== "saving" && (from === undefined || saved?.sourceSandboxId === from)) return saved;
     await sleep(5000);
   }
   throw new Error(`saved snapshot ${name} is still saving after 30 minutes`);
