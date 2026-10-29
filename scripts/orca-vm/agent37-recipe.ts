@@ -4,7 +4,7 @@
 // old as the base: `tolkster host add --recipe` fetches it through the host's own credential
 // once it joins, so no git token is handed to the instance here.
 
-import { boot, inputs, log, payloadInstance, prepareLock, result, run, sleep } from "./recipe.ts";
+import { boot, inputs, log, machineName, payloadInstance, prepareLock, result, run, sleep } from "./recipe.ts";
 import { agent37, api, baseStep, exec, mergeState, readState, revision, waitRunning } from "./agent37.ts";
 import { BASE_SETUP, IMAGE_DIR, buildImage, newBase } from "./agent37-base.ts";
 
@@ -22,8 +22,7 @@ async function note(id: string, phase: string): Promise<void> {
 }
 
 async function create() {
-  const slug = `orca-${process.env.ORCA_RECIPE_ID ?? "agent37"}-${process.env.ORCA_VM_INSTANCE_ID ?? Date.now()}`;
-  const name = slug.toLowerCase().replace(/[^a-z0-9-]+/g, "-").slice(-63);
+  const name = machineName(agent37);
   const forked = (base: string | undefined) => {
     if (!base) throw new Error("no base instance: run agent37-recipe.ts prepare");
     return api("POST", `/instances/${base}/fork`, { name });

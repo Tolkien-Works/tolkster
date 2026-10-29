@@ -62,6 +62,12 @@ export function stateFile<S extends object>(provider: string, dir = HERE) {
 // The project's checkout on a provider's machines.
 export const projectRoot = (provider: Provider) => `${provider.home}/tolkster`;
 
+// A machine's name at its provider, from the recipe and the instance Orca makes it for.
+export function machineName(provider: Provider): string {
+  const slug = `orca-${process.env.ORCA_RECIPE_ID ?? provider.name}-${process.env.ORCA_VM_INSTANCE_ID ?? Date.now()}`;
+  return slug.toLowerCase().replace(/[^a-z0-9-]+/g, "-").slice(-63);
+}
+
 // Like exec, but fails on a nonzero exit, with the command's stderr.
 export async function sh(provider: Provider, id: string, command: string, what: string): Promise<string> {
   const result = await provider.exec(id, command);
@@ -127,6 +133,10 @@ export function withGitToken(token: string, body: string): string {
 // need a new image, and every machine on the old one would boot nothing on a wake.
 export async function boot(provider: Provider, id: string): Promise<Record<string, unknown>> {
   const pairingAddress = await provider.pairingAddress(id);
+  // Both go into the script, the address inside single quotes: a provider's answer that would
+  // reach past them is refused.
+  if (!/^wss:\/\/[^\s']+$/.test(pairingAddress)) throw new Error(`${provider.name} gave an unexpected pairing address`);
+  if (!/^\/[A-Za-z0-9._/-]+$/.test(provider.home)) throw new Error(`${provider.name} has an unexpected home`);
   const bootScript = `${provider.home}/.orca-serve.sh`;
   const root = projectRoot(provider);
   // A resume's container start runs the script the last phase wrote, beside this run of the
