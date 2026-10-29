@@ -4,9 +4,10 @@
 // as old as the snapshot: `tolkster host add --recipe` fetches it through the host's own
 // credential once it joins, so no git token is handed to the sandbox here.
 
+import { randomUUID } from "node:crypto";
 import { boot, inputs, log, machineName, payloadInstance, prepareLock, result, run, sleep } from "./recipe.ts";
 import {
-  assertNoCredentials, api, boat, createSandbox, deleteSandbox, mergeState, missing, readState, retire, size, snapshotName, stop,
+  BoatError, assertNoCredentials, api, boat, createSandbox, deleteSandbox, mergeState, missing, readState, retire, size, snapshotName, stop,
   waitReady,
 } from "./boat.ts";
 import { BASE_SETUP, newBase, orcaVersion } from "./boat-base.ts";
@@ -22,10 +23,12 @@ async function create() {
     return;
   }
   const name = machineName(boat);
+  // One key per run, for `api`'s own resends: `listen` gives a name made again the same
+  // instance id, and boat would answer its key with the sandbox an earlier make deleted.
+  const nonce = randomUUID();
   const made = (snapshot: string | undefined) => {
     if (!snapshot) throw new Error("no saved snapshot: run boat-recipe.ts prepare");
-    const idempotency = process.env.ORCA_VM_INSTANCE_ID && `${name}-${snapshot}`;
-    return createSandbox({ from: snapshot, type, name, labels: { [REVISION]: snapshot } }, idempotency);
+    return createSandbox({ from: snapshot, type, name, labels: { [REVISION]: snapshot } }, `${nonce}-${snapshot}`);
   };
   const { snapshot: read } = readState();
   // A `prepare` may have replaced and deleted the snapshot this read: the new one is used then.
@@ -54,6 +57,7 @@ async function suspend() {
 
 // boat wakes nothing by itself, and a stop keeps the disk but no process, so serve is started
 // again here. One still being stopped is resumed once it is; one already running only boots.
+// One that fails to is stopped again, as `listen` keeps it asleep and auto-stop is off.
 async function resume() {
   const id = payloadInstance();
   for (let i = 0; (await api("GET", `/sandboxes/${id}`)).sandbox.state === "archiving"; i++) {
@@ -62,9 +66,14 @@ async function resume() {
   }
   const { sandbox } = await api("GET", `/sandboxes/${id}`);
   if (!["ready", "idle", "running"].includes(sandbox.state)) await api("POST", `/sandboxes/${id}/resume`, { noEnv: true });
-  const ready = await waitReady(id);
-  await assertNoCredentials(id);
-  return result(boat, await boot(boat, id), id, ready.labels?.[REVISION] ?? "");
+  try {
+    const ready = await waitReady(id);
+    await assertNoCredentials(id);
+    return result(boat, await boot(boat, id), id, ready.labels?.[REVISION] ?? "");
+  } catch (error) {
+    await stop(id).catch((e: unknown) => log(`could not stop ${id} again: ${e}`));
+    throw error;
+  }
 }
 
 // boat can't move a sandbox onto another snapshot in place, so a machine stays on its revision
@@ -77,55 +86,59 @@ async function destroy() {
   await deleteSandbox(payloadInstance());
 }
 
-// The saved snapshot brought up to the repo's inputs, as `listen` runs it after each pull: a new
-// base built and saved under the name its inputs give, then the old snapshot deleted. `create`
-// uses the old one until the new one is ready. A name already saved is saved again, which
-// replaces it once the new save is ready: dropping `snapshot` from boat-state.json rebuilds the
-// base. Exit 3 when nothing changed. Either way it prints the snapshot's name, the revision
-// `listen` reports.
+// The saved snapshot brought up to the repo's inputs, as `listen` runs it after each pull: when
+// they changed, a new base built and saved under a new name, which `create` then uses, and the
+// old snapshot deleted. Dropping `inputs` from boat-state.json rebuilds it, with `create` on the
+// old one meanwhile. Exit 3 when nothing changed. Either way it prints the snapshot's name, the
+// revision `listen` reports.
 async function prepare() {
   // Read before any wait: a pull meanwhile must not be recorded as built by this run's code.
   const version = orcaVersion();
   const wanted = snapshotName(inputs([BASE_SETUP]), version);
   await prepareLock("boat");
+  // A run cut off partway leaves its sandbox, deleted before another is built so none is lost.
   const building = readState().building;
   if (building) {
-    await deleteSandbox(building).then(
-      () => mergeState({ building: undefined }),
-      (e: unknown) => log(`could not delete ${building}; the next prepare tries again: ${e}`),
-    );
+    await deleteSandbox(building);
+    mergeState({ building: undefined });
   }
   await deleteRetired();
-  // A save a cut-off run left going is waited out: boat refuses a second under its name.
-  const saved = await settled(wanted);
-  if (saved?.status === "ready" && readState().snapshot === wanted) {
+  const state = readState();
+  if (state.snapshot && state.inputs === wanted) {
     process.exitCode = 3;
-    return { revision: wanted };
+    return { revision: state.snapshot };
   }
-  const id = await newBase(readState(), version).catch(async (error: unknown) => {
+  const name = `${wanted}-${Date.now().toString(36)}`;
+  const id = await newBase(state, version).catch(async (error: unknown) => {
     const left = readState().building;
     if (left) await deleteSandbox(left).then(() => mergeState({ building: undefined }), () => {});
     throw error;
   });
   try {
-    await api("POST", "/saved-snapshots", { sandboxId: id, name: wanted });
-    const done = await settled(wanted, id);
-    if (done?.status !== "ready") throw new Error(`saving ${wanted} from ${id} failed: ${done?.error ?? "no snapshot"}`);
+    // Retired until it is recorded, so a run cut off as it saves leaves it to delete.
+    mergeState({ retired: [...(readState().retired ?? []), name] });
+    // A resend boat answers `save_in_progress` found the first send's save going.
+    await api("POST", "/saved-snapshots", { sandboxId: id, name }).catch((error: unknown) => {
+      if (!(error instanceof BoatError && error.code === "save_in_progress")) throw error;
+    });
+    const done = await settled(name);
+    if (done?.status !== "ready") throw new Error(`saving ${name} from ${id} failed: ${done?.error ?? "no snapshot"}`);
   } finally {
     await deleteSandbox(id).then(
       () => mergeState({ building: undefined }),
       (e: unknown) => log(`could not delete ${id}; the next prepare tries again: ${e}`),
     );
   }
-  mergeState({ snapshot: wanted, retired: retire(readState(), wanted) });
+  mergeState({ snapshot: name, inputs: wanted, retired: retire(readState(), name) });
+  // A create begun from the old snapshot before the swap gets a minute to start from it; one
+  // begun later finds it gone and uses the new one.
+  await sleep(60_000);
   await deleteRetired();
-  return { snapshot: wanted, revision: wanted };
+  return { snapshot: name, revision: name };
 }
 
-// The saved snapshot `name` once no save of it is running, or undefined without one; with
-// `from`, once it is the save from that sandbox, as a name saved again shows its old one until
-// the new one replaces it.
-async function settled(name: string, from?: string): Promise<any> {
+// The saved snapshot `name` once no save of it is running, or undefined without one.
+async function settled(name: string): Promise<any> {
   for (let i = 0; i < 360; i++) {
     const saved = await api("GET", `/saved-snapshots/${name}`).then(
       (found) => found.snapshot,
@@ -133,7 +146,7 @@ async function settled(name: string, from?: string): Promise<any> {
         if (!missing(error)) throw error;
       },
     );
-    if (saved?.status !== "saving" && (from === undefined || saved?.sourceSandboxId === from)) return saved;
+    if (saved?.status !== "saving") return saved;
     await sleep(5000);
   }
   throw new Error(`saved snapshot ${name} is still saving after 30 minutes`);

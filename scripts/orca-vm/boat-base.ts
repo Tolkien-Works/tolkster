@@ -10,6 +10,7 @@
 // identity.
 
 import { execFileSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { ghToken, log, projectRoot, shLong, withGitToken } from "./recipe.ts";
@@ -21,7 +22,7 @@ export const BASE_SETUP = fileURLToPath(import.meta.url);
 export function orcaVersion(): string {
   const dockerfile = readFileSync(fileURLToPath(new URL("agent37/Dockerfile", import.meta.url)), "utf8");
   const version = /ARG ORCA_VERSION=(\S+)/.exec(dockerfile)?.[1];
-  if (!version) throw new Error("agent37/Dockerfile pins no ORCA_VERSION");
+  if (!version || !/^[0-9.]+$/.test(version)) throw new Error("agent37/Dockerfile pins no ORCA_VERSION");
   return version;
 }
 
@@ -33,7 +34,7 @@ const GIT_PPA_KEY = "F911AB184317630C59970973E363C90F8F1B6217";
 export async function newBase(state: State, version: string): Promise<string> {
   const repoUrl = state.repoUrl ?? execFileSync("git", ["remote", "get-url", "origin"], { encoding: "utf8" }).trim();
   const repoRef = state.repoRef ?? "main";
-  const sandbox = await createSandbox({ type: "default", name: "tolkster-orca-base" });
+  const sandbox = await createSandbox({ type: "default", name: "tolkster-orca-base" }, randomUUID());
   const id: string = sandbox.id;
   mergeState({ building: id, repoUrl, repoRef });
   log(`created base ${id}; installing Orca, cloning and warming the build (about 15 minutes)`);
@@ -43,8 +44,12 @@ export async function newBase(state: State, version: string): Promise<string> {
   const system = [
     "set -euo pipefail",
     "sudo install -d -m 755 /etc/apt/keyrings",
-    `curl -fsSL 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x${GIT_PPA_KEY}' | gpg --dearmor | sudo tee /etc/apt/keyrings/git-core-ppa.gpg > /dev/null`,
+    // Only the pinned key is exported into apt's keyring, whatever else the keyserver answers.
+    "keys=$(mktemp -d)",
+    `curl -fsSL 'https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x${GIT_PPA_KEY}' | gpg --homedir "$keys" --import`,
+    `gpg --homedir "$keys" --export ${GIT_PPA_KEY} | sudo tee /etc/apt/keyrings/git-core-ppa.gpg > /dev/null`,
     `gpg --show-keys --with-colons /etc/apt/keyrings/git-core-ppa.gpg | grep -qx 'fpr:::::::::${GIT_PPA_KEY}:'`,
+    'rm -rf "$keys"',
     `printf 'Types: deb\\nURIs: https://ppa.launchpadcontent.net/git-core/ppa/ubuntu\\nSuites: %s\\nComponents: main\\nSigned-By: /etc/apt/keyrings/git-core-ppa.gpg\\n' "$(lsb_release -cs)" | sudo tee /etc/apt/sources.list.d/git-core-ppa.sources > /dev/null`,
     `curl -fsSL -o /tmp/orca.deb https://github.com/stablyai/orca/releases/download/v${version}/orca-ide_${version}_amd64.deb`,
     "sudo apt-get update -q",

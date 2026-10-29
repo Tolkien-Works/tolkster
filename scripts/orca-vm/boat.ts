@@ -12,9 +12,12 @@ const API = "https://boat.dev/api/v1";
 export const HOME = "/home/user";
 
 // Ids, names and digests only, never a credential. `snapshot` is the saved snapshot `create`
-// starts from, set only once it is ready; `building` is a sandbox a `prepare` is setting up and
-// `retired` the saved snapshots left to delete, which a cut-off `prepare` leaves to the next one.
-export type State = { snapshot?: string; building?: string; retired?: string[]; repoUrl?: string; repoRef?: string };
+// starts from, set only once it is ready, and `inputs` what it was built from (`snapshotName`);
+// `building` is a sandbox a `prepare` is setting up and `retired` the saved snapshots left to
+// delete, which a cut-off `prepare` leaves to the next one.
+export type State = {
+  snapshot?: string; inputs?: string; building?: string; retired?: string[]; repoUrl?: string; repoRef?: string;
+};
 
 // `boat-state.json`, read as `prepare` writes it.
 const state = stateFile<State>("boat");
@@ -107,7 +110,9 @@ export async function waitReady(id: string): Promise<any> {
 }
 
 // Stops the sandbox and waits until its disk is saved, so a resume that follows finds it at rest.
+// One already stopped, as the trial's auto-stop leaves it, is done.
 export async function stop(id: string): Promise<void> {
+  if ((await api("GET", `/sandboxes/${id}`)).sandbox.state === "archived") return;
   const stopping = await api("POST", `/sandboxes/${id}/stop`);
   const stopId: string | undefined = stopping.operation?.id ?? stopping.sandbox?.stop?.id;
   for (let i = 0; i < 180; i++) {
@@ -160,16 +165,20 @@ export async function pairingAddress(id: string): Promise<string> {
 
 export const boat: Provider = { name: "boat", home: HOME, exec, pairingAddress };
 
-// Fails unless the sandbox holds none of the owner's credentials: a Claude or GitHub token in its
-// environment, a git credential or a signed-in `gh` or Claude. `noEnv` should keep them all out;
-// this checks it did, before anything of Tolkster's runs there. Only names are printed.
+// Fails unless the sandbox holds none of the owner's credentials: a Claude, Anthropic or GitHub
+// token or an AI proxy in a login shell's environment, a git credential or key, a signed-in `gh`
+// or Claude, or Claude settings that bring a key. `noEnv` should keep them all out; this checks it
+// did, before anything of Tolkster's runs there. Only names are printed.
 export async function assertNoCredentials(id: string): Promise<void> {
-  const found = await sh(boat, id, [
-    "for v in CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY GH_TOKEN GITHUB_TOKEN GIT_ASKPASS; do printenv $v > /dev/null && echo $v; done",
-    `for f in ${HOME}/.git-credentials ${HOME}/.config/gh/hosts.yml ${HOME}/.claude/.credentials.json; do test -e $f && echo $f; done`,
-    "git config --global --name-only --get-regexp '^credential' 2> /dev/null",
+  const check = [
+    "for v in CLAUDE_CODE_OAUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_BASE_URL GH_TOKEN GITHUB_TOKEN GIT_ASKPASS SSH_AUTH_SOCK; do printenv $v > /dev/null && echo $v; done",
+    `for f in ${HOME}/.git-credentials ${HOME}/.config/git/credentials ${HOME}/.netrc ${HOME}/.config/gh/hosts.yml ${HOME}/.claude/.credentials.json ${HOME}/.ssh/id_*; do test -e "$f" && echo "$f"; done`,
+    `grep -l -E 'apiKeyHelper|ANTHROPIC_|CLAUDE_CODE_OAUTH' ${HOME}/.claude/settings.json /etc/claude-code/managed-settings.json 2> /dev/null`,
+    "git config --name-only --get-regexp '^credential' 2> /dev/null",
     "true",
-  ].join("\n"), "checking the sandbox for credentials");
+  ].join("\n");
+  const encoded = Buffer.from(check).toString("base64");
+  const found = await sh(boat, id, `echo ${encoded} | base64 -d | bash -l`, "checking the sandbox for credentials");
   if (found.trim()) throw new Error(`sandbox ${id} holds credentials it should not: ${found.trim().split("\n").join(", ")}`);
 }
 
@@ -182,8 +191,9 @@ export function size(args: string[]): Size | undefined {
   return (SIZES as readonly string[]).includes(value) ? (value as Size) : undefined;
 }
 
-// The saved snapshot's name for a base built from these inputs: the setup's digest and the Orca
-// version it installs. It is also the revision a machine made from it runs.
+// What names a base built from these inputs: the setup's digest and the Orca version it
+// installs. Each build's saved snapshot is this and its time, the revision a machine made from it
+// runs.
 export function snapshotName(setup: string, orcaVersion: string): string {
   return `tolkster-orca-${createHash("sha256").update(`${setup}\0${orcaVersion}`).digest("hex").slice(0, 16)}`;
 }

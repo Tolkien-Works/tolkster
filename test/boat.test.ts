@@ -83,7 +83,7 @@ test("the size comes from the create line, default without one, and an unknown o
 
 test("the snapshot's name follows the base's inputs and the Orca version, within boat's rules", () => {
   const name = snapshotName("sha256:a", "1.4.241");
-  assert.match(name, /^[a-z0-9][a-z0-9-]{0,62}$/);
+  assert.match(`${name}-${Date.now().toString(36)}`, /^[a-z0-9][a-z0-9-]{0,62}$/);
   assert.equal(snapshotName("sha256:a", "1.4.241"), name);
   assert.notEqual(snapshotName("sha256:b", "1.4.241"), name);
   assert.notEqual(snapshotName("sha256:a", "1.4.242"), name);
