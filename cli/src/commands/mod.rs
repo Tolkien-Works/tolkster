@@ -276,7 +276,11 @@ pub const COMMANDS: &[Spec] = &[
                                            Prints the issue, verdict and new state as JSON"# },
     Spec { words: &["pr", "create"], options: pr::CREATE, arguments: false, run: pr::create, help: r#"
   pr create [--repo <owner/name>] --head <branch> --base <branch> --title <text>
-      --body-file <path|-> [--session <id>] [--auto-merge]
+      --body-file <path|-> [--session <id>] [--auto-merge] [--push]
+                                           [--review light|deep [--findings <text>]]
+                                           with --push, first push the branch checked out,
+                                           which must be --head, with a lease; a failed
+                                           push opens nothing and exits 9. Then
                                            open a PR as the GitHub App, so its author is the
                                            app's bot; prints its number, url and "existing"
                                            (true when the branch had an open PR already,

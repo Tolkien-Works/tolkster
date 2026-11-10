@@ -33,7 +33,7 @@ use crate::sessions;
 use crate::state::{Change, ReadRecord, State, Store};
 
 const S: Kind = Kind::String;
-pub const CREATE: &[(&str, Kind)] = &[("repo", S), ("head", S), ("base", S), ("title", S), ("body-file", S), ("session", S), ("auto-merge", Kind::Boolean), ("review", S), ("findings", S)];
+pub const CREATE: &[(&str, Kind)] = &[("repo", S), ("head", S), ("base", S), ("title", S), ("body-file", S), ("session", S), ("auto-merge", Kind::Boolean), ("review", S), ("findings", S), ("push", Kind::Boolean)];
 pub const FEEDBACK: &[(&str, Kind)] = &[("repo", S), ("pr", S), ("session", S)];
 pub const CHECKS: &[(&str, Kind)] = &[("repo", S), ("pr", S), ("head", S)];
 pub const REPLY: &[(&str, Kind)] = &[("repo", S), ("pr", S), ("thread", S), ("body-file", S)];
@@ -71,6 +71,17 @@ pub fn create(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
         }
         None => None,
     };
+    // The branch goes up before anything is posted or opened, so a failed push leaves both
+    // as they were and a retry repeats nothing.
+    if parsed.flag("push") {
+        if parsed.non_empty("repo").is_some() {
+            return Err(Error::Usage("--push pushes to origin: leave out --repo".into()));
+        }
+        if let Some(why) = push_head(&mut run_command, head)? {
+            eprintln!("no PR opened: {why}");
+            return Ok(PUSH_FAILED);
+        }
+    }
     // The review's verdict goes in before the PR opens, each verdict once in the session, so
     // a retry doesn't post it again. It never stops the PR, as the link below doesn't.
     if let (Some((action, parameter)), Some((session_id, _))) = (verdict, &session) {
@@ -106,6 +117,22 @@ pub fn create(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     let what = if merge == Some(AutoMergeOutcome::On) { "auto-merge on" } else { "opened" };
     card::checkpoint_pr(agent, opened.number, what);
     Ok(0)
+}
+
+// Exit of `pr create --push` when the push failed: nothing was posted and no PR opened.
+const PUSH_FAILED: u8 = 9;
+
+// `--push`: HEAD over origin's --head, which must be the branch checked out, so the PR opens
+// on what the worker committed, with a lease, as after a rebase. Some(why) when it failed.
+fn push_head(run: &mut exec::Run, head: &str) -> Result<Option<String>, Error> {
+    let Some(branch) = git::current_branch(run, ".")?.filter(|branch| &**branch == head) else {
+        return Err(Error::Usage(format!("--push pushes the branch checked out, which isn't --head {head}")));
+    };
+    Ok(match git::push_with_lease(run, ".", &branch) {
+        Ok(git::Push::Pushed) => None,
+        Ok(git::Push::Behind) => Some(format!("origin's {branch} moved since this checkout last fetched it: fetch, rebase and run it again")),
+        Err(error) => Some(error.to_string()),
+    })
 }
 
 // `pr create --review light|deep [--findings <text>]`: the pre-push review's verdict, as the

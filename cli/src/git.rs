@@ -392,10 +392,21 @@ pub enum Push {
 // `!`, and its own fast-forward check says `[rejected]`; the remote's refusal, `[remote
 // rejected]`, is a failure. As with `fetch`, a failure says only that it failed.
 pub fn push_fast_forward(run: &mut Run, dir: &str, branch: &BranchName) -> Result<Push, Error> {
+    push_head(run, dir, branch, &[])
+}
+
+// HEAD pushed over origin's `branch`, a rebase's push, but only while origin has there what
+// the checkout last fetched or pushed of it: Behind, its `[rejected] (stale info)`, when
+// another push moved it since.
+pub fn push_with_lease(run: &mut Run, dir: &str, branch: &BranchName) -> Result<Push, Error> {
+    push_head(run, dir, branch, &[&format!("--force-with-lease=refs/heads/{branch}")])
+}
+
+fn push_head(run: &mut Run, dir: &str, branch: &BranchName, flags: &[&str]) -> Result<Push, Error> {
     let _writing = writing();
     let target = format!("HEAD:refs/heads/{branch}");
     let failed = || Error::Failed(format!("pushing to {branch} failed"));
-    let output = run("git", &[&STALL_LIMITS[..], &["push", "--porcelain", "origin", &target]].concat(), Some(dir)).map_err(|_| failed())?;
+    let output = run("git", &[&STALL_LIMITS[..], &["push", "--porcelain"], flags, &["origin", &target]].concat(), Some(dir)).map_err(|_| failed())?;
     if output.ok {
         return Ok(Push::Pushed);
     }
