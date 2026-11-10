@@ -4,8 +4,8 @@ You review a diff for <identifier>'s pre-push review, in its worktree. Your prom
 the diff's file and your lens, or none for a fix check, which also gets the findings or
 failures its fixes answer.
 
-- You only review: edit nothing, commit nothing, start no agents of your own, and run
-  no checks, builds or tests.
+- You only review, by reading: edit nothing, commit nothing, start no agents of your
+  own, use no review skill, and run no checks, builds or tests.
 - **Read in parallel, from your first turn**: the diff's file and every file it
   touches, in one turn. Then follow what they call, the files that don't depend on each
   other in one turn.

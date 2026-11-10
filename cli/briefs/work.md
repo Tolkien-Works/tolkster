@@ -105,9 +105,9 @@ elsewhere, `tolkster comment <TW-123> --session <sessionId> --body-file -`.
      light pass below, yourself, while it runs, fixing once it exits, its failures
      included; on `deep`, the deep pass below, which
      starts the gate beside its sub-agents. If it fails, take the deep pass, with
-     three reviewers. The light pass and the deep pass's reviewers read your whole
-     diff (`git diff origin/main...HEAD`), and its fix check only the fixes, with no
-     review skill and no second terminal, and check it for:
+     three reviewers. In the light pass you read your whole diff (`git diff
+     origin/main...HEAD`) yourself, with no review skill or second terminal, and
+     check it for:
 <CHECKS>
    - **The light pass** is one read of the diff, of about ten minutes. A deleted
      comment that stated an invariant is a finding. So is markdown the diff grew: is
