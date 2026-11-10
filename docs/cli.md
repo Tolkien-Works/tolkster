@@ -51,7 +51,8 @@ holding a token or a secret.
 
 - `pr create` prints `number`, `url` and `existing`; `--session` adds `"linked"` and
   `"review"`, `--auto-merge` adds `"autoMerge"`: `"on"`, `"refused"` (as `pr auto-merge`'s
-  exit 1) or `"unavailable"` (as its exit 8). It exits 0 once the PR is open.
+  exit 1) or `"unavailable"` (as its exit 8). It exits 0 once the PR is open, and 9 when
+  `--push` failed, before anything else.
   `--review light|deep` (and `--findings`) posts the review's verdict first.
 - `land` prints `sha`, `url`, `pushed`, `done`, `linked`, `branchDeleted` and `reported`,
   exiting 0 once the commit is on the default branch.

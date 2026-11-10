@@ -90,8 +90,8 @@ elsewhere, `tolkster comment <TW-123> --session <sessionId> --body-file -`.
 
 ## Finishing
 
-1. Fetch `origin main` and rebase onto it, with your work committed, then `git push
-   --force-with-lease`. <GATE> They run whole here, and again only as "While working" says.
+1. Fetch `origin main` and rebase onto it, with your work committed, then push nothing:
+   the last step does. <GATE> They run whole here, and again only as "While working" says.
    The gate runs beside the review below: change no file in this worktree while it
    runs, and finish only once it has exited, green or with
    its failures fixed, and what it changed committed.
