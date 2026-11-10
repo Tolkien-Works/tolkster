@@ -60,8 +60,8 @@ pub fn create(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     if verdict.is_some() && value("session").is_none() {
         return Err(Error::Usage("pr create --review needs --session".into()));
     }
-    if parsed.flag("push") && (parsed.non_empty("repo").is_some() || head == base) {
-        return Err(Error::Usage("--push pushes a branch other than --base to origin: leave out --repo".into()));
+    if parsed.flag("push") {
+        push_usage(parsed.non_empty("repo").is_some(), head, base)?;
     }
     let repo = repo(&parsed)?;
     let body = args::file_body(body_file, "description", read_body)?;
@@ -119,6 +119,15 @@ pub fn create(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
 
 // Exit of `pr create --push` when the push failed: nothing was posted and no PR opened.
 const PUSH_FAILED: u8 = 9;
+
+// `--push` goes to origin alone, and never over the base.
+fn push_usage(repo: bool, head: &str, base: &str) -> Result<(), Error> {
+    match (repo, head == base) {
+        (true, _) => Err(Error::Usage("--push pushes to origin: leave out --repo".into())),
+        (_, true) => Err(Error::Usage("--push never pushes --base: --head must be another branch".into())),
+        _ => Ok(()),
+    }
+}
 
 // `--push`: HEAD over origin's --head, which must be the branch checked out, so the PR opens
 // on what the worker committed, with a lease, as after a rebase (git::push_with_lease). Some(why) when it failed.

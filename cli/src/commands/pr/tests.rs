@@ -138,3 +138,10 @@ fn push_goes_up_with_a_lease_only_from_the_branch_named_and_says_why_it_failed()
     assert!(stale.contains("drop"), "{stale}");
     assert!(push_head(&mut git_pushing(&mut Vec::new(), 128, ""), "tw-1").unwrap().is_some());
 }
+
+#[test]
+fn push_never_goes_over_the_base_nor_to_another_repo() {
+    assert!(push_usage(false, "tw-1", "main").is_ok());
+    assert!(matches!(push_usage(false, "main", "main"), Err(Error::Usage(_))));
+    assert!(matches!(push_usage(true, "tw-1", "main"), Err(Error::Usage(_))));
+}
