@@ -13,7 +13,9 @@ set up in [Set it up, step 4](setup.md#4-the-github-app).
 - `pr create` (`github.rs`) returns a branch's open PR (`"existing": true`) rather than
   open a second, so a retry after a lost answer ends where the first would have. With
   `--session` it links the PR and moves the issue to review as Tolkster ([Issue
-  states](issue-states.md)); with `--auto-merge` it also turns auto-merge on.
+  states](issue-states.md)); with `--auto-merge` it also turns auto-merge on. `--push`
+  pushes the checked-out branch first, with a lease, so a rebased branch reaches an open PR
+  in one call; a failed push posts and opens nothing.
 - `pr auto-merge` is safe to repeat. Exit 8 with nothing on stdout means the budget or
   GitHub was still unavailable after its retries: a later try may succeed, a refusal's
   (exit 1) won't.
@@ -149,6 +151,8 @@ The app's webhook tells the Worker of each PR event in a repo it is installed on
 - A fork's PR is never one of a worker's branch's PRs: `branch_prs` keeps only
   `isCrossRepository` false, and a list over a page fails the read.
 - Reap never reads an open PR's reviews or threads.
+- `pr create --push` pushes only the checked-out `--head`, never `--base`, and never over
+  commits the checkout never had (`git::push_with_lease`).
 - `pr checks` never reports a commit's checks as the pushed commit's (`github::checks`),
   and reads whether the PR is open before it compares heads, so a merged or closed PR is
   never `pending`, and whether it merges only after both, so `conflicts` is never an old

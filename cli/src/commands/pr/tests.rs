@@ -115,3 +115,33 @@ fn a_review_verdict_is_light_or_deep_and_clean_without_findings() {
         assert!(matches!(verdict(review, findings), Err(Error::Usage(_))), "{review:?} {findings:?}");
     }
 }
+
+// A git whose branch is `tw-1` and whose push exits `code`, printing `porcelain`.
+fn git_pushing<'a>(calls: &'a mut Vec<String>, code: i32, porcelain: &'a str) -> impl FnMut(&str, &[&str], Option<&str>) -> Result<crate::exec::Output, Error> + 'a {
+    move |_, args, _| {
+        calls.push(args.join(" "));
+        let push = args.contains(&"push");
+        let ok = !push || code == 0;
+        Ok(crate::exec::Output { ok, code: Some(if ok { 0 } else { code }), stdout: if push { porcelain.into() } else { "tw-1\n".into() }, stderr: String::new() })
+    }
+}
+
+#[test]
+fn push_goes_up_with_a_lease_only_from_the_branch_named_and_says_why_it_failed() {
+    let mut calls = Vec::new();
+    assert_eq!(push_head(&mut git_pushing(&mut calls, 0, ""), "tw-1").unwrap(), None);
+    assert_eq!(calls[1], "-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 push --porcelain --force-with-lease=refs/heads/tw-1 --force-if-includes origin HEAD:refs/heads/tw-1");
+    let mut calls = Vec::new();
+    assert!(matches!(push_head(&mut git_pushing(&mut calls, 0, ""), "tw-2"), Err(Error::Usage(_))));
+    assert_eq!(calls.len(), 1, "another branch is never pushed");
+    let stale = push_head(&mut git_pushing(&mut Vec::new(), 1, "!\tHEAD:refs/heads/tw-1\t[rejected] (stale info)\n"), "tw-1").unwrap().unwrap();
+    assert!(stale.contains("drop"), "{stale}");
+    assert!(push_head(&mut git_pushing(&mut Vec::new(), 128, ""), "tw-1").unwrap().is_some());
+}
+
+#[test]
+fn push_never_goes_over_the_base_nor_to_another_repo() {
+    assert!(push_usage(false, "tw-1", "main").is_ok());
+    assert!(matches!(push_usage(false, "main", "main"), Err(Error::Usage(_))));
+    assert!(matches!(push_usage(true, "tw-1", "main"), Err(Error::Usage(_))));
+}

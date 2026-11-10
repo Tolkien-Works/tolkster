@@ -83,15 +83,15 @@ elsewhere, `tolkster comment <TW-123> --session <sessionId> --body-file -`.
   contract another component reads. Never wording, docs or briefs, nor what the type
   checker guarantees. Extend an existing test before adding one.
 - Commit in slices as you go, each with its push in one shell call (`git commit … &&
-  git push`), unless a section above holds the push until <OWNER NAME>'s go. A limit a
+  git push`), unless a section above holds the push until <OWNER NAME>'s go, or Finishing began. A limit a
   check sets, such as a word budget, is raised in the commit that outgrew it. Each
   `action`, the hook's `Committed` included, also sets the worktree card's comment until
   `pr create` puts the PR there: never set it yourself.
 
 ## Finishing
 
-1. Fetch `origin main` and rebase onto it, with your work committed, then `git push
-   --force-with-lease`. <GATE> They run whole here, and again only as "While working" says.
+1. Fetch `origin main` and rebase onto it, with your work committed, then push nothing:
+   the last step does. <GATE> They run whole here, and again only as "While working" says.
    The gate runs beside the review below: change no file in this worktree while it
    runs, and finish only once it has exited, green or with
    its failures fixed, and what it changed committed.

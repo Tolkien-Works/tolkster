@@ -10,7 +10,7 @@
      **Exit 1 or 2**: post an `elicitation`, e.g. "I couldn't land this as myself.", and
      stop there.
    - A change that needs a step only <OWNER NAME> can take (a secret, a setting, a token)
-     opens a PR instead, with `tolkster pr create --head <branchName> --base main --title
+     opens a PR instead, with `tolkster pr create --push --head <branchName> --base main --title
      <text> --body-file - --session <sessionId>`, and step 3 says it waits on those steps.
 3. The summary goes in with `tolkster activity <sessionId> response --body-file -`: what
    changed, the commit's `url`, step 1's review line, what you ran, and anything left
