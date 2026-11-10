@@ -151,6 +151,8 @@ The app's webhook tells the Worker of each PR event in a repo it is installed on
 - A fork's PR is never one of a worker's branch's PRs: `branch_prs` keeps only
   `isCrossRepository` false, and a list over a page fails the read.
 - Reap never reads an open PR's reviews or threads.
+- `pr create --push` pushes only the checked-out `--head`, never `--base`, and never over
+  commits the checkout never had (`git::push_with_lease`).
 - `pr checks` never reports a commit's checks as the pushed commit's (`github::checks`),
   and reads whether the PR is open before it compares heads, so a merged or closed PR is
   never `pending`, and whether it merges only after both, so `conflicts` is never an old
