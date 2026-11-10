@@ -60,6 +60,9 @@ pub fn create(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     if verdict.is_some() && value("session").is_none() {
         return Err(Error::Usage("pr create --review needs --session".into()));
     }
+    if parsed.flag("push") && (parsed.non_empty("repo").is_some() || head == base) {
+        return Err(Error::Usage("--push pushes a branch other than --base to origin: leave out --repo".into()));
+    }
     let repo = repo(&parsed)?;
     let body = args::file_body(body_file, "description", read_body)?;
     let app = github::app()?;
@@ -73,14 +76,9 @@ pub fn create(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
     };
     // The branch goes up before anything is posted or opened, so a failed push leaves both
     // as they were and a retry repeats nothing.
-    if parsed.flag("push") {
-        if parsed.non_empty("repo").is_some() {
-            return Err(Error::Usage("--push pushes to origin: leave out --repo".into()));
-        }
-        if let Some(why) = push_head(&mut run_command, head)? {
-            eprintln!("no PR opened: {why}");
-            return Ok(PUSH_FAILED);
-        }
+    if parsed.flag("push") && let Some(why) = push_head(&mut run_command, head)? {
+        eprintln!("no PR opened: {why}");
+        return Ok(PUSH_FAILED);
     }
     // The review's verdict goes in before the PR opens, each verdict once in the session, so
     // a retry doesn't post it again. It never stops the PR, as the link below doesn't.
@@ -123,14 +121,14 @@ pub fn create(agent: &Agent, argv: &[String]) -> Result<u8, Error> {
 const PUSH_FAILED: u8 = 9;
 
 // `--push`: HEAD over origin's --head, which must be the branch checked out, so the PR opens
-// on what the worker committed, with a lease, as after a rebase. Some(why) when it failed.
+// on what the worker committed, with a lease, as after a rebase (git::push_with_lease). Some(why) when it failed.
 fn push_head(run: &mut exec::Run, head: &str) -> Result<Option<String>, Error> {
     let Some(branch) = git::current_branch(run, ".")?.filter(|branch| &**branch == head) else {
         return Err(Error::Usage(format!("--push pushes the branch checked out, which isn't --head {head}")));
     };
     Ok(match git::push_with_lease(run, ".", &branch) {
         Ok(git::Push::Pushed) => None,
-        Ok(git::Push::Behind) => Some(format!("origin's {branch} moved since this checkout last fetched it: fetch, rebase and run it again")),
+        Ok(git::Push::Behind) => Some(format!("origin's {branch} has commits this checkout never had, which a push would drop")),
         Err(error) => Some(error.to_string()),
     })
 }

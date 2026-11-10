@@ -130,11 +130,11 @@ fn git_pushing<'a>(calls: &'a mut Vec<String>, code: i32, porcelain: &'a str) ->
 fn push_goes_up_with_a_lease_only_from_the_branch_named_and_says_why_it_failed() {
     let mut calls = Vec::new();
     assert_eq!(push_head(&mut git_pushing(&mut calls, 0, ""), "tw-1").unwrap(), None);
-    assert_eq!(calls[1], "-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 push --porcelain --force-with-lease=refs/heads/tw-1 origin HEAD:refs/heads/tw-1");
+    assert_eq!(calls[1], "-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=60 push --porcelain --force-with-lease=refs/heads/tw-1 --force-if-includes origin HEAD:refs/heads/tw-1");
     let mut calls = Vec::new();
     assert!(matches!(push_head(&mut git_pushing(&mut calls, 0, ""), "tw-2"), Err(Error::Usage(_))));
     assert_eq!(calls.len(), 1, "another branch is never pushed");
     let stale = push_head(&mut git_pushing(&mut Vec::new(), 1, "!\tHEAD:refs/heads/tw-1\t[rejected] (stale info)\n"), "tw-1").unwrap().unwrap();
-    assert!(stale.contains("rebase"), "{stale}");
+    assert!(stale.contains("drop"), "{stale}");
     assert!(push_head(&mut git_pushing(&mut Vec::new(), 128, ""), "tw-1").unwrap().is_some());
 }

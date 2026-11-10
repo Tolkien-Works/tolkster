@@ -396,10 +396,10 @@ pub fn push_fast_forward(run: &mut Run, dir: &str, branch: &BranchName) -> Resul
 }
 
 // HEAD pushed over origin's `branch`, a rebase's push, but only while origin has there what
-// the checkout last fetched or pushed of it: Behind, its `[rejected] (stale info)`, when
-// another push moved it since.
+// the checkout last fetched or pushed of it, and what the local branch once held, so a fetch
+// since never lets it drop another's commits: Behind, git's `[rejected]`, otherwise.
 pub fn push_with_lease(run: &mut Run, dir: &str, branch: &BranchName) -> Result<Push, Error> {
-    push_head(run, dir, branch, &[&format!("--force-with-lease=refs/heads/{branch}")])
+    push_head(run, dir, branch, &[&format!("--force-with-lease=refs/heads/{branch}"), "--force-if-includes"])
 }
 
 fn push_head(run: &mut Run, dir: &str, branch: &BranchName, flags: &[&str]) -> Result<Push, Error> {

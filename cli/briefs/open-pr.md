@@ -2,8 +2,7 @@
     PR's body, with a quoted heredoc, into `tolkster pr create --push --head <branchName>
     --base main --title <text> --body-file - --session <sessionId><AUTO MERGE>`, or
     for a body the deep pass drafted, or of thousands of characters, `--body-file <path>`, written as "While working" says. It
-    pushes your branch first; exit 9, a failed push, opens nothing: to a stale
-    lease, fetch, rebase and rerun. It prints the
+    pushes your branch first: exit 9, a failed push, opened nothing. It prints the
     PR's `number` and `url` as JSON, links the PR on this session and moves <identifier>
     to review. `"linked": false` or `"review": "failed"` means the PR is still open: carry
     on, and say which in the final `response`. Don't post comments, attach links or move
